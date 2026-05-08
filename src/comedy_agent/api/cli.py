@@ -11,12 +11,17 @@ from typing import Sequence
 
 from comedy_agent import __version__
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.models.factory import ModelConfigError
 from comedy_agent.skills.standup import StandupSkill
 
 
 def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
     """构建并初始化 Orchestrator（自动注册内置 Skill）。"""
-    orch = AgentOrchestrator(model_name=model_name)
+    try:
+        orch = AgentOrchestrator(model_name=model_name)
+    except ModelConfigError as e:
+        print(f"\n❌ 模型配置错误\n\n{e}\n", file=sys.stderr)
+        sys.exit(1)
     orch.register_skill(StandupSkill())
     return orch
 
@@ -122,10 +127,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         cmd_version()
         return 0
 
+    # 优先使用子命令的 --model，否则使用全局 --model
+    model_name = getattr(args, "model", None)
+
     if args.command == "chat":
-        cmd_chat(model_name=args.model)
+        cmd_chat(model_name=model_name)
     elif args.command == "run":
-        cmd_run(args.prompt, model_name=args.model)
+        cmd_run(args.prompt, model_name=model_name)
     elif args.command == "skills":
         cmd_skills()
     elif args.command == "skill" and args.skill_name == "standup":

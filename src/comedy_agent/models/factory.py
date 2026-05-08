@@ -49,6 +49,10 @@ except ImportError:
     logger.warning("langchain-community 未安装，通义千问模型不可用")
 
 
+class ModelConfigError(Exception):
+    """模型配置错误（如 API Key 缺失）。"""
+
+
 class ModelFactory:
     """模型工厂：根据配置返回对应的 LLM / Embedding 实例。"""
 
@@ -72,84 +76,57 @@ class ModelFactory:
         """注册内置 LLM 构造器。"""
         # OpenAI
         if _HAS_OPENAI:
-            cls.register_llm(
-                "gpt-4o",
-                lambda **kw: ChatOpenAI(
-                    model="gpt-4o",
-                    api_key=settings.openai_api_key or None,
-                    **kw,
-                ),
-            )
-            cls.register_llm(
-                "gpt-4o-mini",
-                lambda **kw: ChatOpenAI(
-                    model="gpt-4o-mini",
-                    api_key=settings.openai_api_key or None,
-                    **kw,
-                ),
-            )
-            cls.register_llm(
-                "gpt-4-turbo",
-                lambda **kw: ChatOpenAI(
-                    model="gpt-4-turbo",
-                    api_key=settings.openai_api_key or None,
-                    **kw,
-                ),
-            )
+            def _openai(model: str, **kw):
+                key = settings.openai_api_key
+                if not key:
+                    raise ModelConfigError(
+                        f"模型 '{model}' 需要 OpenAI API Key。\n"
+                        f"请设置环境变量：export OPENAI_API_KEY=sk-xxx\n"
+                        f"或使用本地模型：--model ollama-llama3"
+                    )
+                return ChatOpenAI(model=model, api_key=key, **kw)
+
+            cls.register_llm("gpt-4o", lambda **kw: _openai("gpt-4o", **kw))
+            cls.register_llm("gpt-4o-mini", lambda **kw: _openai("gpt-4o-mini", **kw))
+            cls.register_llm("gpt-4-turbo", lambda **kw: _openai("gpt-4-turbo", **kw))
 
         # Anthropic
         if _HAS_ANTHROPIC:
+            def _anthropic(model: str, **kw):
+                key = settings.anthropic_api_key
+                if not key:
+                    raise ModelConfigError(
+                        f"模型 '{model}' 需要 Anthropic API Key。\n"
+                        f"请设置环境变量：export ANTHROPIC_API_KEY=sk-ant-xxx\n"
+                        f"或使用本地模型：--model ollama-llama3"
+                    )
+                return ChatAnthropic(model=model, api_key=key, **kw)
+
             cls.register_llm(
-                "claude-3-5-sonnet",
-                lambda **kw: ChatAnthropic(
-                    model="claude-3-5-sonnet-20241022",
-                    api_key=settings.anthropic_api_key or None,
-                    **kw,
-                ),
+                "claude-3-5-sonnet", lambda **kw: _anthropic("claude-3-5-sonnet-20241022", **kw)
             )
             cls.register_llm(
-                "claude-3-opus",
-                lambda **kw: ChatAnthropic(
-                    model="claude-3-opus-20240229",
-                    api_key=settings.anthropic_api_key or None,
-                    **kw,
-                ),
+                "claude-3-opus", lambda **kw: _anthropic("claude-3-opus-20240229", **kw)
             )
             cls.register_llm(
-                "claude-3-5-haiku",
-                lambda **kw: ChatAnthropic(
-                    model="claude-3-5-haiku-20241022",
-                    api_key=settings.anthropic_api_key or None,
-                    **kw,
-                ),
+                "claude-3-5-haiku", lambda **kw: _anthropic("claude-3-5-haiku-20241022", **kw)
             )
 
         # 通义千问 (Tongyi / DashScope)
         if _HAS_TONGYI:
-            cls.register_llm(
-                "qwen-max",
-                lambda **kw: ChatTongyi(
-                    model="qwen-max",
-                    dashscope_api_key=settings.qwen_api_key or None,
-                    **kw,
-                ),
-            )
-            cls.register_llm(
-                "qwen-plus",
-                lambda **kw: ChatTongyi(
-                    model="qwen-plus",
-                    dashscope_api_key=settings.qwen_api_key or None,
-                    **kw,
-                ),
-            )
-            cls.register_llm(
-                "qwen-turbo",
-                lambda **kw: ChatTongyi(
-                    model="qwen-turbo",
-                    dashscope_api_key=settings.qwen_api_key or None,
-                    **kw,
-                ),
-            )
+            def _tongyi(model: str, **kw):
+                key = settings.qwen_api_key
+                if not key:
+                    raise ModelConfigError(
+                        f"模型 '{model}' 需要 DashScope API Key。\n"
+                        f"请设置环境变量：export DASHSCOPE_API_KEY=sk-xxx\n"
+                        f"或使用本地模型：--model ollama-llama3"
+                    )
+                return ChatTongyi(model=model, dashscope_api_key=key, **kw)
+
+            cls.register_llm("qwen-max", lambda **kw: _tongyi("qwen-max", **kw))
+            cls.register_llm("qwen-plus", lambda **kw: _tongyi("qwen-plus", **kw))
+            cls.register_llm("qwen-turbo", lambda **kw: _tongyi("qwen-turbo", **kw))
 
         # Ollama（本地模型，无 API Key 要求）
         if _HAS_OLLAMA:

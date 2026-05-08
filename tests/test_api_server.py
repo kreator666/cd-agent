@@ -1,0 +1,122 @@
+"""FastAPI HTTP 服务单元测试。"""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from comedy_agent.api.server import app, state
+
+
+@pytest.fixture
+def client():
+    """提供 TestClient（ lifespan 自动执行）。"""
+    # 需要先 mock ModelFactory.get_model，否则 lifespan 初始化会失败
+    with patch(
+        "comedy_agent.api.server.AgentOrchestrator"
+    ) as mock_orch_cls:
+        mock_orch = MagicMock()
+        mock_orch.list_skills.return_value = ["standup_generator"]
+        mock_orch_cls.return_value = mock_orch
+
+        # 手动初始化 state（ lifespan 在 TestClient 中会自动执行，
+        # 但这里先确保 mock 已就绪）
+        from comedy_agent.api.server import lifespan
+        import asyncio
+
+        # 使用 TestClient 让 lifespan 自动运行
+        with TestClient(app) as c:
+            # lifespan 已经执行完毕，state.orch 应该已设置
+            yield c
+
+    # 清理
+    state.orch = None
+
+
+class TestHealth:
+    def test_health_check(self, client):
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+
+class TestSkills:
+    def test_list_skills(self, client):
+        response = client.get("/skills")
+        assert response.status_code == 200
+        data = response.json()
+        assert "skills" in data
+        assert "standup_generator" in data["skills"]
+
+
+class TestChat:
+    def test_chat_success(self, client):
+        # TestClient  lifespan 里的 mock 已经替换了 state.orch
+        # 但我们需要让它能返回正常结果
+        from comedy_agent.api.server import state
+
+        state.orch.run = MagicMock(
+            return_value={
+                "output": "Agent 回答",
+                "messages": [
+                    MagicMock(type="human", content="你好"),
+                    MagicMock(type="ai", content="Agent 回答"),
+                ],
+            }
+        )
+
+        response = client.post(
+            "/chat",
+            json={"prompt": "你好"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["output"] == "Agent 回答"
+        assert len(data["messages"]) == 2
+
+    def test_chat_with_history(self, client):
+        from comedy_agent.api.server import state
+
+        state.orch.run = MagicMock(
+            return_value={
+                "output": "好的",
+                "messages": [],
+            }
+        )
+
+        response = client.post(
+            "/chat",
+            json={
+                "prompt": "继续",
+                "chat_history": [["human", "上一句"], ["ai", "上一答"]],
+            },
+        )
+        assert response.status_code == 200
+        _, call_kwargs = state.orch.run.call_args
+        assert call_kwargs["chat_history"] == [
+            ("human", "上一句"),
+            ("ai", "上一答"),
+        ]
+
+
+class TestStandupSkill:
+    def test_standup_skill(self, client):
+        with patch(
+            "comedy_agent.api.server.StandupSkill"
+        ) as mock_skill_cls:
+            mock_skill = MagicMock()
+            mock_skill.invoke.return_value = "生成的段子"
+            mock_skill_cls.return_value = mock_skill
+
+            response = client.post(
+                "/skills/standup",
+                json={
+                    "topic": "相亲",
+                    "style": "自嘲",
+                    "duration": 3,
+                    "audience": "年轻人",
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["content"] == "生成的段子"

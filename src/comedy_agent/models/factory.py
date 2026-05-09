@@ -153,6 +153,26 @@ class ModelFactory:
                 lambda **kw: ChatOllama(model="llama3.1", **kw),
             )
 
+        # Moonshot / Kimi（OpenAI 兼容接口）
+        if _HAS_OPENAI:
+            def _kimi(model: str, **kw):
+                key = settings.moonshot_api_key
+                if not key:
+                    raise ModelConfigError(
+                        f"模型 '{model}' 需要 Moonshot API Key。\n"
+                        f"请设置环境变量：export MOONSHOT_API_KEY=sk-kimi-xxx\n"
+                        f"或使用其他模型：--model gpt-4o / claude-3-5-sonnet"
+                    )
+                return ChatOpenAI(
+                    model=model,
+                    api_key=key,
+                    base_url="https://api.moonshot.cn/v1",
+                    **kw,
+                )
+
+            cls.register_llm("kimi-k2-6", lambda **kw: _kimi("kimi-k2-6", **kw))
+            cls.register_llm("kimi-code", lambda **kw: _kimi("kimi-k2-6", **kw))
+
     @classmethod
     def _build_default_embedding_registry(cls) -> None:
         """注册内置 Embedding 构造器。"""

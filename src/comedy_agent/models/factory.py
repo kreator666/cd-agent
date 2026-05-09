@@ -33,12 +33,22 @@ except ImportError:
     logger.warning("langchain-anthropic 未安装，Anthropic 模型不可用")
 
 try:
-    from langchain_community.chat_models import ChatOllama
+    from langchain_ollama import ChatOllama
 
     _HAS_OLLAMA = True
 except ImportError:
-    _HAS_OLLAMA = False
-    logger.warning("langchain-community 未安装，Ollama 模型不可用")
+    try:
+        # 兼容旧版导入
+        from langchain_community.chat_models import ChatOllama
+
+        _HAS_OLLAMA = True
+        logger.warning(
+            "langchain_ollama 未安装，使用已弃用的 langchain_community.ChatOllama。"
+            "建议运行：pip install langchain-ollama"
+        )
+    except ImportError:
+        _HAS_OLLAMA = False
+        logger.warning("langchain-ollama 未安装，Ollama 模型不可用")
 
 try:
     from langchain_community.chat_models.tongyi import ChatTongyi

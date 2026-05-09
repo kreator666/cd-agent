@@ -170,8 +170,8 @@ class ModelFactory:
                     **kw,
                 )
 
-            cls.register_llm("kimi-k2-6", lambda **kw: _kimi("kimi-k2-6", **kw))
-            cls.register_llm("kimi-code", lambda **kw: _kimi("kimi-k2-6", **kw))
+            cls.register_llm("kimi-for-coding", lambda **kw: _kimi("kimi-for-coding", **kw))
+            cls.register_llm("kimi-code", lambda **kw: _kimi("kimi-for-coding", **kw))
 
     @classmethod
     def _build_default_embedding_registry(cls) -> None:

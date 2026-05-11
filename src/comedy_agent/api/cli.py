@@ -63,6 +63,16 @@ def _print_runtime_error(e: Exception) -> None:
             "或使用云端模型：--model gpt-4o / claude-3-5-sonnet\n",
             file=sys.stderr,
         )
+    elif "status code: 404" in err_msg or "not found" in err_msg:
+        print(
+            "\n❌ Ollama 模型未找到。\n"
+            "可能的原因和解决方案：\n"
+            "  1. 模型尚未拉取：ollama pull llama3\n"
+            "  2. 模型名称拼写错误，查看已安装模型：ollama list\n"
+            "  3. 使用其他模型：--model ollama-qwen2.5 / ollama-llama3.1\n"
+            "或使用云端模型：--model gpt-4o / claude-3-5-sonnet\n",
+            file=sys.stderr,
+        )
     else:
         print(f"\n❌ 错误: {e}\n", file=sys.stderr)
 

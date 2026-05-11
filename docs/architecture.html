@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comedy Agent 架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin-top: 40px;
+        }
+        .diagram {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 24px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+        .legend {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+        .legend-box {
+            width: 24px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+        }
+        .legend-box.done { background: #d4edda; border-color: #28a745; }
+        .legend-box.wip { background: #fff3cd; border-color: #ffc107; }
+        .legend-box.todo { background: #f8d7da; border-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>🎭 Comedy Agent 系统架构图</h1>
+
+    <h2>一、系统分层架构</h2>
+    <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+    subgraph User["👤 用户"]
+        U1["命令行终端"]
+        U2["HTTP 客户端 / 前端"]
+    end
+
+    subgraph API["🌐 API 接入层"]
+        CLI["CLI\ncomedy-agent chat/run/skill\n(api/cli.py)"]
+        Server["HTTP API\nFastAPI / Uvicorn\n(api/server.py)"]
+    end
+
+    subgraph Agent["🤖 Agent 核心层"]
+        Orchestrator["AgentOrchestrator\nLangChain create_agent\n路由 & 调度\n(agent/orchestrator.py)"]
+    end
+
+    subgraph Skills["🛠️ Skill 技能层"]
+        Base["ComedySkill 基类\nBaseTool + ABC\n(skills/base.py)"]
+        Standup["StandupSkill ✅\n脱口秀创作\n(skills/standup.py)"]
+        Future1["相声创作\n(预留) 🔜"]
+        Future2["小品创作\n(预留) 🔜"]
+        Future3["笑点分析\n(预留) 🔜"]
+    end
+
+    subgraph Infra["⚙️ 基础设施层"]
+        subgraph Models["🧠 模型层 (models/)"]
+            Factory["ModelFactory\n统一模型工厂\n(models/factory.py)"]
+            OpenAI["OpenAI\nGPT-4o / GPT-4o-mini"]
+            Anthropic["Anthropic\nClaude 3.5 Sonnet"]
+            Ollama["Ollama\nLlama3 / Qwen2.5"]
+            Tongyi["通义千问\nqwen-max / plus"]
+            Kimi["Moonshot / Kimi\n(OpenAI 兼容)"]
+        end
+
+        subgraph RAG["📚 RAG 知识库 (rag/)"]
+            Retriever["ComedyRetriever\n混合检索\n(rag/retriever.py)\n🔜 第三阶段实现"]
+        end
+
+        subgraph Memory["🧩 记忆系统 (memory/)"]
+            Store["MemoryStore\n用户偏好 & 历史\n(memory/store.py)\n🔜 第四阶段实现"]
+        end
+
+        subgraph Config["🔧 配置中心 (core/)"]
+            Settings["Settings\nPydantic BaseSettings\n(core/config.py)"]
+            Env[".env\n环境变量"]
+        end
+    end
+
+    U1 --> CLI
+    U2 --> Server
+    CLI --> Orchestrator
+    Server --> Orchestrator
+    Orchestrator --> Base
+    Base --> Standup
+    Base --> Future1
+    Base --> Future2
+    Base --> Future3
+    Standup --> Factory
+    Orchestrator --> Factory
+    Factory --> OpenAI
+    Factory --> Anthropic
+    Factory --> Ollama
+    Factory --> Tongyi
+    Factory --> Kimi
+    Factory --> Settings
+    Settings --> Env
+    Orchestrator -.-> Retriever
+    Orchestrator -.-> Store
+
+    classDef done fill:#d4edda,stroke:#28a745,stroke-width:2px
+    classDef wip fill:#fff3cd,stroke:#ffc107,stroke-width:2px
+    classDef todo fill:#f8d7da,stroke:#dc3545,stroke-width:2px,stroke-dasharray: 5 5
+    classDef user fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    classDef api fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
+    classDef agent fill:#fff8e1,stroke:#ff9800,stroke-width:2px
+    classDef skill fill:#fce4ec,stroke:#e91e63,stroke-width:2px
+    classDef infra fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px
+
+    class U1,U2 user
+    class CLI,Server api
+    class Orchestrator agent
+    class Base,Standup skill
+    class Factory,OpenAI,Anthropic,Ollama,Tongyi,Kimi,Settings,Env,Retriever,Store infra
+    class Standup done
+    class Future1,Future2,Future3,Retriever,Store todo
+        </pre>
+    </div>
+
+    <h2>二、核心调用链路</h2>
+    <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as 用户
+    participant CLI as CLI / HTTP API
+    participant Orch as AgentOrchestrator
+    participant Agent as LangChain Agent
+    participant Skill as StandupSkill
+    participant LLM as ModelFactory / LLM
+
+    User->>CLI: "写一个关于职场加班的脱口秀"
+    CLI->>Orch: run(user_input)
+    Orch->>Orch: _build_agent()
+    Orch->>Agent: create_agent(model, tools, system_prompt)
+    Agent->>Agent: 意图识别 & 路由
+    Agent->>Skill: invoke(topic="职场加班", style="...")
+    Skill->>Skill: _build_prompt()
+    Skill->>LLM: get_model()
+    LLM-->>Skill: ChatModel 实例
+    Skill->>LLM: chain.invoke(prompt)
+    LLM-->>Skill: 生成的段子文本
+    Skill-->>Agent: 段子结果
+    Agent-->>Orch: {output, messages}
+    Orch-->>CLI: result["output"]
+    CLI-->>User: 完整脱口秀段子
+        </pre>
+    </div>
+
+    <h2>三、模块依赖关系</h2>
+    <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+    cli["api/cli.py"] --> orch["agent/orchestrator.py"]
+    srv["api/server.py"] --> orch
+    orch --> factory["models/factory.py"]
+    orch --> base["skills/base.py"]
+    standup["skills/standup.py"] --> factory
+    standup --> base
+    factory --> cfg["core/config.py"]
+    orch -.-> rag["rag/retriever.py"]
+    orch -.-> mem["memory/store.py"]
+
+    classDef impl fill:#d4edda,stroke:#28a745,stroke-width:2px
+    classDef todo fill:#f8d7da,stroke:#dc3545,stroke-width:2px,stroke-dasharray: 5 5
+    class cli,srv,orch,base,standup,factory,cfg impl
+    class rag,mem todo
+        </pre>
+    </div>
+
+    <div class="legend">
+        <h3>图例</h3>
+        <div class="legend-item"><div class="legend-box done"></div> <span>已实现模块</span></div>
+        <div class="legend-item"><div class="legend-box wip"></div> <span>进行中模块</span></div>
+        <div class="legend-item"><div class="legend-box todo"></div> <span>预留接口（后续阶段实现）</span></div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+            sequence: { useMaxWidth: true, diagramMarginX: 50, diagramMarginY: 20 }
+        });
+    </script>
+</body>
+</html>

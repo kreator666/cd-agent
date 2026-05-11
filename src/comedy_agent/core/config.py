@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     qwen_api_key: str = Field(default="", alias="DASHSCOPE_API_KEY")
+    moonshot_api_key: str = Field(default="", alias="MOONSHOT_API_KEY")
 
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")

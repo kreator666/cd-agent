@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from comedy_agent.models.factory import ModelFactory
+from comedy_agent.models.factory import ModelConfigError, ModelFactory
 
 
 class TestModelFactory:
@@ -128,3 +128,11 @@ class TestModelFactory:
 
         assert len(models) > 0 or len(embeddings) > 0
         # 至少应列出可用模型名称（具体取决于环境依赖是否安装）
+
+    # ------------------------------------------------------------------ #
+    # 配置错误
+    # ------------------------------------------------------------------ #
+    def test_model_config_error_message(self) -> None:
+        """验证 ModelConfigError 携带清晰提示。"""
+        err = ModelConfigError("test message")
+        assert "test message" in str(err)

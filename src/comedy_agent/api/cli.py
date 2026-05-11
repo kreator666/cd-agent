@@ -11,19 +11,53 @@ from typing import Sequence
 
 from comedy_agent import __version__
 from comedy_agent.agent.orchestrator import AgentOrchestrator
-from comedy_agent.skills.standup import StandupSkill
+from comedy_agent.models.factory import ModelConfigError
+from comedy_agent.skills import (
+    CrosstalkSkill,
+    JokeAnalyzerSkill,
+    ScriptEvaluatorSkill,
+    SitcomSkill,
+    SketchSkill,
+    StandupSkill,
+)
 
 
 def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
     """构建并初始化 Orchestrator（自动注册内置 Skill）。"""
-    orch = AgentOrchestrator(model_name=model_name)
+    try:
+        orch = AgentOrchestrator(model_name=model_name)
+    except ModelConfigError as e:
+        print(f"\n❌ 模型配置错误\n\n{e}\n", file=sys.stderr)
+        sys.exit(1)
     orch.register_skill(StandupSkill())
+    orch.register_skill(CrosstalkSkill())
+    orch.register_skill(SketchSkill())
+    orch.register_skill(SitcomSkill())
+    orch.register_skill(JokeAnalyzerSkill())
+    orch.register_skill(ScriptEvaluatorSkill())
     return orch
 
 
 def cmd_version() -> None:
     """显示版本信息。"""
     print(f"Comedy Agent v{__version__}")
+
+
+def _print_runtime_error(e: Exception) -> None:
+    """打印友好的运行时错误提示。"""
+    err_msg = str(e).lower()
+    if "responseerror" in err_msg or "status code: 502" in err_msg:
+        print(
+            "\n❌ 无法连接到 Ollama 服务。\n"
+            "请先安装并启动 Ollama：\n"
+            "  1. 下载安装：https://ollama.com/download\n"
+            "  2. 启动服务：ollama serve\n"
+            "  3. 拉取模型：ollama pull llama3\n"
+            "或使用云端模型：--model gpt-4o / claude-3-5-sonnet\n",
+            file=sys.stderr,
+        )
+    else:
+        print(f"\n❌ 错误: {e}\n", file=sys.stderr)
 
 
 def cmd_skills() -> None:
@@ -57,14 +91,18 @@ def cmd_chat(model_name: str | None = None) -> None:
             result = orch.run(user_input)
             print(f"\nAgent > {result['output']}\n")
         except Exception as e:
-            print(f"\n❌ 错误: {e}\n", file=sys.stderr)
+            _print_runtime_error(e)
 
 
 def cmd_run(prompt: str, model_name: str | None = None) -> None:
     """单次运行模式。"""
     orch = _build_orchestrator(model_name=model_name)
-    result = orch.run(prompt)
-    print(result["output"])
+    try:
+        result = orch.run(prompt)
+        print(result["output"])
+    except Exception as e:
+        _print_runtime_error(e)
+        sys.exit(1)
 
 
 def cmd_skill_standup(topic: str, style: str, duration: int, audience: str) -> None:
@@ -122,10 +160,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         cmd_version()
         return 0
 
+    # 优先使用子命令的 --model，否则使用全局 --model
+    model_name = getattr(args, "model", None)
+
     if args.command == "chat":
-        cmd_chat(model_name=args.model)
+        cmd_chat(model_name=model_name)
     elif args.command == "run":
-        cmd_run(args.prompt, model_name=args.model)
+        cmd_run(args.prompt, model_name=model_name)
     elif args.command == "skills":
         cmd_skills()
     elif args.command == "skill" and args.skill_name == "standup":

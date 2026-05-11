@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     analytical_model: str = Field(default="gpt-4o", alias="ANALYTICAL_MODEL")
     fast_model: str = Field(default="gpt-4o-mini", alias="FAST_MODEL")
 
+    # Fallback 备用模型链（逗号分隔）
+    creative_fallback_models: str = Field(default="gpt-4o,qwen-max", alias="CREATIVE_FALLBACK_MODELS")
+    analytical_fallback_models: str = Field(default="qwen-max,gpt-4o-mini", alias="ANALYTICAL_FALLBACK_MODELS")
+    fast_fallback_models: str = Field(default="qwen-turbo,ollama-qwen2.5", alias="FAST_FALLBACK_MODELS")
+
     # LangSmith 可观测性
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
     langsmith_project: str = Field(default="comedy-agent", alias="LANGSMITH_PROJECT")

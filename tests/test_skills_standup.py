@@ -44,7 +44,7 @@ class TestStandupSkill:
     def test_build_prompt_structure(self, mock_llm):
         """验证 Prompt 构建包含关键要素。"""
         with patch(
-            "comedy_agent.skills.standup.ModelFactory.get_model",
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
             return_value=mock_llm,
         ):
             skill = StandupSkill()
@@ -67,7 +67,7 @@ class TestStandupSkill:
         # 所以检查 mock_llm() 而非 mock_llm.invoke()
         mock_llm.return_value = "测试段子内容\n\n这是主体部分。\n\nCallback！"
         with patch(
-            "comedy_agent.skills.standup.ModelFactory.get_model",
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
             return_value=mock_llm,
         ):
             skill = StandupSkill()
@@ -97,7 +97,7 @@ class TestStandupSkill:
             return prompt
 
         with patch(
-            "comedy_agent.skills.standup.ModelFactory.get_model",
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
             return_value=mock_llm,
         ):
             with patch.object(ChatPromptTemplate, "from_messages", side_effect=capture_from_messages):
@@ -114,7 +114,7 @@ class TestStandupSkill:
         """验证 Skill 可作为 LangChain Tool 被 invoke。"""
         mock_llm.return_value = "Tool invoke result"
         with patch(
-            "comedy_agent.skills.standup.ModelFactory.get_model",
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
             return_value=mock_llm,
         ):
             skill = StandupSkill()
@@ -130,7 +130,7 @@ class TestStandupSkill:
 
         mock_llm.return_value = "async result"
         with patch(
-            "comedy_agent.skills.standup.ModelFactory.get_model",
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
             return_value=mock_llm,
         ):
             skill = StandupSkill()

@@ -178,3 +178,37 @@ class TestModelFactory:
         with patch("comedy_agent.models.factory.settings.default_model", "default-model"):
             result = ModelFactory.get_model(task_type="unknown")
         assert result is mock_default
+
+    # ------------------------------------------------------------------ #
+    # 自动 Fallback
+    # ------------------------------------------------------------------ #
+    def test_get_model_with_fallback_returns_runnable(self) -> None:
+        """get_model_with_fallback 应返回 RunnableWithFallbacks 实例。"""
+        from langchain_core.runnables import RunnableLambda, RunnableWithFallbacks
+
+        ModelFactory.register_llm("primary-m", lambda **kw: RunnableLambda(lambda x: "primary"))
+        ModelFactory.register_llm("fb-m", lambda **kw: RunnableLambda(lambda x: "fallback"))
+        with patch("comedy_agent.models.factory.settings.creative_model", "primary-m"), \
+             patch("comedy_agent.models.factory.settings.creative_fallback_models", "fb-m"):
+            result = ModelFactory.get_model_with_fallback(task_type="creative")
+        assert isinstance(result, RunnableWithFallbacks)
+
+    def test_get_model_with_fallback_empty_fallbacks(self) -> None:
+        """备用模型链为空时，只返回主模型包装。"""
+        from langchain_core.runnables import RunnableLambda, RunnableWithFallbacks
+
+        ModelFactory.register_llm("solo-m", lambda **kw: RunnableLambda(lambda x: "solo"))
+        with patch("comedy_agent.models.factory.settings.creative_model", "solo-m"), \
+             patch("comedy_agent.models.factory.settings.creative_fallback_models", ""):
+            result = ModelFactory.get_model_with_fallback(task_type="creative")
+        assert isinstance(result, RunnableWithFallbacks)
+
+    def test_get_model_with_fallback_ignores_unavailable_fallback(self) -> None:
+        """不可用的备用模型应被跳过，不阻断主模型返回。"""
+        from langchain_core.runnables import RunnableLambda, RunnableWithFallbacks
+
+        ModelFactory.register_llm("good-m", lambda **kw: RunnableLambda(lambda x: "good"))
+        with patch("comedy_agent.models.factory.settings.creative_model", "good-m"), \
+             patch("comedy_agent.models.factory.settings.creative_fallback_models", "non-existent-model"):
+            result = ModelFactory.get_model_with_fallback(task_type="creative")
+        assert isinstance(result, RunnableWithFallbacks)

@@ -199,7 +199,7 @@ def _create_declarative_skill(meta: SkillMeta) -> type[ComedySkill]:
                 ("system", self.SYSTEM_PROMPT),
                 ("human", user_prompt),
             ])
-            llm = ModelFactory.get_model(task_type=getattr(self, "task_type", "creative"))
+            llm = ModelFactory.get_model_with_fallback(task_type=getattr(self, "task_type", "creative"))
             chain = prompt | llm
             result = chain.invoke({})
             return str(result.content) if hasattr(result, "content") else str(result)

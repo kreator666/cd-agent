@@ -268,6 +268,58 @@ class ModelFactory:
         )
 
     @classmethod
+    def get_model_with_fallback(
+        cls,
+        name: str | None = None,
+        task_type: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """获取带自动 Fallback 的模型实例。
+
+        主模型失败（超时/限流/异常）时，自动降级到备用模型链。
+
+        Args:
+            name: 主模型标识，为 ``None`` 时按 ``task_type`` 解析。
+            task_type: 任务类型，用于解析主模型和备用模型链。
+            **kwargs: 额外参数传递给模型构造器。
+
+        Returns:
+            RunnableWithFallbacks: 包装了主模型与备用模型链的 Runnable。
+        """
+        from langchain_core.runnables import RunnableWithFallbacks
+
+        primary = cls.get_model(name=name, task_type=task_type, **kwargs)
+
+        # 解析备用模型链
+        fallback_names: list[str] = []
+        if task_type:
+            attr = f"{task_type}_fallback_models"
+            fallback_str = getattr(settings, attr, "")
+            if fallback_str:
+                fallback_names = [
+                    n.strip() for n in fallback_str.split(",") if n.strip()
+                ]
+
+        fallbacks: list[Any] = []
+        for fb_name in fallback_names:
+            try:
+                fallbacks.append(cls.get_model(name=fb_name, **kwargs))
+            except Exception as e:
+                logger.warning(
+                    "Fallback model '%s' unavailable: %s", fb_name, e
+                )
+
+        exceptions = (
+            Exception,
+        )  # 可根据需要细化：ConnectionError, TimeoutError, RateLimitError 等
+
+        return RunnableWithFallbacks(
+            runnable=primary,
+            fallbacks=fallbacks,
+            exceptions_to_handle=exceptions,
+        )
+
+    @classmethod
     def get_embedding_model(
         cls, name: str | None = None, **kwargs: Any
     ) -> Embeddings:

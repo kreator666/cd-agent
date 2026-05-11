@@ -21,10 +21,11 @@ from comedy_agent.skills import (
     StandupSkill,
 )
 from comedy_agent.skills.loader import load_plugin_skills
+from comedy_agent.core.prompt_manager import PromptManager
 
 
 def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
-    """构建并初始化 Orchestrator（自动注册内置 Skill）。"""
+    """构建并初始化 Orchestrator（自动加载 Prompt 与 Skill）。"""
     try:
         orch = AgentOrchestrator(model_name=model_name)
     except ModelConfigError as e:

@@ -22,6 +22,7 @@ from comedy_agent.skills import (
     StandupSkill,
 )
 from comedy_agent.skills.loader import load_plugin_skills
+from comedy_agent.core.prompt_manager import PromptManager
 
 
 # ------------------------------------------------------------------ #
@@ -82,7 +83,10 @@ state = AppState()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动时初始化 Orchestrator。"""
+    """应用生命周期：启动时加载 Prompt 与初始化 Orchestrator。"""
+    # 加载外部 Prompt 模板
+    PromptManager().load_from_directory()
+
     try:
         state.orch = AgentOrchestrator()
         state.orch.register_skill(StandupSkill())

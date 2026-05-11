@@ -43,6 +43,10 @@ pip install langchain-anthropic
 
 # 可选：Ollama 本地模型支持（需额外安装 Ollama 服务）
 pip install langchain-ollama
+
+# 注意：交互模式需要支持 Tool Calling 的模型
+# 推荐：llama3.1 / qwen2.5（llama3 不支持 Tool Calling）
+ollama pull llama3.1
 ```
 
 ### 2. 配置环境变量

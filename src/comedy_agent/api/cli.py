@@ -73,6 +73,17 @@ def _print_runtime_error(e: Exception) -> None:
             "或使用云端模型：--model gpt-4o / claude-3-5-sonnet\n",
             file=sys.stderr,
         )
+    elif "does not support tools" in err_msg or "status code: 400" in err_msg:
+        print(
+            "\n❌ Ollama 模型不支持 Tool 调用。\n"
+            "Comedy Agent 的交互模式需要模型支持 Tool/Function Calling。\n"
+            "解决方案：\n"
+            "  1. 换用支持 Tool 的模型：ollama pull llama3.1\n"
+            "  2. 或换用：ollama pull qwen2.5\n"
+            "  3. 使用云端模型：--model gpt-4o / claude-3-5-sonnet\n"
+            "注意：llama3（非 3.1 版）不支持 Tool Calling。\n",
+            file=sys.stderr,
+        )
     else:
         print(f"\n❌ 错误: {e}\n", file=sys.stderr)
 

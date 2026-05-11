@@ -50,6 +50,30 @@ class TestSkillMeta:
         assert meta.parameters[0].get("default") == "日常观察"
         assert meta.parameters[1].get("default") == "3"
 
+    def test_parse_task_type(self):
+        md = (
+            "# Analyze Skill\n\n"
+            "## 描述\n\n"
+            "分析用。\n\n"
+            "## 任务类型\n\n"
+            "analytical\n\n"
+            "## 参数\n\n"
+            "| 名称 | 类型 | 必填 | 描述 |\n"
+            "|------|------|------|------|\n"
+            "| query | string | 是 | 查询 |\n"
+        )
+        meta = SkillMeta.from_markdown(md, Path("/tmp/analyze"))
+        assert meta.task_type == "analytical"
+
+    def test_parse_default_task_type(self):
+        md = (
+            "# Simple Skill\n\n"
+            "## 描述\n\n"
+            "简单 Skill。\n"
+        )
+        meta = SkillMeta.from_markdown(md, Path("/tmp/simple"))
+        assert meta.task_type == "creative"
+
 
 class TestBuildArgsSchema:
     """测试动态 Args Schema 构建。"""

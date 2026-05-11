@@ -26,6 +26,7 @@ class StandupSkill(ComedySkill):
     包含开场钩子、递进式笑点、Callback 闭环。
     """
 
+    task_type: str = "creative"
     name: str = "standup_generator"
     description: str = (
         "创作脱口秀段子。输入主题、风格、时长、受众，"
@@ -76,7 +77,7 @@ class StandupSkill(ComedySkill):
             ("human", self._build_prompt(topic, style, duration, audience)),
         ])
 
-        llm = ModelFactory.get_model()
+        llm = ModelFactory.get_model(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
 

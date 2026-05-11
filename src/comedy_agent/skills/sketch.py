@@ -22,6 +22,7 @@ class SketchSkill(ComedySkill):
     输入主题、角色数、场景和时长，输出包含场景描述、对白和笑点的完整小品剧本。
     """
 
+    task_type: str = "creative"
     name: str = "sketch_generator"
     description: str = (
         "创作小品剧本。输入主题、角色数、场景、时长，"
@@ -69,7 +70,7 @@ class SketchSkill(ComedySkill):
             ("system", self.SYSTEM_PROMPT),
             ("human", self._build_prompt(theme, characters_count, setting, duration)),
         ])
-        llm = ModelFactory.get_model()
+        llm = ModelFactory.get_model(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
         return str(result.content) if hasattr(result, "content") else str(result)

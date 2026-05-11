@@ -26,6 +26,7 @@ class ScriptEvaluatorSkill(ComedySkill):
     输入完整剧本，按多维度评分并给出可执行的改进建议。
     """
 
+    task_type: str = "analytical"
     name: str = "script_evaluator"
     description: str = (
         "评估喜剧剧本质量。输入剧本内容，按笑点密度、角色塑造、"
@@ -69,7 +70,7 @@ class ScriptEvaluatorSkill(ComedySkill):
             ("system", self.SYSTEM_PROMPT),
             ("human", self._build_prompt(script, criteria)),
         ])
-        llm = ModelFactory.get_model()
+        llm = ModelFactory.get_model(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
         return str(result.content) if hasattr(result, "content") else str(result)

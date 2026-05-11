@@ -211,13 +211,26 @@ class ModelFactory:
         """注册 Embedding 构造器。"""
         cls._embedding_registry[name] = constructor
 
+    _TASK_TYPE_MAP: dict[str, str] = {
+        "creative": "creative_model",
+        "analytical": "analytical_model",
+        "fast": "fast_model",
+    }
+
     @classmethod
-    def get_model(cls, name: str | None = None, **kwargs: Any) -> BaseChatModel:
-        """获取指定名称的 ChatModel 实例。
+    def get_model(
+        cls,
+        name: str | None = None,
+        task_type: str | None = None,
+        **kwargs: Any,
+    ) -> BaseChatModel:
+        """获取指定名称或任务类型的 ChatModel 实例。
 
         Args:
             name: 模型标识，如 ``gpt-4o``、``claude-3-5-sonnet`` 等。
-                为 ``None`` 时使用 ``settings.default_model``。
+                为 ``None`` 时，若 ``task_type`` 提供则按任务类型绑定模型，
+                否则使用 ``settings.default_model``。
+            task_type: 任务类型，可选 ``creative`` / ``analytical`` / ``fast``。
             **kwargs: 额外参数传递给模型构造器（如 ``temperature``、``max_tokens``）。
 
         Returns:
@@ -227,6 +240,15 @@ class ModelFactory:
             ValueError: 模型名称未注册且无法动态解析。
         """
         cls._ensure_initialized()
+
+        if name is None and task_type is not None:
+            attr = cls._TASK_TYPE_MAP.get(task_type)
+            if attr:
+                name = getattr(settings, attr, settings.default_model)
+                logger.debug("Task type '%s' -> model '%s'", task_type, name)
+            else:
+                logger.warning("未知 task_type '%s'，使用默认模型", task_type)
+
         name = name or settings.default_model
 
         if name in cls._llm_registry:

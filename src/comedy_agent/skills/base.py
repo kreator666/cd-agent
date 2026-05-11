@@ -16,6 +16,12 @@ class ComedySkill(BaseTool, ABC):
     或辅助能力（笑点分析、剧本评估等）。
     """
 
+    # 任务类型，用于模型分层配置
+    # creative: 创意任务（创作类）
+    # analytical: 分析任务（评估/分析类）
+    # fast: 快速响应任务
+    task_type: str = "creative"
+
     @abstractmethod
     def _run(self, *args: Any, **kwargs: Any) -> str:
         """同步执行 Skill。"""

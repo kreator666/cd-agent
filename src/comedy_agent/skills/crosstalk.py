@@ -25,6 +25,7 @@ class CrosstalkSkill(ComedySkill):
     输入主题与风格要求，输出包含铺垫、包袱、抖包袱的完整相声剧本。
     """
 
+    task_type: str = "creative"
     name: str = "crosstalk_generator"
     description: str = (
         "创作相声剧本。输入主题、风格、篇幅、角色设定，"
@@ -70,7 +71,7 @@ class CrosstalkSkill(ComedySkill):
             ("system", self.SYSTEM_PROMPT),
             ("human", self._build_prompt(topic, style, length, characters)),
         ])
-        llm = ModelFactory.get_model()
+        llm = ModelFactory.get_model(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
         return str(result.content) if hasattr(result, "content") else str(result)

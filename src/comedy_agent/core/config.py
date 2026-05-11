@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
+    # 模型分层配置（任务类型绑定模型）
+    creative_model: str = Field(default="claude-3-5-sonnet", alias="CREATIVE_MODEL")
+    analytical_model: str = Field(default="gpt-4o", alias="ANALYTICAL_MODEL")
+    fast_model: str = Field(default="gpt-4o-mini", alias="FAST_MODEL")
+
     # LangSmith 可观测性
     langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
     langsmith_project: str = Field(default="comedy-agent", alias="LANGSMITH_PROJECT")

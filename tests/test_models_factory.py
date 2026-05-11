@@ -136,3 +136,45 @@ class TestModelFactory:
         """验证 ModelConfigError 携带清晰提示。"""
         err = ModelConfigError("test message")
         assert "test message" in str(err)
+
+    # ------------------------------------------------------------------ #
+    # 模型分层配置（任务类型绑定）
+    # ------------------------------------------------------------------ #
+    def test_get_model_by_task_type_creative(self) -> None:
+        """creative 任务类型应返回配置的创意模型。"""
+        mock_creative = MagicMock()
+        ModelFactory.register_llm("test-creative", lambda **kw: mock_creative)
+        with patch("comedy_agent.models.factory.settings.creative_model", "test-creative"):
+            result = ModelFactory.get_model(task_type="creative")
+        assert result is mock_creative
+
+    def test_get_model_by_task_type_analytical(self) -> None:
+        """analytical 任务类型应返回配置的分析模型。"""
+        mock_analytical = MagicMock()
+        ModelFactory.register_llm("test-analytical", lambda **kw: mock_analytical)
+        with patch("comedy_agent.models.factory.settings.analytical_model", "test-analytical"):
+            result = ModelFactory.get_model(task_type="analytical")
+        assert result is mock_analytical
+
+    def test_get_model_by_task_type_fast(self) -> None:
+        """fast 任务类型应返回配置的轻量模型。"""
+        mock_fast = MagicMock()
+        ModelFactory.register_llm("test-fast", lambda **kw: mock_fast)
+        with patch("comedy_agent.models.factory.settings.fast_model", "test-fast"):
+            result = ModelFactory.get_model(task_type="fast")
+        assert result is mock_fast
+
+    def test_get_model_name_overrides_task_type(self) -> None:
+        """显式传入 name 时，task_type 应被忽略。"""
+        mock_named = MagicMock()
+        ModelFactory.register_llm("named-model", lambda **kw: mock_named)
+        result = ModelFactory.get_model(name="named-model", task_type="creative")
+        assert result is mock_named
+
+    def test_get_model_unknown_task_type_fallback(self) -> None:
+        """未知 task_type 应回退到默认模型。"""
+        mock_default = MagicMock()
+        ModelFactory.register_llm("default-model", lambda **kw: mock_default)
+        with patch("comedy_agent.models.factory.settings.default_model", "default-model"):
+            result = ModelFactory.get_model(task_type="unknown")
+        assert result is mock_default

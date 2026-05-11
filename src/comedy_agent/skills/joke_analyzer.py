@@ -23,6 +23,7 @@ class JokeAnalyzerSkill(ComedySkill):
     输入喜剧段子或剧本片段，输出专业的笑点结构分析报告。
     """
 
+    task_type: str = "analytical"
     name: str = "joke_analyzer"
     description: str = (
         "分析喜剧文本的笑点结构与创作技巧。输入喜剧内容，"
@@ -62,7 +63,7 @@ class JokeAnalyzerSkill(ComedySkill):
             ("system", self.SYSTEM_PROMPT),
             ("human", self._build_prompt(content, analysis_type)),
         ])
-        llm = ModelFactory.get_model()
+        llm = ModelFactory.get_model(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
         return str(result.content) if hasattr(result, "content") else str(result)

@@ -36,11 +36,13 @@ class SkillMeta:
         description: str,
         parameters: list[dict[str, Any]],
         skill_dir: Path,
+        task_type: str = "creative",
     ) -> None:
         self.name = name
         self.description = description
         self.parameters = parameters
         self.skill_dir = skill_dir
+        self.task_type = task_type
         self.prompt_template: str = ""
 
     @classmethod
@@ -58,6 +60,20 @@ class SkillMeta:
             desc_match.group(1).strip().replace("\n", " ") if desc_match else name
         )
 
+        # 提取任务类型
+        task_type = "creative"
+        task_match = re.search(
+            r"^##\s+任务类型\s*\n+(.+?)(?=\n^##|\Z)", text, re.MULTILINE | re.DOTALL
+        )
+        if task_match:
+            task_type = task_match.group(1).strip().lower()
+            # 取第一行第一个有效词
+            first_word = task_type.split()[0] if task_type.split() else "creative"
+            if first_word in ("creative", "analytical", "fast"):
+                task_type = first_word
+            else:
+                task_type = "creative"
+
         # 提取参数表格
         parameters: list[dict[str, Any]] = []
         param_match = re.search(
@@ -67,7 +83,7 @@ class SkillMeta:
             table_text = param_match.group(1).strip()
             parameters = _parse_param_table(table_text)
 
-        return cls(name=name, description=description, parameters=parameters, skill_dir=skill_dir)
+        return cls(name=name, description=description, parameters=parameters, skill_dir=skill_dir, task_type=task_type)
 
 
 def _parse_param_table(table_text: str) -> list[dict[str, Any]]:
@@ -163,6 +179,7 @@ def _create_declarative_skill(meta: SkillMeta) -> type[ComedySkill]:
         name: str = meta.name
         description: str = meta.description
         args_schema: type[BaseModel] = _schema_cls
+        task_type: str = meta.task_type
 
         SYSTEM_PROMPT: str = (
             "你是一位专业的喜剧创作助手。请根据用户要求，"
@@ -182,7 +199,7 @@ def _create_declarative_skill(meta: SkillMeta) -> type[ComedySkill]:
                 ("system", self.SYSTEM_PROMPT),
                 ("human", user_prompt),
             ])
-            llm = ModelFactory.get_model()
+            llm = ModelFactory.get_model(task_type=getattr(self, "task_type", "creative"))
             chain = prompt | llm
             result = chain.invoke({})
             return str(result.content) if hasattr(result, "content") else str(result)

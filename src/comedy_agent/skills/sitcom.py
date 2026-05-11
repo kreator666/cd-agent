@@ -27,6 +27,7 @@ class SitcomSkill(ComedySkill):
     输入情景设定、本集主题和角色信息，输出单集剧本大纲与关键对白。
     """
 
+    task_type: str = "creative"
     name: str = "sitcom_generator"
     description: str = (
         "创作情景喜剧单集剧本。输入情景设定、本集主题、角色、场景数，"
@@ -76,7 +77,7 @@ class SitcomSkill(ComedySkill):
             ("system", self.SYSTEM_PROMPT),
             ("human", self._build_prompt(scenario, episode_theme, characters, scenes)),
         ])
-        llm = ModelFactory.get_model()
+        llm = ModelFactory.get_model(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
         return str(result.content) if hasattr(result, "content") else str(result)

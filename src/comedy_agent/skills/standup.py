@@ -1,6 +1,7 @@
 """脱口秀创作 Skill —— 首个 MVP Skill。
 
 验证 Tool → Prompt → LLM → Output 最小闭环。
+已接入 PromptManager 支持外部模板热加载与 A/B 测试。
 """
 
 from pydantic import BaseModel, Field
@@ -8,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from comedy_agent.skills.base import ComedySkill
 from comedy_agent.models.factory import ModelFactory
+from comedy_agent.core.prompt_manager import PromptManager
 
 
 class StandupArgs(BaseModel):
@@ -35,7 +37,7 @@ class StandupSkill(ComedySkill):
     args_schema: type[BaseModel] = StandupArgs
 
     # ------------------------------------------------------------------ #
-    # Prompt 工程
+    # 内置 Prompt（当外部 Prompt 未加载时的 fallback）
     # ------------------------------------------------------------------ #
     SYSTEM_PROMPT: str = (
         "你是一位资深脱口秀编剧，擅长创作结构完整、笑点密集的脱口秀段子。\n"
@@ -46,20 +48,36 @@ class StandupSkill(ComedySkill):
         "- 语言口语化，适合口头表演"
     )
 
-    def _build_prompt(self, topic: str, style: str, duration: int, audience: str) -> str:
-        """根据参数构建创作 Prompt。"""
-        return (
-            f"请创作一段关于「{topic}」的脱口秀段子。\n\n"
-            f"要求：\n"
-            f"- 风格：{style}\n"
-            f"- 时长：约{duration}分钟\n"
-            f"- 受众：{audience}观众\n\n"
-            f"结构要求：\n"
-            f"1. 开场钩子：用一句话抓住观众注意力\n"
-            f"2. 主体：2-3个递进式笑点，每个笑点包含铺垫+反转\n"
-            f"3. Callback：结尾呼应开头，形成闭环\n\n"
-            f"请直接输出段子内容，不需要解释结构。"
-        )
+    def _get_system_prompt(self) -> str:
+        """获取 System Prompt，优先使用外部模板。"""
+        pm = PromptManager()
+        try:
+            return pm.render("standup_system", {})
+        except Exception:
+            return self.SYSTEM_PROMPT
+
+    def _build_user_prompt(self, topic: str, style: str, duration: int, audience: str) -> str:
+        """构建用户 Prompt，优先使用外部模板。"""
+        pm = PromptManager()
+        try:
+            return pm.render(
+                "standup_user",
+                {"topic": topic, "style": style, "duration": duration, "audience": audience},
+            )
+        except Exception:
+            # fallback 到内置模板
+            return (
+                f"请创作一段关于「{topic}」的脱口秀段子。\n\n"
+                f"要求：\n"
+                f"- 风格：{style}\n"
+                f"- 时长：约{duration}分钟\n"
+                f"- 受众：{audience}观众\n\n"
+                f"结构要求：\n"
+                f"1. 开场钩子：用一句话抓住观众注意力\n"
+                f"2. 主体：2-3个递进式笑点，每个笑点包含铺垫+反转\n"
+                f"3. Callback：结尾呼应开头，形成闭环\n\n"
+                f"请直接输出段子内容，不需要解释结构。"
+            )
 
     # ------------------------------------------------------------------ #
     # 执行
@@ -73,8 +91,8 @@ class StandupSkill(ComedySkill):
     ) -> str:
         """同步执行：调用 LLM 生成段子。"""
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
-            ("human", self._build_prompt(topic, style, duration, audience)),
+            ("system", self._get_system_prompt()),
+            ("human", self._build_user_prompt(topic, style, duration, audience)),
         ])
 
         llm = ModelFactory.get_model_with_fallback(task_type=self.task_type)

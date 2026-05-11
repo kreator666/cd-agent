@@ -48,7 +48,7 @@ class TestStandupSkill:
             return_value=mock_llm,
         ):
             skill = StandupSkill()
-            prompt_text = skill._build_prompt(
+            prompt_text = skill._build_user_prompt(
                 topic="职场加班",
                 style="自嘲",
                 duration=5,

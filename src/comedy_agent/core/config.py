@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     project_root: Path = Field(default=Path(__file__).resolve().parents[2])
     data_dir: Path = Field(default=Path(__file__).resolve().parents[3] / "data")
     skills_dir: Path = Field(default=Path(__file__).resolve().parents[3] / "skills")
+    prompts_dir: Path = Field(default=Path(__file__).resolve().parents[3] / "data" / "prompts")
 
     # LLM API Keys
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")

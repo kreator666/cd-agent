@@ -12,7 +12,14 @@ from typing import Sequence
 from comedy_agent import __version__
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.models.factory import ModelConfigError
-from comedy_agent.skills.standup import StandupSkill
+from comedy_agent.skills import (
+    CrosstalkSkill,
+    JokeAnalyzerSkill,
+    ScriptEvaluatorSkill,
+    SitcomSkill,
+    SketchSkill,
+    StandupSkill,
+)
 
 
 def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
@@ -23,6 +30,11 @@ def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
         print(f"\n❌ 模型配置错误\n\n{e}\n", file=sys.stderr)
         sys.exit(1)
     orch.register_skill(StandupSkill())
+    orch.register_skill(CrosstalkSkill())
+    orch.register_skill(SketchSkill())
+    orch.register_skill(SitcomSkill())
+    orch.register_skill(JokeAnalyzerSkill())
+    orch.register_skill(ScriptEvaluatorSkill())
     return orch
 
 

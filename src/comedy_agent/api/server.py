@@ -13,7 +13,14 @@ from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.models.factory import ModelConfigError
-from comedy_agent.skills.standup import StandupSkill
+from comedy_agent.skills import (
+    CrosstalkSkill,
+    JokeAnalyzerSkill,
+    ScriptEvaluatorSkill,
+    SitcomSkill,
+    SketchSkill,
+    StandupSkill,
+)
 
 
 # ------------------------------------------------------------------ #
@@ -78,6 +85,11 @@ async def lifespan(app: FastAPI):
     try:
         state.orch = AgentOrchestrator()
         state.orch.register_skill(StandupSkill())
+        state.orch.register_skill(CrosstalkSkill())
+        state.orch.register_skill(SketchSkill())
+        state.orch.register_skill(SitcomSkill())
+        state.orch.register_skill(JokeAnalyzerSkill())
+        state.orch.register_skill(ScriptEvaluatorSkill())
     except ModelConfigError as e:
         import logging
 

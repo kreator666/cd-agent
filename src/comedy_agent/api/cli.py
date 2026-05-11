@@ -20,6 +20,7 @@ from comedy_agent.skills import (
     SketchSkill,
     StandupSkill,
 )
+from comedy_agent.skills.loader import load_plugin_skills
 
 
 def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
@@ -35,6 +36,11 @@ def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
     orch.register_skill(SitcomSkill())
     orch.register_skill(JokeAnalyzerSkill())
     orch.register_skill(ScriptEvaluatorSkill())
+
+    # 加载外部插件 Skill
+    for plugin in load_plugin_skills():
+        orch.register_skill(plugin)
+
     return orch
 
 

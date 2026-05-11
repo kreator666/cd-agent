@@ -21,6 +21,7 @@ from comedy_agent.skills import (
     SketchSkill,
     StandupSkill,
 )
+from comedy_agent.skills.loader import load_plugin_skills
 
 
 # ------------------------------------------------------------------ #
@@ -90,6 +91,10 @@ async def lifespan(app: FastAPI):
         state.orch.register_skill(SitcomSkill())
         state.orch.register_skill(JokeAnalyzerSkill())
         state.orch.register_skill(ScriptEvaluatorSkill())
+
+        # 加载外部插件 Skill
+        for plugin in load_plugin_skills():
+            state.orch.register_skill(plugin)
     except ModelConfigError as e:
         import logging
 

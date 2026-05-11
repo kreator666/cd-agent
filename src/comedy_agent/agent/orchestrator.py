@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
 
 from comedy_agent.models.factory import ModelFactory
+from comedy_agent.skills.base import ComedySkill
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class AgentOrchestrator:
             model_name: 模型标识，为 ``None`` 时使用 ``settings.default_model``。
             system_prompt: 系统提示词，覆盖默认值。
         """
+        self.model_name = model_name
         self.llm = ModelFactory.get_model(model_name)
         self.tools: list[BaseTool] = []
         self.system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
@@ -52,7 +54,10 @@ class AgentOrchestrator:
         """注册 Skill（Tool）。
 
         注册新 Skill 后会重置内部 Agent 缓存，下次 ``run`` 时自动重建。
+        如果 Orchestrator 指定了 model_name，会同步传播给 ComedySkill。
         """
+        if isinstance(skill, ComedySkill) and self.model_name is not None:
+            skill.model_name = self.model_name
         self.tools.append(skill)
         self._agent = None
         logger.info("Registered skill: %s", skill.name)

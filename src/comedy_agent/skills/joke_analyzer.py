@@ -63,7 +63,7 @@ class JokeAnalyzerSkill(ComedySkill):
             ("system", self.SYSTEM_PROMPT),
             ("human", self._build_prompt(content, analysis_type)),
         ])
-        llm = ModelFactory.get_model(task_type=self.task_type)
+        llm = ModelFactory.get_model_with_fallback(task_type=self.task_type)
         chain = prompt | llm
         result = chain.invoke({})
         return str(result.content) if hasattr(result, "content") else str(result)

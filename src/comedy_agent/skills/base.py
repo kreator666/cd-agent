@@ -22,6 +22,9 @@ class ComedySkill(BaseTool, ABC):
     # fast: 快速响应任务
     task_type: str = "creative"
 
+    # 用户指定的覆盖模型，优先级高于 task_type 分层配置
+    model_name: str | None = None
+
     @abstractmethod
     def _run(self, *args: Any, **kwargs: Any) -> str:
         """同步执行 Skill。"""

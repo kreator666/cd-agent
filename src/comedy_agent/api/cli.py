@@ -22,6 +22,7 @@ from comedy_agent.skills import (
 )
 from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
+from comedy_agent.rag.ingest import KnowledgeIngestor
 
 
 def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
@@ -145,6 +146,24 @@ def cmd_skill_standup(topic: str, style: str, duration: int, audience: str) -> N
     print(result)
 
 
+def cmd_ingest(dir_path: str | None = None) -> None:
+    """导入知识库数据。"""
+    try:
+        ingestor = KnowledgeIngestor()
+        result = ingestor.ingest_directory(dir_path)
+        print(f"导入完成：")
+        print(f"  原始文档: {result['raw_docs']}")
+        print(f"  分块数量: {result['chunks']}")
+        print(f"  入库文档: {result['ingested']}")
+        print(f"  集合名称: {result['collection']}")
+    except FileNotFoundError as e:
+        print(f"❌ {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ 导入失败: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI 主入口。"""
     parser = argparse.ArgumentParser(
@@ -182,6 +201,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     standup_parser.add_argument("--duration", type=int, default=3, help="时长（分钟）")
     standup_parser.add_argument("--audience", default="通用", help="受众")
 
+    # ingest
+    ingest_parser = subparsers.add_parser("ingest", help="导入知识库数据")
+    ingest_parser.add_argument("--dir", default=None, help="知识库目录路径")
+
     args = parser.parse_args(argv)
 
     if args.version:
@@ -199,6 +222,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         cmd_skills()
     elif args.command == "skill" and args.skill_name == "standup":
         cmd_skill_standup(args.topic, args.style, args.duration, args.audience)
+    elif args.command == "ingest":
+        cmd_ingest(dir_path=args.dir)
     else:
         parser.print_help()
         return 1

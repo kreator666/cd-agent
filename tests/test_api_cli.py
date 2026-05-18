@@ -84,3 +84,26 @@ class TestCLI:
                     "audience": "互联网人",
                 }
             )
+
+    def test_ingest(self, capsys):
+        """ingest 子命令导入知识库。"""
+        with patch(
+            "comedy_agent.api.cli.KnowledgeIngestor"
+        ) as mock_cls:
+            mock_ingestor = MagicMock()
+            mock_ingestor.ingest_directory.return_value = {
+                "raw_docs": 3,
+                "chunks": 5,
+                "ingested": 5,
+                "collection": "comedy_knowledge",
+            }
+            mock_cls.return_value = mock_ingestor
+
+            code = main(["ingest", "--dir", "data/knowledge"])
+
+            assert code == 0
+            captured = capsys.readouterr()
+            assert "导入完成" in captured.out
+            assert "3" in captured.out
+            assert "5" in captured.out
+            mock_ingestor.ingest_directory.assert_called_once_with("data/knowledge")

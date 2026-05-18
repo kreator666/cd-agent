@@ -4,31 +4,57 @@
 
 ## 技术栈
 
-- **Agent 框架**: LangChain
-- **模型接入**: ModelFactory 统一封装（OpenAI / Anthropic / Ollama / 通义千问）
-- **向量数据库**: ChromaDB（开发）→ Milvus（生产）
-- **记忆存储**: PostgreSQL / SQLite + Redis
-- **文档解析**: Unstructured / LangChain DocumentLoader
-- **检索增强**: BM25 + Cross-Encoder 重排序
-- **可观测性**: LangSmith / 自建日志
+- **Agent 框架**: LangChain / LangGraph
+- **模型接入**: ModelFactory 统一封装（OpenAI / Anthropic / Ollama / 通义千问 / Moonshot）
+- **向量数据库**: ChromaDB（开发）→ Milvus（生产）— *预留接口*
+- **记忆存储**: PostgreSQL / SQLite + Redis — *预留接口*
+- **文档解析**: Unstructured / LangChain DocumentLoader — *预留接口*
+- **检索增强**: BM25 + Cross-Encoder 重排序 — *预留接口*
+- **可观测性**: LangSmith / 自建日志 — *预留接口*
+
+## 当前功能特性
+
+| 特性 | 状态 | 说明 |
+|------|------|------|
+| 多模型接入 | ✅ 已完成 | 支持 OpenAI、Anthropic、Ollama、通义千问、Moonshot/Kimi，自动 Fallback 降级 |
+| 内置 Skill | ✅ 已完成 | 脱口秀、相声、小品、情景喜剧、笑点分析、剧本评估 |
+| 插件化 Skill | ✅ 已完成 | 从 `skills/` 目录动态加载声明式 / 代码式 Skill |
+| Agent 主控 | ✅ 已完成 | 基于 LangGraph 的 Orchestrator，自动路由用户请求到对应 Skill |
+| CLI 交互 | ✅ 已完成 | `chat`、`run`、`skills`、`skill standup` 等命令 |
+| HTTP API | ✅ 已完成 | FastAPI 服务，`/health`、`/skills`、`/chat`、`/skills/standup` |
+| Prompt 工程化 | ✅ 已完成 | 统一管理、变量注入、版本管理、A/B 测试 |
+| RAG 知识库 | ⏳ 预留接口 | `ComedyRetriever` 已预留，待第三阶段实现 |
+| 记忆系统 | ⏳ 预留接口 | `MemoryStore` 已预留，待第四阶段实现 |
 
 ## 项目结构
 
 ```
 cd-agent/
 ├── src/comedy_agent/      # 核心源码
-│   ├── core/              # 配置与通用工具
-│   ├── models/            # ModelFactory 模型层
-│   ├── skills/            # Skill 基类与内置技能
+│   ├── core/              # 配置与通用工具（PromptManager、Settings）
+│   ├── models/            # ModelFactory 模型层（LLM + Embedding）
+│   ├── skills/            # Skill 基类与内置技能（6 个）
 │   ├── agent/             # Agent 主控与 Orchestrator
-│   ├── rag/               # RAG 检索与知识库
-│   ├── memory/            # 记忆系统
+│   ├── rag/               # RAG 检索与知识库（预留接口）
+│   ├── memory/            # 记忆系统（预留接口）
 │   └── api/               # CLI / HTTP API
 ├── skills/                # 插件化 Skill 目录
 ├── data/                  # 数据目录
-├── tests/                 # 测试
+├── tests/                 # 测试（78 个用例全部通过）
 └── vibe-log/              # 开发日志
 ```
+
+## 开发进度
+
+| 阶段 | 主题 | 进度 | 核心目标 |
+|------|------|------|----------|
+| 第一阶段 | MVP 骨架搭建 | ✅ 已完成 | 跑通 Agent → Skill → LLM → Output 的最小闭环 |
+| 第二阶段 | Skill 体系与模型层 | ✅ 已完成 | 构建完整喜剧 Skill 生态，支持模型动态切换与 Fallback |
+| 第三阶段 | RAG 知识库建设 | ⏳ 未开始 | 让 Agent 具备喜剧行业专业知识检索与注入能力 |
+| 第四阶段 | 记忆系统与用户层 | ⏳ 未开始 | 实现个性化记忆与持续进化 |
+| 第五阶段 | 工程化与优化 | ⏳ 未开始 | 性能、可观测性、生产就绪 |
+
+> 详见 [plan.md](plan.md)。
 
 ## 快速开始
 
@@ -88,7 +114,7 @@ comedy-agent chat
 # 指定模型对话
 comedy-agent chat --model claude-3-5-sonnet
 comedy-agent chat --model gpt-4o
-comedy-agent chat --model ollama-llama3   # 本地模型，无需 API Key
+comedy-agent chat --model ollama-llama3.1   # 本地模型，无需 API Key
 
 # 单次运行
 comedy-agent run "写一个关于相亲的脱口秀" --model gpt-4o
@@ -127,10 +153,32 @@ uvicorn comedy_agent.api.server:app --reload
 ### 5. 运行测试
 
 ```bash
-# 全量测试
+# 全量测试（当前 78 个用例全部通过）
 python -m pytest tests/ -v
 ```
 
-## 开发计划
+## 内置 Skill 一览
 
-详见 [plan.md](plan.md)。
+| Skill | 类型 | 任务类型 | 说明 |
+|-------|------|----------|------|
+| `standup` | 创作 | creative | 脱口秀创作：主题、风格、时长、受众 |
+| `crosstalk` | 创作 | creative | 相声创作：逗哏、捧哏、结构 |
+| `sketch` | 创作 | creative | 小品创作：角色、场景、冲突 |
+| `sitcom` | 创作 | creative | 情景喜剧创作：集数、角色关系 |
+| `joke_analyzer` | 分析 | analytical | 笑点分析：拆解笑点结构与节奏 |
+| `script_evaluator` | 分析 | analytical | 剧本评估：评分与改进建议 |
+
+## 模型支持矩阵
+
+| 提供商 | 模型 | 需要 API Key | 支持 Tool Calling |
+|--------|------|--------------|-------------------|
+| OpenAI | gpt-4o, gpt-4o-mini, gpt-4-turbo | ✅ | ✅ |
+| Anthropic | claude-3-5-sonnet, claude-3-opus, claude-3-5-haiku | ✅ | ✅ |
+| 通义千问 | qwen-max, qwen-plus, qwen-turbo | ✅ | ✅ |
+| Moonshot | kimi-for-coding | ✅ | ✅ |
+| Ollama | ollama-llama3.1, ollama-qwen2.5, ollama-llama3 | ❌ | llama3.1/qwen2.5 ✅ |
+
+## 设计文档
+
+- [comedy-agent-design.md](comedy-agent-design.md) — 设计方案与核心问题解答
+- [plan.md](plan.md) — 详细开发计划与任务分解

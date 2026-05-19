@@ -4,33 +4,44 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import StaticPool, create_engine
 
 from comedy_agent.api.server import app, state
 
 
+def _patched_create_engine(*args, **kwargs):
+    """对 SQLite 内存数据库使用 StaticPool，确保多线程共享连接。"""
+    if args and ":memory:" in str(args[0]):
+        kwargs["poolclass"] = StaticPool
+        kwargs.setdefault("connect_args", {})
+        kwargs["connect_args"]["check_same_thread"] = False
+    return create_engine(*args, **kwargs)
+
+
 @pytest.fixture
 def client():
-    """提供 TestClient（ lifespan 自动执行）。"""
-    # 需要先 mock ModelFactory.get_model，否则 lifespan 初始化会失败
+    """提供 TestClient（ lifespan 自动执行，memory 使用内存数据库）。"""
     with patch(
+        "comedy_agent.memory.medium_term.create_engine",
+        side_effect=_patched_create_engine,
+    ), patch(
         "comedy_agent.api.server.AgentOrchestrator"
     ) as mock_orch_cls:
         mock_orch = MagicMock()
         mock_orch.list_skills.return_value = ["standup_generator"]
         mock_orch_cls.return_value = mock_orch
 
-        # 手动初始化 state（ lifespan 在 TestClient 中会自动执行，
-        # 但这里先确保 mock 已就绪）
-        from comedy_agent.api.server import lifespan
-        import asyncio
-
         # 使用 TestClient 让 lifespan 自动运行
         with TestClient(app) as c:
-            # lifespan 已经执行完毕，state.orch 应该已设置
+            # lifespan 已经执行完毕，替换 memory 为内存数据库实例
+            from comedy_agent.memory.unified import UnifiedMemory
+
+            state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
             yield c
 
     # 清理
     state.orch = None
+    state.memory = None
 
 
 class TestHealth:

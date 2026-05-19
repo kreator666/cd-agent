@@ -65,6 +65,7 @@ class ContextInjector:
         query: str,
         top_k: int = 5,
         system_prompt: str | None = None,
+        memory_context: str | None = None,
     ) -> dict[str, str]:
         """检索相关知识并格式化为上下文。
 
@@ -72,33 +73,48 @@ class ContextInjector:
             query: 用户查询。
             top_k: 检索结果数量。
             system_prompt: 现有系统提示词，注入后会追加知识上下文说明。
+            memory_context: 可选的用户记忆上下文文本，优先注入到 system prompt。
 
         Returns:
             dict: 包含 ``system_prompt``（更新后的系统提示）和 ``context``（上下文文本）的字典。
                 若 ``system_prompt`` 为 ``None``，则上下文放在 ``context`` 中供外部拼接。
         """
         docs = self.retriever.retrieve(query, top_k=top_k)
-        if not docs:
-            logger.debug("未检索到与 '%s' 相关的知识", query)
+        has_knowledge = bool(docs)
+
+        if not has_knowledge and not memory_context:
+            logger.debug("未检索到与 '%s' 相关的知识，且无记忆上下文", query)
             return {
                 "system_prompt": system_prompt or "",
                 "context": "",
             }
 
-        context_text = self._format_context(docs, query)
-        context_text = self._truncate_to_budget(context_text)
+        context_text = ""
+        if has_knowledge:
+            context_text = self._format_context(docs, query)
+            context_text = self._truncate_to_budget(context_text)
 
         if system_prompt:
-            # 在 system prompt 中追加知识上下文
-            injected_system = (
-                f"{system_prompt}\n\n"
-                f"【知识库参考】\n"
-                f"以下是与用户问题相关的喜剧行业知识，请在回答时参考：\n\n"
-                f"{context_text}\n"
-                f"【知识库参考结束】"
-            )
+            parts: list[str] = [system_prompt]
+
+            if memory_context:
+                parts.append(
+                    f"【关于用户】\n"
+                    f"以下是该用户的历史偏好与创作习惯，请在回答时参考：\n\n"
+                    f"{memory_context}\n"
+                    f"【关于用户结束】"
+                )
+
+            if context_text:
+                parts.append(
+                    f"【知识库参考】\n"
+                    f"以下是与用户问题相关的喜剧行业知识，请在回答时参考：\n\n"
+                    f"{context_text}\n"
+                    f"【知识库参考结束】"
+                )
+
             return {
-                "system_prompt": injected_system,
+                "system_prompt": "\n\n".join(parts),
                 "context": context_text,
             }
 
@@ -200,6 +216,7 @@ class ContextInjector:
         system_prompt: str | None = None,
         chat_history: list[tuple[str, str]] | None = None,
         top_k: int = 5,
+        memory_context: str | None = None,
     ) -> list[tuple[str, str]]:
         """构建包含知识上下文的完整消息列表，供 LangChain Agent 使用。
 
@@ -208,11 +225,14 @@ class ContextInjector:
             system_prompt: 系统提示词。
             chat_history: 历史消息列表 [(role, content), ...]。
             top_k: 检索结果数量。
+            memory_context: 可选的用户记忆上下文文本。
 
         Returns:
             list[tuple[str, str]]: 完整消息列表，可直接传给 Agent。
         """
-        injected = self.inject(query, top_k=top_k, system_prompt=system_prompt)
+        injected = self.inject(
+            query, top_k=top_k, system_prompt=system_prompt, memory_context=memory_context
+        )
         messages: list[tuple[str, str]] = []
 
         if injected["system_prompt"]:

@@ -11,6 +11,7 @@ from typing import Sequence
 
 from comedy_agent import __version__
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError
 from comedy_agent.skills import (
     CrosstalkSkill,
@@ -25,10 +26,23 @@ from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.rag.ingest import KnowledgeIngestor
 
 
-def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
-    """构建并初始化 Orchestrator（自动加载 Prompt 与 Skill）。"""
+def _build_orchestrator(
+    model_name: str | None = None,
+    user_id: str | None = None,
+) -> tuple[AgentOrchestrator, str | None]:
+    """构建并初始化 Orchestrator（自动加载 Prompt、Memory 与 Skill）。
+
+    Returns:
+        tuple: (Orchestrator 实例, user_id)
+    """
     try:
-        orch = AgentOrchestrator(model_name=model_name)
+        memory = UnifiedMemory()
+    except Exception as e:
+        print(f"\n⚠️  记忆系统初始化失败: {e}", file=sys.stderr)
+        memory = None
+
+    try:
+        orch = AgentOrchestrator(model_name=model_name, memory=memory)
     except ModelConfigError as e:
         print(f"\n❌ 模型配置错误\n\n{e}\n", file=sys.stderr)
         sys.exit(1)
@@ -43,7 +57,7 @@ def _build_orchestrator(model_name: str | None = None) -> AgentOrchestrator:
     for plugin in load_plugin_skills():
         orch.register_skill(plugin)
 
-    return orch
+    return orch, user_id
 
 
 def cmd_version() -> None:
@@ -91,16 +105,18 @@ def _print_runtime_error(e: Exception) -> None:
 
 def cmd_skills() -> None:
     """列出所有可用 Skill。"""
-    orch = _build_orchestrator()
+    orch, _ = _build_orchestrator()
     print("可用 Skill 列表：")
     for name in orch.list_skills():
         print(f"  - {name}")
 
 
-def cmd_chat(model_name: str | None = None) -> None:
+def cmd_chat(model_name: str | None = None, user_id: str | None = None) -> None:
     """启动交互式对话模式。"""
-    orch = _build_orchestrator(model_name=model_name)
+    orch, uid = _build_orchestrator(model_name=model_name, user_id=user_id)
     print("🎤 Comedy Agent 交互模式")
+    if uid:
+        print(f"当前用户: {uid}")
     print("输入你的需求（如：'写一个关于职场加班的脱口秀'），输入 exit/quit 退出\n")
 
     while True:
@@ -117,17 +133,17 @@ def cmd_chat(model_name: str | None = None) -> None:
             break
 
         try:
-            result = orch.run(user_input)
+            result = orch.run(user_input, user_id=uid)
             print(f"\nAgent > {result['output']}\n")
         except Exception as e:
             _print_runtime_error(e)
 
 
-def cmd_run(prompt: str, model_name: str | None = None) -> None:
+def cmd_run(prompt: str, model_name: str | None = None, user_id: str | None = None) -> None:
     """单次运行模式。"""
-    orch = _build_orchestrator(model_name=model_name)
+    orch, uid = _build_orchestrator(model_name=model_name, user_id=user_id)
     try:
-        result = orch.run(prompt)
+        result = orch.run(prompt, user_id=uid)
         print(result["output"])
     except Exception as e:
         _print_runtime_error(e)
@@ -182,11 +198,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     # chat
     chat_parser = subparsers.add_parser("chat", help="启动交互式对话")
     chat_parser.add_argument("--model", default=None, help="指定模型")
+    chat_parser.add_argument("--user-id", default=None, help="用户标识，用于注入记忆上下文")
 
     # run
     run_parser = subparsers.add_parser("run", help="单次运行")
     run_parser.add_argument("prompt", help="输入提示词")
     run_parser.add_argument("--model", default=None, help="指定模型")
+    run_parser.add_argument("--user-id", default=None, help="用户标识，用于注入记忆上下文")
 
     # skills
     subparsers.add_parser("skills", help="列出可用 Skill")
@@ -214,10 +232,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     # 优先使用子命令的 --model，否则使用全局 --model
     model_name = getattr(args, "model", None)
 
+    user_id = getattr(args, "user_id", None)
+
     if args.command == "chat":
-        cmd_chat(model_name=model_name)
+        cmd_chat(model_name=model_name, user_id=user_id)
     elif args.command == "run":
-        cmd_run(args.prompt, model_name=model_name)
+        cmd_run(args.prompt, model_name=model_name, user_id=user_id)
     elif args.command == "skills":
         cmd_skills()
     elif args.command == "skill" and args.skill_name == "standup":

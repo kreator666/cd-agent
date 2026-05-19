@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError
 from comedy_agent.skills import (
     CrosstalkSkill,
@@ -33,6 +34,7 @@ class ChatRequest(BaseModel):
 
     prompt: str = Field(description="用户输入")
     model: str | None = Field(default=None, description="指定模型")
+    user_id: str | None = Field(default=None, description="用户标识，用于注入记忆上下文")
     chat_history: list[tuple[str, str]] | None = Field(
         default=None, description="历史消息 [(role, content), ...]"
     )
@@ -72,10 +74,11 @@ class StandupResponse(BaseModel):
 # 应用生命周期
 # ------------------------------------------------------------------ #
 class AppState:
-    """全局应用状态（持有 Orchestrator 实例）。"""
+    """全局应用状态（持有 Orchestrator 与 Memory 实例）。"""
 
     def __init__(self) -> None:
         self.orch: AgentOrchestrator | None = None
+        self.memory: UnifiedMemory | None = None
 
 
 state = AppState()
@@ -83,12 +86,21 @@ state = AppState()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动时加载 Prompt 与初始化 Orchestrator。"""
+    """应用生命周期：启动时加载 Prompt、Memory 与初始化 Orchestrator。"""
     # 加载外部 Prompt 模板
     PromptManager().load_from_directory()
 
+    # 初始化统一记忆
     try:
-        state.orch = AgentOrchestrator()
+        state.memory = UnifiedMemory()
+    except Exception as e:
+        import logging
+
+        logging.getLogger("comedy-agent").warning("记忆系统初始化失败: %s", e)
+        state.memory = None
+
+    try:
+        state.orch = AgentOrchestrator(memory=state.memory)
         state.orch.register_skill(StandupSkill())
         state.orch.register_skill(CrosstalkSkill())
         state.orch.register_skill(SketchSkill())
@@ -106,6 +118,7 @@ async def lifespan(app: FastAPI):
         state.orch = None
     yield
     state.orch = None
+    state.memory = None
 
 
 app = FastAPI(
@@ -143,6 +156,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         result = state.orch.run(
             request.prompt,
             chat_history=request.chat_history,
+            user_id=request.user_id,
         )
         # 将消息对象序列化为 dict
         messages = []

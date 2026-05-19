@@ -155,7 +155,12 @@ class TestAgentOrchestrator:
                 assert result["output"] == "Hello there"
                 assert len(result["messages"]) == 2
                 mock_agent.invoke.assert_called_once_with(
-                    {"messages": [("human", "hi")]}
+                    {
+                        "messages": [
+                            ("system", mock_create.call_args.kwargs["system_prompt"]),
+                            ("human", "hi"),
+                        ]
+                    }
                 )
 
     def test_run_with_chat_history(self, mock_llm):
@@ -187,6 +192,7 @@ class TestAgentOrchestrator:
                 call_args = mock_agent.invoke.call_args
                 messages = call_args[0][0]["messages"]
                 assert messages == [
+                    ("system", mock_create.call_args.kwargs["system_prompt"]),
                     ("human", "prev"),
                     ("ai", "ok"),
                     ("human", "next"),

@@ -56,3 +56,4 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+data/memory.db

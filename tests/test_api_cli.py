@@ -32,7 +32,7 @@ class TestCLI:
         ) as mock_build:
             mock_orch = MagicMock()
             mock_orch.list_skills.return_value = ["standup_generator"]
-            mock_build.return_value = mock_orch
+            mock_build.return_value = (mock_orch, None)
 
             code = main(["skills"])
 
@@ -47,14 +47,14 @@ class TestCLI:
         ) as mock_build:
             mock_orch = MagicMock()
             mock_orch.run.return_value = {"output": "测试输出"}
-            mock_build.return_value = mock_orch
+            mock_build.return_value = (mock_orch, None)
 
             code = main(["run", "写一个段子"])
 
             assert code == 0
             captured = capsys.readouterr()
             assert "测试输出" in captured.out
-            mock_orch.run.assert_called_once_with("写一个段子")
+            mock_orch.run.assert_called_once_with("写一个段子", user_id=None)
 
     def test_skill_standup(self, capsys):
         """skill standup 直接调用 Skill。"""

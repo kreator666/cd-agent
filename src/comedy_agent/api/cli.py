@@ -23,7 +23,18 @@ from comedy_agent.skills import (
 )
 from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
+from comedy_agent.memory.models import ScriptData
+from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.rag.ingest import KnowledgeIngestor
+
+
+def _get_memory() -> UnifiedMemory | None:
+    """获取 UnifiedMemory 实例（不依赖 Orchestrator）。"""
+    try:
+        return UnifiedMemory()
+    except Exception as e:
+        print(f"\n⚠️  记忆系统初始化失败: {e}", file=sys.stderr)
+        return None
 
 
 def _build_orchestrator(
@@ -162,6 +173,120 @@ def cmd_skill_standup(topic: str, style: str, duration: int, audience: str) -> N
     print(result)
 
 
+def cmd_scripts_list(user_id: str, script_type: str | None = None) -> None:
+    """列出用户的作品。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    scripts = memory.list_scripts(user_id, script_type)
+    if not scripts:
+        print("暂无作品")
+        return
+    print(f"{'ID':<18} {'标题':<20} {'类型':<12} {'评分':<6} {'更新时间'}")
+    print("-" * 70)
+    for sc in scripts:
+        title = (sc.title or "-")[:18]
+        stype = sc.script_type or "-"
+        rating = f"{sc.rating:.1f}" if sc.rating is not None else "-"
+        updated = sc.updated_at.strftime("%Y-%m-%d %H:%M") if sc.updated_at else "-"
+        print(f"{sc.script_id:<18} {title:<20} {stype:<12} {rating:<6} {updated}")
+
+
+def cmd_scripts_get(script_id: str) -> None:
+    """查看作品详情。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    script = memory.load_script(script_id)
+    if script is None:
+        print(f"❌ 作品不存在: {script_id}", file=sys.stderr)
+        sys.exit(1)
+    print(f"作品 ID: {script.script_id}")
+    print(f"标题: {script.title or '-'}")
+    print(f"类型: {script.script_type or '-'}")
+    print(f"评分: {script.rating if script.rating is not None else '-'}")
+    print(f"标签: {', '.join(script.tags) if script.tags else '-'}")
+    print(f"更新时间: {script.updated_at}")
+    print("-" * 40)
+    print(script.content)
+
+
+def cmd_scripts_save(
+    user_id: str,
+    title: str,
+    content: str,
+    script_type: str | None = None,
+    tags: list[str] | None = None,
+    rating: float | None = None,
+) -> None:
+    """保存新作品。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    script = ScriptData(
+        title=title,
+        content=content,
+        script_type=script_type,
+        tags=tags,
+        rating=rating,
+    )
+    saved = memory.save_script(user_id, script)
+    print(f"✅ 作品已保存，ID: {saved.script_id}")
+
+
+def cmd_scripts_update(
+    user_id: str,
+    script_id: str,
+    title: str | None = None,
+    content: str | None = None,
+    script_type: str | None = None,
+    tags: list[str] | None = None,
+    rating: float | None = None,
+) -> None:
+    """更新作品。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    existing = memory.load_script(script_id)
+    if existing is None:
+        print(f"❌ 作品不存在: {script_id}", file=sys.stderr)
+        sys.exit(1)
+    updated = ScriptData(
+        script_id=script_id,
+        title=title if title is not None else existing.title,
+        content=content if content is not None else existing.content,
+        script_type=script_type if script_type is not None else existing.script_type,
+        tags=tags if tags is not None else existing.tags,
+        rating=rating if rating is not None else existing.rating,
+    )
+    memory.save_script(user_id, updated)
+    print(f"✅ 作品已更新: {script_id}")
+
+
+def cmd_scripts_delete(script_id: str) -> None:
+    """删除作品。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    ok = memory.delete_script(script_id)
+    if not ok:
+        print(f"❌ 作品不存在: {script_id}", file=sys.stderr)
+        sys.exit(1)
+    print(f"✅ 作品已删除: {script_id}")
+
+
+def cmd_scripts_rate(script_id: str, rating: float) -> None:
+    """为作品评分。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    ok = memory.rate_script(script_id, rating)
+    if not ok:
+        print(f"❌ 作品不存在: {script_id}", file=sys.stderr)
+        sys.exit(1)
+    print(f"✅ 评分已更新: {script_id} -> {rating}")
+
+
 def cmd_ingest(dir_path: str | None = None) -> None:
     """导入知识库数据。"""
     try:
@@ -219,6 +344,49 @@ def main(argv: Sequence[str] | None = None) -> int:
     standup_parser.add_argument("--duration", type=int, default=3, help="时长（分钟）")
     standup_parser.add_argument("--audience", default="通用", help="受众")
 
+    # scripts
+    scripts_parser = subparsers.add_parser("scripts", help="用户作品管理")
+    scripts_sub = scripts_parser.add_subparsers(dest="scripts_cmd", help="作品子命令")
+
+    # scripts list
+    scripts_list_parser = scripts_sub.add_parser("list", help="列出作品")
+    scripts_list_parser.add_argument("--user-id", required=True, help="用户标识")
+    scripts_list_parser.add_argument(
+        "--type", default=None, help="作品类型过滤（standup/sketch/crosstalk/sitcom）"
+    )
+
+    # scripts get
+    scripts_get_parser = scripts_sub.add_parser("get", help="查看作品详情")
+    scripts_get_parser.add_argument("script_id", help="作品 ID")
+
+    # scripts save
+    scripts_save_parser = scripts_sub.add_parser("save", help="保存新作品")
+    scripts_save_parser.add_argument("--user-id", required=True, help="用户标识")
+    scripts_save_parser.add_argument("--title", required=True, help="作品标题")
+    scripts_save_parser.add_argument("--content", required=True, help="作品内容")
+    scripts_save_parser.add_argument("--type", default=None, help="作品类型")
+    scripts_save_parser.add_argument("--tags", default=None, help="标签，逗号分隔")
+    scripts_save_parser.add_argument("--rating", type=float, default=None, help="评分 0.0-5.0")
+
+    # scripts update
+    scripts_update_parser = scripts_sub.add_parser("update", help="更新作品")
+    scripts_update_parser.add_argument("--user-id", required=True, help="用户标识")
+    scripts_update_parser.add_argument("script_id", help="作品 ID")
+    scripts_update_parser.add_argument("--title", default=None, help="作品标题")
+    scripts_update_parser.add_argument("--content", default=None, help="作品内容")
+    scripts_update_parser.add_argument("--type", default=None, help="作品类型")
+    scripts_update_parser.add_argument("--tags", default=None, help="标签，逗号分隔")
+    scripts_update_parser.add_argument("--rating", type=float, default=None, help="评分 0.0-5.0")
+
+    # scripts delete
+    scripts_delete_parser = scripts_sub.add_parser("delete", help="删除作品")
+    scripts_delete_parser.add_argument("script_id", help="作品 ID")
+
+    # scripts rate
+    scripts_rate_parser = scripts_sub.add_parser("rate", help="为作品评分")
+    scripts_rate_parser.add_argument("script_id", help="作品 ID")
+    scripts_rate_parser.add_argument("rating", type=float, help="评分 0.0-5.0")
+
     # ingest
     ingest_parser = subparsers.add_parser("ingest", help="导入知识库数据")
     ingest_parser.add_argument("--dir", default=None, help="知识库目录路径")
@@ -244,6 +412,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         cmd_skill_standup(args.topic, args.style, args.duration, args.audience)
     elif args.command == "ingest":
         cmd_ingest(dir_path=args.dir)
+    elif args.command == "scripts":
+        if args.scripts_cmd == "list":
+            cmd_scripts_list(user_id=args.user_id, script_type=args.type)
+        elif args.scripts_cmd == "get":
+            cmd_scripts_get(script_id=args.script_id)
+        elif args.scripts_cmd == "save":
+            tags = args.tags.split(",") if args.tags else None
+            cmd_scripts_save(
+                user_id=args.user_id,
+                title=args.title,
+                content=args.content,
+                script_type=args.type,
+                tags=tags,
+                rating=args.rating,
+            )
+        elif args.scripts_cmd == "update":
+            tags = args.tags.split(",") if args.tags else None
+            cmd_scripts_update(
+                user_id=args.user_id,
+                script_id=args.script_id,
+                title=args.title,
+                content=args.content,
+                script_type=args.type,
+                tags=tags,
+                rating=args.rating,
+            )
+        elif args.scripts_cmd == "delete":
+            cmd_scripts_delete(script_id=args.script_id)
+        elif args.scripts_cmd == "rate":
+            cmd_scripts_rate(script_id=args.script_id, rating=args.rating)
+        else:
+            scripts_parser.print_help()
+            return 1
     else:
         parser.print_help()
         return 1

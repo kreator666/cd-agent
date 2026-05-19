@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError
 from comedy_agent.skills import (
@@ -68,6 +69,57 @@ class StandupResponse(BaseModel):
     """脱口秀创作响应。"""
 
     content: str = Field(description="生成的段子")
+
+
+# ------------------------------------------------------------------ #
+# 作品管理请求/响应模型
+# ------------------------------------------------------------------ #
+class ScriptCreateRequest(BaseModel):
+    """创建作品请求。"""
+
+    user_id: str = Field(description="用户标识")
+    title: str | None = Field(default=None, description="作品标题")
+    content: str = Field(description="作品内容")
+    script_type: str | None = Field(
+        default=None, description="作品类型：standup / sketch / crosstalk / sitcom"
+    )
+    tags: list[str] | None = Field(default=None, description="标签列表")
+    rating: float | None = Field(default=None, description="评分 0.0-5.0")
+
+
+class ScriptUpdateRequest(BaseModel):
+    """更新作品请求。"""
+
+    user_id: str = Field(description="用户标识")
+    title: str | None = Field(default=None, description="作品标题")
+    content: str | None = Field(default=None, description="作品内容")
+    script_type: str | None = Field(default=None, description="作品类型")
+    tags: list[str] | None = Field(default=None, description="标签列表")
+    rating: float | None = Field(default=None, description="评分 0.0-5.0")
+
+
+class ScriptRateRequest(BaseModel):
+    """作品评分请求。"""
+
+    rating: float = Field(description="评分 0.0-5.0")
+
+
+class ScriptListResponse(BaseModel):
+    """作品列表响应。"""
+
+    scripts: list[ScriptData] = Field(description="作品列表")
+
+
+class ScriptDetailResponse(BaseModel):
+    """作品详情响应。"""
+
+    script: ScriptData | None = Field(default=None, description="作品详情")
+
+
+class SuccessResponse(BaseModel):
+    """通用成功响应。"""
+
+    success: bool = Field(description="是否成功")
 
 
 # ------------------------------------------------------------------ #
@@ -188,3 +240,86 @@ async def skill_standup(request: StandupRequest) -> StandupResponse:
         return StandupResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------ #
+# 作品管理路由
+# ------------------------------------------------------------------ #
+@app.post("/scripts", response_model=ScriptData, tags=["scripts"])
+async def create_script(request: ScriptCreateRequest) -> ScriptData:
+    """保存（创建）新作品。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    script = ScriptData(
+        title=request.title,
+        content=request.content,
+        script_type=request.script_type,
+        tags=request.tags,
+        rating=request.rating,
+    )
+    return state.memory.save_script(request.user_id, script)
+
+
+@app.get("/scripts", response_model=ScriptListResponse, tags=["scripts"])
+async def list_scripts(
+    user_id: str, script_type: str | None = None
+) -> ScriptListResponse:
+    """列出用户的作品。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    scripts = state.memory.list_scripts(user_id, script_type)
+    return ScriptListResponse(scripts=scripts)
+
+
+@app.get("/scripts/{script_id}", response_model=ScriptDetailResponse, tags=["scripts"])
+async def get_script(script_id: str) -> ScriptDetailResponse:
+    """获取单个作品详情。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    script = state.memory.load_script(script_id)
+    if script is None:
+        raise HTTPException(status_code=404, detail="作品不存在")
+    return ScriptDetailResponse(script=script)
+
+
+@app.put("/scripts/{script_id}", response_model=ScriptData, tags=["scripts"])
+async def update_script(script_id: str, request: ScriptUpdateRequest) -> ScriptData:
+    """更新作品。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    existing = state.memory.load_script(script_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="作品不存在")
+    updated = ScriptData(
+        script_id=script_id,
+        title=request.title if request.title is not None else existing.title,
+        content=request.content if request.content is not None else existing.content,
+        script_type=request.script_type
+        if request.script_type is not None
+        else existing.script_type,
+        tags=request.tags if request.tags is not None else existing.tags,
+        rating=request.rating if request.rating is not None else existing.rating,
+    )
+    return state.memory.save_script(request.user_id, updated)
+
+
+@app.delete("/scripts/{script_id}", response_model=SuccessResponse, tags=["scripts"])
+async def delete_script(script_id: str) -> SuccessResponse:
+    """删除作品。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    ok = state.memory.delete_script(script_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="作品不存在")
+    return SuccessResponse(success=True)
+
+
+@app.patch("/scripts/{script_id}/rate", response_model=SuccessResponse, tags=["scripts"])
+async def rate_script(script_id: str, request: ScriptRateRequest) -> SuccessResponse:
+    """为作品评分。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    ok = state.memory.rate_script(script_id, request.rating)
+    if not ok:
+        raise HTTPException(status_code=404, detail="作品不存在")
+    return SuccessResponse(success=True)

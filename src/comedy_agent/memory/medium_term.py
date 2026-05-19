@@ -297,6 +297,28 @@ class SQLMemoryStore(MemoryStore):
                 for r in rows
             ]
 
+    def list_all_scripts(
+        self, min_rating: float | None = None
+    ) -> list[ScriptData]:
+        with self._new_session() as session:
+            query = session.query(UserScript)
+            if min_rating is not None:
+                query = query.filter(UserScript.rating >= min_rating)
+            rows = query.order_by(UserScript.rating.desc()).all()
+            return [
+                ScriptData(
+                    script_id=r.script_id,
+                    title=r.title,
+                    content=r.content,
+                    script_type=r.script_type,
+                    rating=r.rating,
+                    tags=r.tags,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
     def delete_script(self, script_id: str) -> bool:
         with self._new_session() as session:
             row = (

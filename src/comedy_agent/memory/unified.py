@@ -103,6 +103,11 @@ class UnifiedMemory(MemoryStore):
     ) -> list[ScriptData]:
         return self._store.list_scripts(user_id, script_type)
 
+    def list_all_scripts(
+        self, min_rating: float | None = None
+    ) -> list[ScriptData]:
+        return self._store.list_all_scripts(min_rating)
+
     def delete_script(self, script_id: str) -> bool:
         return self._store.delete_script(script_id)
 

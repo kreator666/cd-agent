@@ -168,6 +168,18 @@ class VectorStore:
         results = self.collection.peek(limit=limit)
         return _query_result_to_documents(results)
 
+    def get_by_filter(self, filter_dict: dict[str, Any]) -> list[Document]:
+        """按 metadata 过滤条件查询文档。
+
+        Args:
+            filter_dict: ChromaDB ``where`` 过滤条件。
+
+        Returns:
+            list[Document]: 匹配的文档列表。
+        """
+        results = self.collection.get(where=filter_dict)
+        return _query_result_to_documents(results)
+
 
 # ------------------------------------------------------------------ #
 # 工具函数

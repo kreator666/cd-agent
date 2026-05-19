@@ -131,3 +131,60 @@ class TestStandupSkill:
             assert response.status_code == 200
             data = response.json()
             assert data["content"] == "生成的段子"
+
+
+class TestFeedbackIngest:
+    """高评分内容回流端点测试。"""
+
+    def test_feedback_ingest_success(self, client):
+        with patch("comedy_agent.api.server.FeedbackLoop") as mock_loop_cls:
+            mock_loop = MagicMock()
+            mock_loop.ingest_high_rated_scripts.return_value = {
+                "ingested_scripts": 2,
+                "total_chunks": 5,
+                "script_ids": ["s1", "s2"],
+                "skipped": [],
+                "dry_run": False,
+            }
+            mock_loop_cls.return_value = mock_loop
+
+            response = client.post(
+                "/feedback/ingest",
+                json={"min_rating": 4.0, "chunk_strategy": "paragraph"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["ingested_scripts"] == 2
+            assert data["total_chunks"] == 5
+            assert data["dry_run"] is False
+            mock_loop_cls.assert_called_once()
+            call_kwargs = mock_loop_cls.call_args[1]
+            assert call_kwargs["min_rating"] == 4.0
+
+    def test_feedback_ingest_dry_run(self, client):
+        with patch("comedy_agent.api.server.FeedbackLoop") as mock_loop_cls:
+            mock_loop = MagicMock()
+            mock_loop.ingest_high_rated_scripts.return_value = {
+                "ingested_scripts": 0,
+                "total_chunks": 0,
+                "script_ids": [],
+                "skipped": [],
+                "dry_run": True,
+            }
+            mock_loop_cls.return_value = mock_loop
+
+            response = client.post(
+                "/feedback/ingest",
+                json={"dry_run": True, "min_rating": 4.0},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["dry_run"] is True
+
+    def test_feedback_ingest_memory_not_ready(self, client):
+        state.memory = None
+        response = client.post(
+            "/feedback/ingest",
+            json={"min_rating": 4.0},
+        )
+        assert response.status_code == 503

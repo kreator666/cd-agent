@@ -25,6 +25,7 @@ from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
+from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.rag.ingest import KnowledgeIngestor
 
 
@@ -287,6 +288,34 @@ def cmd_scripts_rate(script_id: str, rating: float) -> None:
     print(f"✅ 评分已更新: {script_id} -> {rating}")
 
 
+def cmd_feedback_loop(
+    user_id: str | None = None,
+    min_rating: float = 4.0,
+    chunk_strategy: str = "paragraph",
+    dry_run: bool = False,
+) -> None:
+    """将高评分剧本回流到知识库。"""
+    memory = _get_memory()
+    if memory is None:
+        sys.exit(1)
+    loop = FeedbackLoop(memory=memory, min_rating=min_rating)
+    result = loop.ingest_high_rated_scripts(
+        user_id=user_id,
+        chunk_strategy=chunk_strategy,
+        dry_run=dry_run,
+    )
+    if dry_run:
+        print("[模拟运行] 未实际入库")
+    print(f"符合条件作品: {result['ingested_scripts'] + len(result['skipped'])}")
+    print(f"实际回流: {result['ingested_scripts']} 条作品，{result['total_chunks']} 个分块")
+    if result["skipped"]:
+        print(f"已入库跳过: {len(result['skipped'])} 条")
+    if result["script_ids"]:
+        print("回流作品 ID:")
+        for sid in result["script_ids"]:
+            print(f"  - {sid}")
+
+
 def cmd_ingest(dir_path: str | None = None) -> None:
     """导入知识库数据。"""
     try:
@@ -387,6 +416,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     scripts_rate_parser.add_argument("script_id", help="作品 ID")
     scripts_rate_parser.add_argument("rating", type=float, help="评分 0.0-5.0")
 
+    # feedback-loop
+    feedback_parser = subparsers.add_parser("feedback-loop", help="高评分内容回流到知识库")
+    feedback_parser.add_argument("--user-id", default=None, help="用户标识，为空时处理所有用户")
+    feedback_parser.add_argument("--min-rating", type=float, default=4.0, help="最低评分阈值")
+    feedback_parser.add_argument(
+        "--strategy", default="paragraph", help="分块策略（fixed/paragraph/scene/dialogue）"
+    )
+    feedback_parser.add_argument("--dry-run", action="store_true", help="模拟运行，不实际入库")
+
     # ingest
     ingest_parser = subparsers.add_parser("ingest", help="导入知识库数据")
     ingest_parser.add_argument("--dir", default=None, help="知识库目录路径")
@@ -412,6 +450,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         cmd_skill_standup(args.topic, args.style, args.duration, args.audience)
     elif args.command == "ingest":
         cmd_ingest(dir_path=args.dir)
+    elif args.command == "feedback-loop":
+        cmd_feedback_loop(
+            user_id=args.user_id,
+            min_rating=args.min_rating,
+            chunk_strategy=args.strategy,
+            dry_run=args.dry_run,
+        )
     elif args.command == "scripts":
         if args.scripts_cmd == "list":
             cmd_scripts_list(user_id=args.user_id, script_type=args.type)

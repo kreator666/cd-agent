@@ -112,6 +112,9 @@ comedy-agent --model gpt-4o chat
 comedy-agent chat
 
 # 指定模型对话
+#ollama run qwen2.5 
+#ollama rm llama3:latest gemma2:9b mistral:latest
+#comedy-agent chat --model  ollama-qwen2.5
 comedy-agent chat --model claude-3-5-sonnet
 comedy-agent chat --model gpt-4o
 comedy-agent chat --model ollama-llama3.1   # 本地模型，无需 API Key

@@ -18,7 +18,9 @@ from comedy_agent.memory.schema import (
     UserProfile,
     UserScript,
 )
+from comedy_agent.memory.medium_term import SQLMemoryStore
 from comedy_agent.memory.store import MemoryStore
+from comedy_agent.memory.unified import UnifiedMemory
 
 __all__ = [
     # Schema
@@ -35,4 +37,6 @@ __all__ = [
     "UserContext",
     # Store
     "MemoryStore",
+    "SQLMemoryStore",
+    "UnifiedMemory",
 ]

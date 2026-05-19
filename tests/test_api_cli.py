@@ -107,3 +107,65 @@ class TestCLI:
             assert "3" in captured.out
             assert "5" in captured.out
             mock_ingestor.ingest_directory.assert_called_once_with("data/knowledge")
+
+    def test_feedback_loop(self, capsys):
+        """feedback-loop 子命令触发回流。"""
+        with patch("comedy_agent.api.cli._get_memory") as mock_get_memory:
+            mock_memory = MagicMock()
+            mock_get_memory.return_value = mock_memory
+
+            with patch(
+                "comedy_agent.api.cli.FeedbackLoop"
+            ) as mock_loop_cls:
+                mock_loop = MagicMock()
+                mock_loop.ingest_high_rated_scripts.return_value = {
+                    "ingested_scripts": 2,
+                    "total_chunks": 5,
+                    "script_ids": ["s1", "s2"],
+                    "skipped": [],
+                    "dry_run": False,
+                }
+                mock_loop_cls.return_value = mock_loop
+
+                code = main([
+                    "feedback-loop",
+                    "--user-id", "u001",
+                    "--min-rating", "4.0",
+                    "--strategy", "paragraph",
+                ])
+
+                assert code == 0
+                captured = capsys.readouterr()
+                assert "实际回流: 2 条作品" in captured.out
+                mock_loop_cls.assert_called_once_with(
+                    memory=mock_memory, min_rating=4.0
+                )
+                mock_loop.ingest_high_rated_scripts.assert_called_once_with(
+                    user_id="u001",
+                    chunk_strategy="paragraph",
+                    dry_run=False,
+                )
+
+    def test_feedback_loop_dry_run(self, capsys):
+        """feedback-loop --dry-run 模拟运行。"""
+        with patch("comedy_agent.api.cli._get_memory") as mock_get_memory:
+            mock_memory = MagicMock()
+            mock_get_memory.return_value = mock_memory
+
+            with patch(
+                "comedy_agent.api.cli.FeedbackLoop"
+            ) as mock_loop_cls:
+                mock_loop = MagicMock()
+                mock_loop.ingest_high_rated_scripts.return_value = {
+                    "ingested_scripts": 0,
+                    "total_chunks": 0,
+                    "script_ids": [],
+                    "skipped": [],
+                    "dry_run": True,
+                }
+                mock_loop_cls.return_value = mock_loop
+
+                code = main(["feedback-loop", "--dry-run"])
+                assert code == 0
+                captured = capsys.readouterr()
+                assert "[模拟运行]" in captured.out

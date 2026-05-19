@@ -15,6 +15,7 @@ from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError
+from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.skills import (
     CrosstalkSkill,
     JokeAnalyzerSkill,
@@ -120,6 +121,27 @@ class SuccessResponse(BaseModel):
     """通用成功响应。"""
 
     success: bool = Field(description="是否成功")
+
+
+class FeedbackIngestRequest(BaseModel):
+    """高评分内容回流请求。"""
+
+    user_id: str | None = Field(default=None, description="用户标识，为空时处理所有用户")
+    min_rating: float | None = Field(default=None, description="最低评分阈值，默认 4.0")
+    chunk_strategy: str | None = Field(
+        default=None, description="分块策略：fixed / paragraph / scene / dialogue"
+    )
+    dry_run: bool = Field(default=False, description="为 True 时只统计不实际入库")
+
+
+class FeedbackIngestResponse(BaseModel):
+    """高评分内容回流响应。"""
+
+    ingested_scripts: int = Field(description="实际回流作品数")
+    total_chunks: int = Field(description="总分块数")
+    script_ids: list[str] = Field(description="回流作品 ID 列表")
+    skipped: list[str] = Field(description="已入库被跳过的作品 ID 列表")
+    dry_run: bool = Field(description="是否为模拟运行")
 
 
 # ------------------------------------------------------------------ #
@@ -323,3 +345,27 @@ async def rate_script(script_id: str, request: ScriptRateRequest) -> SuccessResp
     if not ok:
         raise HTTPException(status_code=404, detail="作品不存在")
     return SuccessResponse(success=True)
+
+
+# ------------------------------------------------------------------ #
+# 高评分内容回流路由
+# ------------------------------------------------------------------ #
+@app.post("/feedback/ingest", response_model=FeedbackIngestResponse, tags=["feedback"])
+async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestResponse:
+    """将用户高评分剧本回流到知识库，实现持续进化。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    try:
+        loop = FeedbackLoop(
+            memory=state.memory,
+            min_rating=request.min_rating if request.min_rating is not None else 4.0,
+        )
+        result = loop.ingest_high_rated_scripts(
+            user_id=request.user_id,
+            chunk_strategy=request.chunk_strategy or "paragraph",
+            dry_run=request.dry_run,
+        )
+        return FeedbackIngestResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

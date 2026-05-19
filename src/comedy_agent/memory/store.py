@@ -173,6 +173,20 @@ class MemoryStore(ABC):
         ...
 
     @abstractmethod
+    def list_all_scripts(
+        self, min_rating: float | None = None
+    ) -> list[ScriptData]:
+        """列出所有用户作品（跨用户）。
+
+        Args:
+            min_rating: 可选的最低评分过滤。
+
+        Returns:
+            list[ScriptData]: 作品列表，按评分降序。
+        """
+        ...
+
+    @abstractmethod
     def delete_script(self, script_id: str) -> bool:
         """删除指定作品。
 

@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # 向量数据库
     vector_db_path: str = Field(default="./chroma_data", alias="VECTOR_DB_PATH")
 
+    # 记忆数据库（SQLite）
+    memory_db_path: str = Field(default="./data/memory.db", alias="MEMORY_DB_PATH")
+
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 

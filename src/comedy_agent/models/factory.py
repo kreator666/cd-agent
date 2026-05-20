@@ -118,10 +118,22 @@ class ModelFactory:
                 "claude-3-5-sonnet", lambda **kw: _anthropic("claude-3-5-sonnet-20241022", **kw)
             )
             cls.register_llm(
+                "claude-3-5-sonnet-20241022",
+                lambda **kw: _anthropic("claude-3-5-sonnet-20241022", **kw),
+            )
+            cls.register_llm(
                 "claude-3-opus", lambda **kw: _anthropic("claude-3-opus-20240229", **kw)
             )
             cls.register_llm(
+                "claude-3-opus-20240229",
+                lambda **kw: _anthropic("claude-3-opus-20240229", **kw),
+            )
+            cls.register_llm(
                 "claude-3-5-haiku", lambda **kw: _anthropic("claude-3-5-haiku-20241022", **kw)
+            )
+            cls.register_llm(
+                "claude-3-5-haiku-20241022",
+                lambda **kw: _anthropic("claude-3-5-haiku-20241022", **kw),
             )
 
         # 通义千问 (Tongyi / DashScope)

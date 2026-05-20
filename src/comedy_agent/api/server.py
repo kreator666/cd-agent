@@ -72,6 +72,7 @@ class StandupRequest(BaseModel):
     style: str = Field(default="日常观察", description="风格")
     duration: int = Field(default=3, description="时长（分钟）")
     audience: str = Field(default="通用", description="受众")
+    model: str | None = Field(default=None, description="指定模型")
 
 
 class StandupResponse(BaseModel):
@@ -278,12 +279,15 @@ async def list_skills() -> SkillListResponse:
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(request: ChatRequest) -> ChatResponse:
+    print("chat-------------")
     """与 Agent 对话。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
 
     tracer = get_tracer()
     metrics = get_metrics()
+
+    print("chat-------------", request.chat_history, flush=True)
 
     try:
         # 若前端指定了模型，运行时切换
@@ -295,6 +299,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
             input_data={"prompt": request.prompt[:200], "user_id": request.user_id},
             metadata={"model": request.model, "endpoint": "/chat"},
         ) as span:
+            print("chat-------------", request.chat_history, flush=True)
+         
             result = state.orch.run(
                 request.prompt,
                 chat_history=request.chat_history,
@@ -319,7 +325,24 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @app.post("/skills/standup", response_model=StandupResponse, tags=["skills"])
 async def skill_standup(request: StandupRequest) -> StandupResponse:
     """直接调用脱口秀创作 Skill。"""
-    skill = StandupSkill()
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    # 优先复用 orchestrator 中已注册的 Skill，保证模型上下文一致
+    skill = None
+    for tool in state.orch.tools:
+        if getattr(tool, "name", None) == "standup":
+            skill = tool
+            break
+
+    # 若未注册，则新建（兼容测试与边缘场景）
+    if skill is None:
+        skill = StandupSkill()
+
+    # 若前端指定了模型，覆盖 Skill 的模型
+    if request.model is not None:
+        skill.model_name = request.model
+
     try:
         content = skill.invoke(
             {

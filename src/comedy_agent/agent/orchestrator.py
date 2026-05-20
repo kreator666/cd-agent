@@ -12,6 +12,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
 
+from comedy_agent.core.observability import get_metrics, get_tracer
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelFactory
 from comedy_agent.skills.base import ComedySkill
@@ -120,36 +121,55 @@ class AgentOrchestrator:
         Returns:
             dict: 包含 ``output``（最终文本输出）和 ``messages``（完整消息链）的结果字典。
         """
-        agent = self._build_agent()
+        tracer = get_tracer()
+        metrics = get_metrics()
 
-        messages: list[Any] = []
+        with tracer.span(
+            "agent.run",
+            input_data={"user_input": user_input[:200], "user_id": user_id},
+            metadata={
+                "model": self.model_name,
+                "skills": self.list_skills(),
+            },
+        ) as span:
+            agent = self._build_agent()
 
-        # 若存在用户记忆，作为第一条 system message 注入
-        memory_prompt = self._build_memory_system_prompt(user_id)
-        if memory_prompt:
-            messages.append(("system", memory_prompt))
-        elif self.system_prompt:
-            messages.append(("system", self.system_prompt))
+            messages: list[Any] = []
 
-        if chat_history:
-            for role, content in chat_history:
-                messages.append((role, content))
-        messages.append(("human", user_input))
+            # 若存在用户记忆，作为第一条 system message 注入
+            memory_prompt = self._build_memory_system_prompt(user_id)
+            if memory_prompt:
+                messages.append(("system", memory_prompt))
+            elif self.system_prompt:
+                messages.append(("system", self.system_prompt))
 
-        result = agent.invoke({"messages": messages})
+            if chat_history:
+                for role, content in chat_history:
+                    messages.append((role, content))
+            messages.append(("human", user_input))
 
-        # 提取最后一条 AI 消息作为输出
-        msg_list: list[BaseMessage] = result.get("messages", [])
-        output = ""
-        for msg in reversed(msg_list):
-            if isinstance(msg, AIMessage):
-                output = str(msg.content)
-                break
+            result = agent.invoke({"messages": messages})
 
-        return {
-            "output": output,
-            "messages": msg_list,
-        }
+            # 提取最后一条 AI 消息作为输出
+            msg_list: list[BaseMessage] = result.get("messages", [])
+            output = ""
+            for msg in reversed(msg_list):
+                if isinstance(msg, AIMessage):
+                    output = str(msg.content)
+                    break
+
+            span.output_data = {"output": output[:200]}
+            metrics.record("agent.run.duration_ms", span.duration_ms)
+            metrics.record(
+                "agent.run.tokens",
+                len(str(msg_list)),
+                tags={"model": self.model_name or "unknown"},
+            )
+
+            return {
+                "output": output,
+                "messages": msg_list,
+            }
 
     async def arun(
         self,
@@ -158,31 +178,42 @@ class AgentOrchestrator:
         user_id: str | None = None,
     ) -> dict[str, Any]:
         """``run`` 的异步版本。"""
-        agent = self._build_agent()
+        tracer = get_tracer()
+        metrics = get_metrics()
 
-        messages: list[Any] = []
+        with tracer.span(
+            "agent.arun",
+            input_data={"user_input": user_input[:200], "user_id": user_id},
+            metadata={"model": self.model_name, "skills": self.list_skills()},
+        ) as span:
+            agent = self._build_agent()
 
-        memory_prompt = self._build_memory_system_prompt(user_id)
-        if memory_prompt:
-            messages.append(("system", memory_prompt))
-        elif self.system_prompt:
-            messages.append(("system", self.system_prompt))
+            messages: list[Any] = []
 
-        if chat_history:
-            for role, content in chat_history:
-                messages.append((role, content))
-        messages.append(("human", user_input))
+            memory_prompt = self._build_memory_system_prompt(user_id)
+            if memory_prompt:
+                messages.append(("system", memory_prompt))
+            elif self.system_prompt:
+                messages.append(("system", self.system_prompt))
 
-        result = await agent.ainvoke({"messages": messages})
+            if chat_history:
+                for role, content in chat_history:
+                    messages.append((role, content))
+            messages.append(("human", user_input))
 
-        msg_list: list[BaseMessage] = result.get("messages", [])
-        output = ""
-        for msg in reversed(msg_list):
-            if isinstance(msg, AIMessage):
-                output = str(msg.content)
-                break
+            result = await agent.ainvoke({"messages": messages})
 
-        return {
-            "output": output,
-            "messages": msg_list,
-        }
+            msg_list: list[BaseMessage] = result.get("messages", [])
+            output = ""
+            for msg in reversed(msg_list):
+                if isinstance(msg, AIMessage):
+                    output = str(msg.content)
+                    break
+
+            span.output_data = {"output": output[:200]}
+            metrics.record("agent.arun.duration_ms", span.duration_ms)
+
+            return {
+                "output": output,
+                "messages": msg_list,
+            }

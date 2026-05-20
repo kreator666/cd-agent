@@ -12,6 +12,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from comedy_agent.core.config import settings
+from comedy_agent.core.observability import get_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +252,10 @@ class ModelFactory:
 
         name = name or settings.default_model
 
+        # 记录模型使用指标
+        metrics = get_metrics()
+        metrics.record("model.calls", 1, tags={"model": name, "task_type": task_type or "none"})
+
         if name in cls._llm_registry:
             return cls._llm_registry[name](**kwargs)
 
@@ -312,6 +317,16 @@ class ModelFactory:
         exceptions = (
             Exception,
         )  # 可根据需要细化：ConnectionError, TimeoutError, RateLimitError 等
+
+        metrics = get_metrics()
+        metrics.record(
+            "model.fallback_chain",
+            1,
+            tags={
+                "primary": name or settings.default_model,
+                "fallbacks": ",".join(fallback_names) if fallback_names else "none",
+            },
+        )
 
         return RunnableWithFallbacks(
             runnable=primary,

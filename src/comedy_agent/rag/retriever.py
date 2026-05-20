@@ -17,6 +17,7 @@ from typing import Any
 from langchain_core.documents import Document
 
 from comedy_agent.core.cache import Cache
+from comedy_agent.core.observability import get_metrics, get_tracer
 from comedy_agent.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -161,56 +162,74 @@ class ComedyRetriever:
         Returns:
             list[Document]: 按相关性排序的文档列表。
         """
-        # 尝试读取缓存
-        cache_key = None
-        if use_cache and self.cache is not None:
-            cache_key = self._make_cache_key(query, top_k, vector_top_k, bm25_top_k)
-            cached = self.cache.get_json(cache_key)
-            if cached is not None:
-                logger.debug("缓存命中: %s", cache_key)
-                return [Document(page_content=d["content"], metadata=d["metadata"]) for d in cached]
+        tracer = get_tracer()
+        metrics = get_metrics()
 
-        vec_k = vector_top_k or top_k * 2
-        bm25_k = bm25_top_k or top_k * 2
+        with tracer.span(
+            "retriever.retrieve",
+            input_data={"query": query[:200], "top_k": top_k},
+            metadata={"use_cache": use_cache},
+        ) as span:
+            # 尝试读取缓存
+            cache_key = None
+            if use_cache and self.cache is not None:
+                cache_key = self._make_cache_key(query, top_k, vector_top_k, bm25_top_k)
+                cached = self.cache.get_json(cache_key)
+                if cached is not None:
+                    logger.debug("缓存命中: %s", cache_key)
+                    docs = [Document(page_content=d["content"], metadata=d["metadata"]) for d in cached]
+                    metrics.record("retriever.cache_hit", 1)
+                    metrics.record("retriever.results", len(docs))
+                    span.output_data = {"cache_hit": True, "results": len(docs)}
+                    return docs
 
-        # 1. 向量检索召回
-        vec_results = self.vector_store.search(query, top_k=vec_k)
-        logger.debug("向量召回 %d 条", len(vec_results))
+            vec_k = vector_top_k or top_k * 2
+            bm25_k = bm25_top_k or top_k * 2
 
-        # 1.5 多向量检索召回（如果启用）
-        if self.multi_vector_store is not None:
-            mv_results = self.multi_vector_store.search(
-                query, top_k=vec_k, return_original=True
-            )
-            logger.debug("多向量召回 %d 条", len(mv_results))
-            vec_results = self._merge_results(vec_results, mv_results)
+            # 1. 向量检索召回
+            vec_results = self.vector_store.search(query, top_k=vec_k)
+            logger.debug("向量召回 %d 条", len(vec_results))
+            metrics.record("retriever.vector_results", len(vec_results))
 
-        # 2. BM25 召回
-        bm25_results: list[Document] = []
-        if self._bm25 is not None:
-            bm25_results = self._bm25_search(query, top_k=bm25_k)
-            logger.debug("BM25 召回 %d 条", len(bm25_results))
+            # 1.5 多向量检索召回（如果启用）
+            if self.multi_vector_store is not None:
+                mv_results = self.multi_vector_store.search(
+                    query, top_k=vec_k, return_original=True
+                )
+                logger.debug("多向量召回 %d 条", len(mv_results))
+                vec_results = self._merge_results(vec_results, mv_results)
 
-        # 3. 合并去重（按 doc_id 或 content）
-        merged = self._merge_results(vec_results, bm25_results)
-        logger.debug("合并去重后 %d 条", len(merged))
+            # 2. BM25 召回
+            bm25_results: list[Document] = []
+            if self._bm25 is not None:
+                bm25_results = self._bm25_search(query, top_k=bm25_k)
+                logger.debug("BM25 召回 %d 条", len(bm25_results))
+                metrics.record("retriever.bm25_results", len(bm25_results))
 
-        if not merged:
-            return []
+            # 3. 合并去重（按 doc_id 或 content）
+            merged = self._merge_results(vec_results, bm25_results)
+            logger.debug("合并去重后 %d 条", len(merged))
 
-        # 4. Cross-Encoder 重排序
-        reranked = self._rerank(query, merged, top_k=top_k)
-        logger.debug("重排序后返回 %d 条", len(reranked))
+            if not merged:
+                span.output_data = {"results": 0}
+                return []
 
-        # 写入缓存
-        if use_cache and self.cache is not None and cache_key is not None:
-            serializable = [
-                {"content": d.page_content, "metadata": d.metadata}
-                for d in reranked
-            ]
-            self.cache.set_json(cache_key, serializable, ttl=self.cache_ttl)
+            # 4. Cross-Encoder 重排序
+            reranked = self._rerank(query, merged, top_k=top_k)
+            logger.debug("重排序后返回 %d 条", len(reranked))
 
-        return reranked
+            # 写入缓存
+            if use_cache and self.cache is not None and cache_key is not None:
+                serializable = [
+                    {"content": d.page_content, "metadata": d.metadata}
+                    for d in reranked
+                ]
+                self.cache.set_json(cache_key, serializable, ttl=self.cache_ttl)
+
+            metrics.record("retriever.results", len(reranked))
+            metrics.record("retriever.duration_ms", span.duration_ms)
+            span.output_data = {"results": len(reranked)}
+            return reranked
 
     @staticmethod
     def _make_cache_key(query: str, top_k: int, vector_top_k: int | None, bm25_top_k: int | None) -> str:

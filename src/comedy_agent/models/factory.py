@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+import httpx
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -140,18 +141,24 @@ class ModelFactory:
             cls.register_llm("qwen-turbo", lambda **kw: _tongyi("qwen-turbo", **kw))
 
         # Ollama（本地模型，无 API Key 要求）
+        # 使用自定义 HTTPTransport 避免 Windows 系统代理干扰
         if _HAS_OLLAMA:
+            _ollama_transport = httpx.HTTPTransport(retries=1)
+            _ollama_kwargs = {
+                "base_url": "http://localhost:11434",
+                "client_kwargs": {"transport": _ollama_transport},
+            }
             cls.register_llm(
                 "ollama-llama3",
-                lambda **kw: ChatOllama(model="llama3", **kw),
+                lambda **kw: ChatOllama(model="llama3", **_ollama_kwargs, **kw),
             )
             cls.register_llm(
                 "ollama-qwen2.5",
-                lambda **kw: ChatOllama(model="qwen2.5", **kw),
+                lambda **kw: ChatOllama(model="qwen2.5", **_ollama_kwargs, **kw),
             )
             cls.register_llm(
                 "ollama-llama3.1",
-                lambda **kw: ChatOllama(model="llama3.1", **kw),
+                lambda **kw: ChatOllama(model="llama3.1", **_ollama_kwargs, **kw),
             )
 
         # Moonshot / Kimi（OpenAI 兼容接口）
@@ -397,22 +404,20 @@ class ModelFactory:
             if key and name in cls._llm_registry:
                 available.append(name)
 
-        # Ollama 本地模型：探测服务
+        # Ollama 本地模型：探测服务（使用 httpx 并禁用代理，避免系统代理干扰）
         if _HAS_OLLAMA:
             try:
-                import urllib.request
                 import json
 
-                req = urllib.request.Request(
-                    "http://localhost:11434/api/tags",
-                    method="GET",
-                    headers={"Accept": "application/json"},
-                )
-                with urllib.request.urlopen(req, timeout=2) as resp:
-                    data = json.loads(resp.read().decode())
+                import httpx
+
+                transport = httpx.HTTPTransport(retries=1)
+                with httpx.Client(transport=transport, proxy=None, timeout=3) as client:
+                    resp = client.get("http://localhost:11434/api/tags")
+                    resp.raise_for_status()
+                    data = resp.json()
                     for m in data.get("models", []):
                         local_name = m.get("name", "")
-                        # 映射为 factory 支持的名称
                         mapped = cls._map_ollama_name(local_name)
                         if mapped and mapped not in available:
                             available.append(mapped)

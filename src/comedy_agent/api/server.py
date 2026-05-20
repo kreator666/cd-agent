@@ -22,7 +22,7 @@ from comedy_agent.evaluation.script_quality import ScriptQualityEvaluator
 from comedy_agent.core.rate_limiter import get_rate_limiter
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
-from comedy_agent.models.factory import ModelConfigError
+from comedy_agent.models.factory import ModelConfigError, ModelFactory
 from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.skills import (
     CrosstalkSkill,

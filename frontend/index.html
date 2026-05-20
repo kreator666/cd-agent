@@ -162,12 +162,7 @@
         <aside class="sidebar">
             <label for="model">模型</label>
             <select id="model">
-                <option value="">默认</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                <option value="qwen-max">通义千问 Max</option>
-                <option value="kimi-for-coding">Kimi</option>
-                <option value="ollama-llama3">Ollama Llama3</option>
+                <option value="">加载中...</option>
             </select>
 
             <label for="user-id">用户 ID</label>
@@ -215,7 +210,66 @@
                 statusEl.textContent = '离线';
             }
         }
+
+        async function loadModels() {
+            const select = document.getElementById('model');
+            try {
+                const res = await fetch(`${API_BASE}/models`);
+                const data = await res.json();
+                select.innerHTML = '';
+
+                const models = data.models || [];
+                const recommended = data.recommended;
+
+                if (models.length === 0) {
+                    select.innerHTML = '<option value="">无可用模型</option>';
+                    return;
+                }
+
+                // 添加"默认"选项
+                const defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.textContent = recommended
+                    ? `默认（${formatModelName(recommended)}）`
+                    : '默认';
+                select.appendChild(defaultOpt);
+
+                models.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = formatModelName(name);
+                    if (name === recommended) {
+                        opt.selected = true;
+                    }
+                    select.appendChild(opt);
+                });
+            } catch {
+                select.innerHTML = '<option value="">模型加载失败</option>';
+            }
+        }
+
+        function formatModelName(name) {
+            const map = {
+                'gpt-4o': 'GPT-4o',
+                'gpt-4o-mini': 'GPT-4o Mini',
+                'gpt-4-turbo': 'GPT-4 Turbo',
+                'claude-3-5-sonnet': 'Claude 3.5 Sonnet',
+                'claude-3-opus': 'Claude 3 Opus',
+                'claude-3-5-haiku': 'Claude 3.5 Haiku',
+                'qwen-max': '通义千问 Max',
+                'qwen-plus': '通义千问 Plus',
+                'qwen-turbo': '通义千问 Turbo',
+                'kimi-for-coding': 'Kimi',
+                'kimi-code': 'Kimi Code',
+                'ollama-llama3': 'Ollama Llama3',
+                'ollama-llama3.1': 'Ollama Llama3.1',
+                'ollama-qwen2.5': 'Ollama Qwen2.5',
+            };
+            return map[name] || name;
+        }
+
         checkHealth();
+        loadModels();
         setInterval(checkHealth, 30000);
 
         function appendMessage(role, text) {

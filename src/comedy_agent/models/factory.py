@@ -369,3 +369,69 @@ class ModelFactory:
         """返回所有已注册的 Embedding 模型名称列表。"""
         cls._ensure_initialized()
         return sorted(cls._embedding_registry.keys())
+
+    @classmethod
+    def list_available_models(cls) -> list[str]:
+        """返回当前环境实际可用的模型名称列表。
+
+        根据已配置的 API Key 和本地 Ollama 模型动态检测。
+        """
+        cls._ensure_initialized()
+        available: list[str] = []
+
+        # 云端模型：检查对应 API Key
+        key_checks = {
+            "gpt-4o": settings.openai_api_key,
+            "gpt-4o-mini": settings.openai_api_key,
+            "gpt-4-turbo": settings.openai_api_key,
+            "claude-3-5-sonnet": settings.anthropic_api_key,
+            "claude-3-opus": settings.anthropic_api_key,
+            "claude-3-5-haiku": settings.anthropic_api_key,
+            "qwen-max": settings.qwen_api_key,
+            "qwen-plus": settings.qwen_api_key,
+            "qwen-turbo": settings.qwen_api_key,
+            "kimi-for-coding": settings.moonshot_api_key,
+            "kimi-code": settings.moonshot_api_key,
+        }
+        for name, key in key_checks.items():
+            if key and name in cls._llm_registry:
+                available.append(name)
+
+        # Ollama 本地模型：探测服务
+        if _HAS_OLLAMA:
+            try:
+                import urllib.request
+                import json
+
+                req = urllib.request.Request(
+                    "http://localhost:11434/api/tags",
+                    method="GET",
+                    headers={"Accept": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    data = json.loads(resp.read().decode())
+                    for m in data.get("models", []):
+                        local_name = m.get("name", "")
+                        # 映射为 factory 支持的名称
+                        mapped = cls._map_ollama_name(local_name)
+                        if mapped and mapped not in available:
+                            available.append(mapped)
+            except Exception:
+                pass  # Ollama 未运行，静默跳过
+
+        return sorted(available)
+
+    @staticmethod
+    def _map_ollama_name(ollama_name: str) -> str | None:
+        """将 Ollama 本地模型名映射为 factory 注册名。"""
+        name_lower = ollama_name.lower()
+        mapping = {
+            "llama3": "ollama-llama3",
+            "llama3:latest": "ollama-llama3",
+            "llama3.1": "ollama-llama3.1",
+            "llama3.1:latest": "ollama-llama3.1",
+            "qwen2.5": "ollama-qwen2.5",
+            "qwen2.5:latest": "ollama-qwen2.5",
+            "qwen2.5:7b": "ollama-qwen2.5",
+        }
+        return mapping.get(name_lower)

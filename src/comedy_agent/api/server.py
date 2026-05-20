@@ -448,6 +448,23 @@ async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestRespo
 
 
 # ------------------------------------------------------------------ #
+# 模型路由
+# ------------------------------------------------------------------ #
+@app.get("/models", tags=["models"])
+async def list_models() -> dict[str, Any]:
+    """返回当前环境可用的模型列表。"""
+    available = ModelFactory.list_available_models()
+    default = settings.default_model
+    # 如果默认模型不可用，自动推荐第一个可用模型
+    recommended = default if default in available else (available[0] if available else None)
+    return {
+        "models": available,
+        "default": default,
+        "recommended": recommended,
+    }
+
+
+# ------------------------------------------------------------------ #
 # 评估路由
 # ------------------------------------------------------------------ #
 class EvaluateScriptRequest(BaseModel):

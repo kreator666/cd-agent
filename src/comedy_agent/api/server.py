@@ -12,6 +12,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.api.middleware import RateLimitMiddleware
+from comedy_agent.core.config import settings
+from comedy_agent.core.rate_limiter import get_rate_limiter
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError
@@ -200,6 +203,17 @@ app = FastAPI(
     description="喜剧行业垂直 Agent HTTP 接口",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# 注册限流中间件（Redis 优先，失败降级到内存）
+limiter = get_rate_limiter()
+app.add_middleware(
+    RateLimitMiddleware,
+    limiter=limiter,
+    write_max=settings.rate_limit_write_max,
+    write_window=settings.rate_limit_write_window,
+    read_max=settings.rate_limit_read_max,
+    read_window=settings.rate_limit_read_window,
 )
 
 

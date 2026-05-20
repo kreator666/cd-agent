@@ -52,6 +52,11 @@ class SQLMemoryStore(MemoryStore):
             db_path = settings.memory_db_path
             db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(db_url, echo=False)
+        # 对文件数据库启用 WAL 模式，提升并发读取性能
+        if db_url.startswith("sqlite:///") and not db_url.startswith("sqlite:///:memory:"):
+            with self.engine.connect() as conn:
+                conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+                conn.commit()
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
         logger.info("SQLMemoryStore initialized: %s", db_url)

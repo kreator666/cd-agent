@@ -286,6 +286,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
     metrics = get_metrics()
 
     try:
+        # 若前端指定了模型，运行时切换
+        if request.model:
+            state.orch.set_model(request.model)
+
         with tracer.span(
             "api.chat",
             input_data={"prompt": request.prompt[:200], "user_id": request.user_id},

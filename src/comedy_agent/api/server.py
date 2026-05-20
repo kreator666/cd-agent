@@ -9,12 +9,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.middleware import RateLimitMiddleware
+from comedy_agent.auth import get_current_user, router as auth_router
 from comedy_agent.core.config import settings
 from comedy_agent.core.observability import get_metrics, get_tracer, reset_observability, setup_langsmith
 from comedy_agent.evaluation.model_quality import ModelOutputEvaluator
@@ -220,6 +221,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# 挂载认证路由
+app.include_router(auth_router, prefix="/auth")
+
 # 挂载前端静态文件（如果 frontend/ 目录存在）
 _frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
 if _frontend_dir.is_dir():
@@ -278,16 +282,15 @@ async def list_skills() -> SkillListResponse:
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
-async def chat(request: ChatRequest) -> ChatResponse:
-    print("chat-------------")
+async def chat(
+    request: ChatRequest, user_id: str = Depends(get_current_user)
+) -> ChatResponse:
     """与 Agent 对话。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
 
     tracer = get_tracer()
     metrics = get_metrics()
-
-    print("chat-------------", request.chat_history, flush=True)
 
     try:
         # 若前端指定了模型，运行时切换
@@ -296,15 +299,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         with tracer.span(
             "api.chat",
-            input_data={"prompt": request.prompt[:200], "user_id": request.user_id},
+            input_data={"prompt": request.prompt[:200], "user_id": user_id},
             metadata={"model": request.model, "endpoint": "/chat"},
         ) as span:
-            print("chat-------------", request.chat_history, flush=True)
-         
             result = state.orch.run(
                 request.prompt,
                 chat_history=request.chat_history,
-                user_id=request.user_id,
+                user_id=user_id,
             )
             # 将消息对象序列化为 dict
             messages = []
@@ -323,7 +324,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
 
 @app.post("/skills/standup", response_model=StandupResponse, tags=["skills"])
-async def skill_standup(request: StandupRequest) -> StandupResponse:
+async def skill_standup(
+    request: StandupRequest, user_id: str = Depends(get_current_user)
+) -> StandupResponse:
     """直接调用脱口秀创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
@@ -361,7 +364,9 @@ async def skill_standup(request: StandupRequest) -> StandupResponse:
 # 作品管理路由
 # ------------------------------------------------------------------ #
 @app.post("/scripts", response_model=ScriptData, tags=["scripts"])
-async def create_script(request: ScriptCreateRequest) -> ScriptData:
+async def create_script(
+    request: ScriptCreateRequest, user_id: str = Depends(get_current_user)
+) -> ScriptData:
     """保存（创建）新作品。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
@@ -372,12 +377,13 @@ async def create_script(request: ScriptCreateRequest) -> ScriptData:
         tags=request.tags,
         rating=request.rating,
     )
-    return state.memory.save_script(request.user_id, script)
+    return state.memory.save_script(user_id, script)
 
 
 @app.get("/scripts", response_model=ScriptListResponse, tags=["scripts"])
 async def list_scripts(
-    user_id: str, script_type: str | None = None
+    script_type: str | None = None,
+    user_id: str = Depends(get_current_user),
 ) -> ScriptListResponse:
     """列出用户的作品。"""
     if state.memory is None:
@@ -387,7 +393,9 @@ async def list_scripts(
 
 
 @app.get("/scripts/{script_id}", response_model=ScriptDetailResponse, tags=["scripts"])
-async def get_script(script_id: str) -> ScriptDetailResponse:
+async def get_script(
+    script_id: str, user_id: str = Depends(get_current_user)
+) -> ScriptDetailResponse:
     """获取单个作品详情。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
@@ -398,7 +406,11 @@ async def get_script(script_id: str) -> ScriptDetailResponse:
 
 
 @app.put("/scripts/{script_id}", response_model=ScriptData, tags=["scripts"])
-async def update_script(script_id: str, request: ScriptUpdateRequest) -> ScriptData:
+async def update_script(
+    script_id: str,
+    request: ScriptUpdateRequest,
+    user_id: str = Depends(get_current_user),
+) -> ScriptData:
     """更新作品。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
@@ -415,11 +427,13 @@ async def update_script(script_id: str, request: ScriptUpdateRequest) -> ScriptD
         tags=request.tags if request.tags is not None else existing.tags,
         rating=request.rating if request.rating is not None else existing.rating,
     )
-    return state.memory.save_script(request.user_id, updated)
+    return state.memory.save_script(user_id, updated)
 
 
 @app.delete("/scripts/{script_id}", response_model=SuccessResponse, tags=["scripts"])
-async def delete_script(script_id: str) -> SuccessResponse:
+async def delete_script(
+    script_id: str, user_id: str = Depends(get_current_user)
+) -> SuccessResponse:
     """删除作品。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
@@ -430,7 +444,11 @@ async def delete_script(script_id: str) -> SuccessResponse:
 
 
 @app.patch("/scripts/{script_id}/rate", response_model=SuccessResponse, tags=["scripts"])
-async def rate_script(script_id: str, request: ScriptRateRequest) -> SuccessResponse:
+async def rate_script(
+    script_id: str,
+    request: ScriptRateRequest,
+    user_id: str = Depends(get_current_user),
+) -> SuccessResponse:
     """为作品评分。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
@@ -444,7 +462,10 @@ async def rate_script(script_id: str, request: ScriptRateRequest) -> SuccessResp
 # 高评分内容回流路由
 # ------------------------------------------------------------------ #
 @app.post("/feedback/ingest", response_model=FeedbackIngestResponse, tags=["feedback"])
-async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestResponse:
+async def feedback_ingest(
+    request: FeedbackIngestRequest,
+    user_id: str = Depends(get_current_user),
+) -> FeedbackIngestResponse:
     """将用户高评分剧本回流到知识库，实现持续进化。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
@@ -455,7 +476,7 @@ async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestRespo
     try:
         with tracer.span(
             "api.feedback_ingest",
-            input_data={"user_id": request.user_id, "min_rating": request.min_rating},
+            input_data={"user_id": user_id, "min_rating": request.min_rating},
             metadata={"endpoint": "/feedback/ingest"},
         ) as span:
             loop = FeedbackLoop(
@@ -463,7 +484,7 @@ async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestRespo
                 min_rating=request.min_rating if request.min_rating is not None else 4.0,
             )
             result = loop.ingest_high_rated_scripts(
-                user_id=request.user_id,
+                user_id=user_id,
                 chunk_strategy=request.chunk_strategy or "paragraph",
                 dry_run=request.dry_run,
             )

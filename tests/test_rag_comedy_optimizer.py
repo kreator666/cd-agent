@@ -9,6 +9,46 @@ from langchain_core.documents import Document
 from comedy_agent.rag.comedy_optimizer import ComedyChunker, MultiVectorStore
 
 
+class TestGenerateVectorTexts:
+    """多向量文本生成测试。"""
+
+    def test_generate_content_structure_style(self):
+        doc = Document(
+            page_content="第一场 客厅\n郭德纲：大家好。\n于谦：好。",
+            metadata={},
+        )
+        texts = ComedyChunker.generate_vector_texts(doc)
+
+        assert "content" in texts
+        assert "structure" in texts
+        assert "style" in texts
+        # content 应为原始文本
+        assert texts["content"] == doc.page_content
+        # structure 应包含结构信息
+        assert "script" in texts["structure"]
+        assert "场景" in texts["structure"]
+        assert "郭德纲" in texts["structure"]
+        # style 应包含风格信息
+        assert "风格" in texts["style"]
+
+    def test_generate_uses_existing_metadata(self):
+        doc = Document(
+            page_content="讽刺社会现象。",
+            metadata={"structure_type": "analysis", "style_type": "satire"},
+        )
+        texts = ComedyChunker.generate_vector_texts(doc)
+        assert "analysis" in texts["structure"]
+        assert "satire" in texts["style"]
+
+    def test_extract_roles(self):
+        text = "郭德纲：你好。\n于谦：你好。\n郭德纲：再见。"
+        roles = ComedyChunker._extract_roles(text)
+        assert sorted(roles) == ["于谦", "郭德纲"]
+
+    def test_extract_roles_empty(self):
+        assert ComedyChunker._extract_roles("没有角色的文本。") == []
+
+
 class TestComedyChunkerDetect:
     """ComedyChunker 自动检测测试。"""
 
@@ -179,6 +219,51 @@ class TestMultiVectorStore:
         docs = [Document(page_content="x", metadata={})]
         with pytest.raises(ValueError, match="未知向量类型"):
             mvs.add_documents(docs, vector_types=["invalid"])
+
+    def test_add_documents_generates_source_doc_id(self, mvs: MultiVectorStore):
+        """入库时应自动生成 source_doc_id。"""
+        docs = [Document(page_content="源ID测试", metadata={})]
+        mvs.add_documents(docs, vector_types=["content", "structure"])
+
+        # 从 content collection 中查询
+        results = mvs.stores["content"].get_by_filter({"source_doc_id": {"$ne": ""}})
+        assert len(results) == 1
+        assert results[0].metadata.get("source_doc_id")
+
+    def test_search_deduplicate_and_restore(self, mvs: MultiVectorStore):
+        """search 应按 source_doc_id 去重并优先返回 content 原始文本。"""
+        doc = Document(
+            page_content="原始文本内容",
+            metadata={"structure_type": "theory"},
+        )
+        mvs.add_documents([doc], vector_types=["content", "structure"])
+
+        results = mvs.search("原始", vector_types=["content", "structure"])
+        # 去重后应只有 1 条
+        assert len(results) == 1
+        # 优先返回 content 类型的原始文本
+        assert results[0].page_content == "原始文本内容"
+        # metadata 标记了多个 vector_type
+        assert "content" in results[0].metadata["vector_type"]
+        assert "structure" in results[0].metadata["vector_type"]
+
+    def test_structure_text_differs_from_content(self, mvs: MultiVectorStore):
+        """structure 类型的入库文本应与 content 不同。"""
+        doc = Document(
+            page_content="郭德纲：你好。\n于谦：好。",
+            metadata={},
+        )
+        mvs.add_documents([doc], vector_types=["content", "structure"])
+
+        content_docs = mvs.stores["content"].get_by_filter({"vector_type": "content"})
+        structure_docs = mvs.stores["structure"].get_by_filter(
+            {"vector_type": "structure"}
+        )
+        assert len(content_docs) == 1
+        assert len(structure_docs) == 1
+        # structure 文本应包含结构描述，与原始文本不同
+        assert content_docs[0].page_content == doc.page_content
+        assert "script" in structure_docs[0].page_content
 
 
 class _FakeEmbeddings:

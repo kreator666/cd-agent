@@ -151,3 +151,42 @@ class TestWithMockCrossEncoder:
             results = retriever.retrieve("test", top_k=1)
             assert results[0].metadata["source"] == "book"
             assert "rerank_score" in results[0].metadata
+
+
+class TestMultiVectorIntegration:
+    """ComedyRetriever 多向量集成测试。"""
+
+    def test_retrieve_with_multi_vector(self, fake_vs: FakeVectorStore):
+        """启用 multi_vector_store 时，检索应合并多向量结果。"""
+        from comedy_agent.rag.comedy_optimizer import MultiVectorStore
+
+        # 使用同一个 fake embedding 创建 MultiVectorStore
+        mvs = MagicMock()
+        mvs.search.return_value = [
+            Document(page_content="多向量结果", metadata={"source_doc_id": "mv1"}),
+        ]
+
+        retriever = ComedyRetriever(
+            vector_store=fake_vs,
+            multi_vector_store=mvs,
+        )
+        docs = [Document(page_content="原始内容", metadata={})]
+        retriever.ingest(docs)
+
+        results = retriever.retrieve("测试", top_k=5)
+        # multi_vector_store.search 应被调用
+        mvs.search.assert_called_once()
+        # 结果中应包含原始内容和多向量结果（合并后去重）
+        assert len(results) >= 1
+
+    def test_ingest_with_multi_vector(self, fake_vs: FakeVectorStore):
+        """启用 multi_vector_store 时，ingest 应同时入库多向量库。"""
+        mvs = MagicMock()
+        retriever = ComedyRetriever(
+            vector_store=fake_vs,
+            multi_vector_store=mvs,
+        )
+        docs = [Document(page_content="入库测试", metadata={})]
+        retriever.ingest(docs)
+
+        mvs.add_documents.assert_called_once_with(docs)

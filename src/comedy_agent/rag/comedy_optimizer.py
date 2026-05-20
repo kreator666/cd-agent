@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid
 from typing import Any
 
 from langchain_core.documents import Document
@@ -251,6 +252,69 @@ class ComedyChunker:
             enriched["scene_title"] = scene
         return enriched
 
+    # ------------------------------------------------------------------ #
+    # 多向量文本生成
+    # ------------------------------------------------------------------ #
+    @classmethod
+    def generate_vector_texts(cls, doc: Document) -> dict[str, str]:
+        """为 Document 生成三种向量表示文本。
+
+        基于喜剧行业特征，为同一 chunk 生成内容/结构/风格三种语义视角的文本，
+        分别用于生成不同的 Embedding 向量，提升检索精度。
+
+        Args:
+            doc: 输入文档。
+
+        Returns:
+            dict: {"content": 原始文本, "structure": 结构摘要, "style": 风格摘要}
+        """
+        content = doc.page_content
+        meta = doc.metadata
+
+        # 复用已有 metadata，避免重复检测
+        structure_type = meta.get("structure_type") or cls.detect_structure_type(content)
+        style_type = meta.get("style_type") or cls.detect_style_type(content)
+        has_punchline = meta.get("has_punchline")
+        if has_punchline is None:
+            has_punchline = cls.has_punchline(content)
+        scene_title = meta.get("scene_title") or cls.extract_scene_title(content)
+
+        # content: 原始文本
+        # structure: 结构特征摘要
+        structure_parts = [f"这是一段{structure_type}类型的喜剧文本。"]
+        if scene_title:
+            structure_parts.append(f"场景：{scene_title}。")
+        if has_punchline:
+            structure_parts.append("包含笑点或包袱。")
+        roles = cls._extract_roles(content)
+        if roles:
+            structure_parts.append(f"角色：{'、'.join(roles)}。")
+        # 追加内容前 80 字作为摘要
+        summary = content[:80].replace("\n", " ").strip()
+        if summary:
+            structure_parts.append(f"内容摘要：{summary}...")
+        structure_text = " ".join(structure_parts)
+
+        # style: 风格特征摘要
+        style_parts = [f"这是一段{style_type}风格的喜剧创作。"]
+        if has_punchline:
+            style_parts.append("运用了铺垫与包袱的喜剧技巧。")
+        style_text = " ".join(style_parts)
+
+        return {
+            "content": content,
+            "structure": structure_text,
+            "style": style_text,
+        }
+
+    @staticmethod
+    def _extract_roles(text: str) -> list[str]:
+        """从文本中提取角色名（中文+冒号模式）。"""
+        roles = set()
+        for m in re.finditer(r"([\u4e00-\u9fa5]{1,8})[：:]", text):
+            roles.add(m.group(1))
+        return sorted(roles)
+
 
 # ------------------------------------------------------------------ #
 # MultiVectorStore —— 多向量表示存储
@@ -304,12 +368,15 @@ class MultiVectorStore:
         self,
         documents: list[Document],
         vector_types: list[str] | None = None,
+        generate_texts: bool = True,
     ) -> dict[str, list[str]]:
         """将文档添加到指定的向量类型集合中。
 
         Args:
             documents: 要入库的文档列表。
             vector_types: 要存储的向量类型列表，为 ``None`` 时全部存储。
+            generate_texts: 为 ``True`` 时，使用 ``ComedyChunker.generate_vector_texts()``
+                为不同向量类型生成不同的语义表示文本。
 
         Returns:
             dict: {vector_type: [ids]} 映射。
@@ -320,14 +387,31 @@ class MultiVectorStore:
         for vt in types:
             if vt not in self.stores:
                 raise ValueError(f"未知向量类型 '{vt}'。可用: {self._VECTOR_TYPES}")
-            # 为每个类型增加 metadata 标记
-            typed_docs = [
-                Document(
-                    page_content=doc.page_content,
-                    metadata={**doc.metadata, "vector_type": vt},
+
+            typed_docs: list[Document] = []
+            for doc in documents:
+                source_id = doc.metadata.get("source_doc_id")
+                if not source_id:
+                    source_id = str(uuid.uuid4())
+                    doc.metadata["source_doc_id"] = source_id
+
+                if generate_texts and vt != "content":
+                    texts = ComedyChunker.generate_vector_texts(doc)
+                    page_content = texts.get(vt, doc.page_content)
+                else:
+                    page_content = doc.page_content
+
+                typed_docs.append(
+                    Document(
+                        page_content=page_content,
+                        metadata={
+                            **doc.metadata,
+                            "vector_type": vt,
+                            "source_doc_id": source_id,
+                        },
+                    )
                 )
-                for doc in documents
-            ]
+
             ids = self.stores[vt].add_documents(typed_docs)
             results[vt] = ids
             logger.info("向 '%s' 集合入库 %d 条文档", vt, len(ids))
@@ -342,16 +426,19 @@ class MultiVectorStore:
         query: str,
         vector_types: list[str] | None = None,
         top_k: int = 5,
+        return_original: bool = True,
     ) -> list[Document]:
         """跨类型向量检索，合并去重后返回。
 
         Args:
             query: 查询文本。
             vector_types: 要检索的向量类型列表，为 ``None`` 时检索全部。
-            top_k: 每种类型召回数量（最终返回数量可能更多，去重后可能更少）。
+            top_k: 每种类型召回数量。
+            return_original: 为 ``True`` 时，按 ``source_doc_id`` 去重并优先返回
+                ``content`` 类型的原始文本。
 
         Returns:
-            list[Document]: 按相似度合并去重后的文档列表。
+            list[Document]: 合并去重后的文档列表。
         """
         types = vector_types or list(self._VECTOR_TYPES)
         all_results: list[Document] = []
@@ -364,7 +451,8 @@ class MultiVectorStore:
                 doc.metadata["retrieved_from"] = vt
             all_results.extend(docs)
 
-        # 按 page_content 去重，保留多个 vector_type 标记
+        if return_original:
+            return self._deduplicate_and_restore(all_results)
         return self._deduplicate(all_results)
 
     def search_by_structure(
@@ -459,3 +547,35 @@ class MultiVectorStore:
             else:
                 seen[key] = doc
         return list(seen.values())
+
+    @staticmethod
+    def _deduplicate_and_restore(documents: list[Document]) -> list[Document]:
+        """按 source_doc_id 去重，优先返回 content 类型的原始文本。"""
+        by_source: dict[str, dict[str, Any]] = {}
+
+        for doc in documents:
+            sid = doc.metadata.get("source_doc_id")
+            if not sid:
+                # 无 source_doc_id 的文档直接保留
+                continue
+
+            if sid not in by_source:
+                by_source[sid] = {"doc": doc, "types": set()}
+
+            by_source[sid]["types"].add(doc.metadata.get("vector_type", "unknown"))
+
+            # 优先保留 content 类型的原始文本
+            if doc.metadata.get("vector_type") == "content":
+                by_source[sid]["doc"] = doc
+
+        result: list[Document] = []
+        for sid, info in by_source.items():
+            doc = info["doc"]
+            types = sorted(info["types"])
+            doc.metadata["vector_type"] = types
+            doc.metadata["retrieved_from"] = types
+            result.append(doc)
+
+        # 把没有 source_doc_id 的文档也加回来
+        no_sid = [d for d in documents if not d.metadata.get("source_doc_id")]
+        return result + no_sid

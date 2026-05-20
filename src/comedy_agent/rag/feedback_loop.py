@@ -14,6 +14,7 @@ from comedy_agent.core.config import settings
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.rag.chunker import DocumentChunker
+from comedy_agent.rag.comedy_optimizer import MultiVectorStore
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
 
@@ -36,6 +37,7 @@ class FeedbackLoop:
         memory: UnifiedMemory | None = None,
         retriever: ComedyRetriever | None = None,
         min_rating: float = 4.0,
+        use_multi_vector: bool = False,
     ) -> None:
         """初始化回流器。
 
@@ -43,6 +45,7 @@ class FeedbackLoop:
             memory: 统一记忆接口，为 ``None`` 时自动创建。
             retriever: 混合检索器，为 ``None`` 时自动创建。
             min_rating: 最低评分阈值，默认 4.0（满分 5.0）。
+            use_multi_vector: 是否启用多向量表示入库。
         """
         self.memory = memory or UnifiedMemory()
         self.min_rating = min_rating
@@ -52,7 +55,16 @@ class FeedbackLoop:
                 collection_name="comedy_knowledge",
                 persist_path=str(settings.vector_db_path),
             )
-            retriever = ComedyRetriever(vector_store=vector_store)
+            multi_vector_store: MultiVectorStore | None = None
+            if use_multi_vector:
+                multi_vector_store = MultiVectorStore(
+                    base_collection_name="comedy",
+                    persist_path=str(settings.vector_db_path),
+                )
+            retriever = ComedyRetriever(
+                vector_store=vector_store,
+                multi_vector_store=multi_vector_store,
+            )
         self.retriever = retriever
 
     # ------------------------------------------------------------------ #

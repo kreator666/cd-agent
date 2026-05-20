@@ -58,6 +58,18 @@ class SQLMemoryStore(MemoryStore):
                 conn.exec_driver_sql("PRAGMA journal_mode=WAL")
                 conn.commit()
         Base.metadata.create_all(self.engine)
+        # 简单迁移：为旧表添加 password_hash 列（开发阶段兼容）
+        with self.engine.connect() as conn:
+            columns = [
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(user_profiles)")
+            ]
+            if "password_hash" not in columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE user_profiles ADD COLUMN password_hash VARCHAR(256)"
+                )
+                conn.commit()
+                logger.info("Migrated user_profiles: added password_hash column")
         self.Session = sessionmaker(bind=self.engine)
         logger.info("SQLMemoryStore initialized: %s", db_url)
 
@@ -93,6 +105,44 @@ class SQLMemoryStore(MemoryStore):
                 session.add(user)
                 session.commit()
                 logger.debug("Created user profile: %s", user_id)
+            return UserProfileData(
+                user_id=user.user_id,
+                nickname=user.nickname,
+                created_at=user.created_at,
+                updated_at=user.updated_at,
+            )
+
+    def create_user(
+        self, user_id: str, password_hash: str, nickname: str | None = None
+    ) -> UserProfileData:
+        """创建带密码的用户画像。"""
+        with self._new_session() as session:
+            existing = session.query(UserProfile).filter_by(user_id=user_id).first()
+            if existing is not None:
+                raise ValueError(f"用户 '{user_id}' 已存在")
+            user = UserProfile(user_id=user_id, nickname=nickname, password_hash=password_hash)
+            session.add(user)
+            session.commit()
+            logger.info("Created user with password: %s", user_id)
+            return UserProfileData(
+                user_id=user.user_id,
+                nickname=user.nickname,
+                created_at=user.created_at,
+                updated_at=user.updated_at,
+            )
+
+    def get_user_password_hash(self, user_id: str) -> str | None:
+        """获取用户的密码哈希。"""
+        with self._new_session() as session:
+            user = session.query(UserProfile).filter_by(user_id=user_id).first()
+            return user.password_hash if user else None
+
+    def get_user(self, user_id: str) -> UserProfileData | None:
+        """根据 user_id 获取用户画像。"""
+        with self._new_session() as session:
+            user = session.query(UserProfile).filter_by(user_id=user_id).first()
+            if user is None:
+                return None
             return UserProfileData(
                 user_id=user.user_id,
                 nickname=user.nickname,

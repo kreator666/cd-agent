@@ -20,16 +20,23 @@ def _patched_create_engine(*args, **kwargs):
 
 @pytest.fixture
 def client():
-    """提供 TestClient（ lifespan 自动执行，memory 使用内存数据库）。"""
+    """提供 TestClient（ lifespan 自动执行，memory 使用内存数据库，带认证）。"""
     with patch(
         "comedy_agent.memory.medium_term.create_engine",
         side_effect=_patched_create_engine,
     ), patch(
         "comedy_agent.api.server.AgentOrchestrator"
-    ) as mock_orch_cls:
+    ) as mock_orch_cls, patch(
+        "comedy_agent.auth.router.SQLMemoryStore"
+    ) as mock_auth_store_cls:
         mock_orch = MagicMock()
         mock_orch.list_skills.return_value = ["standup_generator"]
         mock_orch_cls.return_value = mock_orch
+
+        # auth router 使用内存数据库
+        from comedy_agent.memory.medium_term import SQLMemoryStore
+        auth_store = SQLMemoryStore(db_url="sqlite:///:memory:")
+        mock_auth_store_cls.return_value = auth_store
 
         # 使用 TestClient 让 lifespan 自动运行
         with TestClient(app) as c:
@@ -37,7 +44,16 @@ def client():
             from comedy_agent.memory.unified import UnifiedMemory
 
             state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
-            yield c
+
+            # 注册测试用户并获取 token
+            c.post("/auth/register", json={"user_id": "testuser", "password": "testpass"})
+            login_resp = c.post("/auth/login", json={"user_id": "testuser", "password": "testpass"})
+            token = login_resp.json()["access_token"]
+
+            # 返回带默认认证 header 的 client
+            with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as authed_c:
+                state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
+                yield authed_c
 
     # 清理
     state.orch = None

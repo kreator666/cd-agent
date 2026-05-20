@@ -156,7 +156,11 @@
 <body>
     <header>
         <h1>🎤 Comedy Agent</h1>
-        <span id="status" class="status">检查中...</span>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <span id="current-user" style="font-size:0.875rem;"></span>
+            <button onclick="logout()" style="font-size:0.75rem;padding:0.25rem 0.75rem;background:#e94560;color:#fff;border:none;border-radius:0.375rem;cursor:pointer;">退出</button>
+            <span id="status" class="status">检查中...</span>
+        </div>
     </header>
     <div class="container">
         <aside class="sidebar">
@@ -165,8 +169,8 @@
                 <option value="">加载中...</option>
             </select>
 
-            <label for="user-id">用户 ID</label>
-            <input id="user-id" type="text" placeholder="anonymous" value="demo-user">
+            <label for="user-id">当前用户</label>
+            <input id="user-id" type="text" readonly style="background:#f0f0f0;cursor:default;">
 
             <label>快捷指令</label>
             <button onclick="sendQuick('写一个关于职场加班的脱口秀')">🎤 职场脱口秀</button>
@@ -196,9 +200,31 @@
         const statusEl = document.getElementById('status');
         let history = [];
 
+        // 登录检查
+        const token = localStorage.getItem('token');
+        const currentUserId = localStorage.getItem('user_id');
+        if (!token || !currentUserId) {
+            window.location.href = '/static/login.html';
+        }
+        document.getElementById('user-id').value = currentUserId || '';
+        document.getElementById('current-user').textContent = currentUserId || '';
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user_id');
+            window.location.href = '/static/login.html';
+        }
+
+        function authHeaders() {
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            };
+        }
+
         async function checkHealth() {
             try {
-                const res = await fetch(`${API_BASE}/health`);
+                const res = await fetch(`${API_BASE}/health`, { headers: authHeaders() });
                 const data = await res.json();
                 if (data.status === 'ok') {
                     statusEl.textContent = '就绪';
@@ -214,7 +240,7 @@
         async function loadModels() {
             const select = document.getElementById('model');
             try {
-                const res = await fetch(`${API_BASE}/models`);
+                const res = await fetch(`${API_BASE}/models`, { headers: authHeaders() });
                 const data = await res.json();
                 select.innerHTML = '';
 
@@ -310,7 +336,6 @@
             const text = input.value.trim();
             if (!text) return;
             const model = document.getElementById('model').value || null;
-            const userId = document.getElementById('user-id').value || 'anonymous';
 
             input.value = '';
             appendMessage('user', text);
@@ -319,11 +344,10 @@
             try {
                 const res = await fetch(`${API_BASE}/chat`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders(),
                     body: JSON.stringify({
                         prompt: text,
                         model: model,
-                        user_id: userId,
                         chat_history: history,
                     }),
                 });

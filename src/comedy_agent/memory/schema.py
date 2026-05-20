@@ -30,6 +30,7 @@ class UserProfile(Base):
 
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     nickname: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

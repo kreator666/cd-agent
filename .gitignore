@@ -52,6 +52,7 @@ outputs/
 # Logs
 *.log
 logs/
+uvicorn.pid
 
 # OS
 .DS_Store

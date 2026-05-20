@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+import httpx
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -117,10 +118,22 @@ class ModelFactory:
                 "claude-3-5-sonnet", lambda **kw: _anthropic("claude-3-5-sonnet-20241022", **kw)
             )
             cls.register_llm(
+                "claude-3-5-sonnet-20241022",
+                lambda **kw: _anthropic("claude-3-5-sonnet-20241022", **kw),
+            )
+            cls.register_llm(
                 "claude-3-opus", lambda **kw: _anthropic("claude-3-opus-20240229", **kw)
             )
             cls.register_llm(
+                "claude-3-opus-20240229",
+                lambda **kw: _anthropic("claude-3-opus-20240229", **kw),
+            )
+            cls.register_llm(
                 "claude-3-5-haiku", lambda **kw: _anthropic("claude-3-5-haiku-20241022", **kw)
+            )
+            cls.register_llm(
+                "claude-3-5-haiku-20241022",
+                lambda **kw: _anthropic("claude-3-5-haiku-20241022", **kw),
             )
 
         # 通义千问 (Tongyi / DashScope)
@@ -140,18 +153,24 @@ class ModelFactory:
             cls.register_llm("qwen-turbo", lambda **kw: _tongyi("qwen-turbo", **kw))
 
         # Ollama（本地模型，无 API Key 要求）
+        # 使用自定义 HTTPTransport 避免 Windows 系统代理干扰
         if _HAS_OLLAMA:
+            _ollama_transport = httpx.HTTPTransport(retries=1)
+            _ollama_kwargs = {
+                "base_url": "http://localhost:11434",
+                "client_kwargs": {"transport": _ollama_transport},
+            }
             cls.register_llm(
                 "ollama-llama3",
-                lambda **kw: ChatOllama(model="llama3", **kw),
+                lambda **kw: ChatOllama(model="llama3", **_ollama_kwargs, **kw),
             )
             cls.register_llm(
                 "ollama-qwen2.5",
-                lambda **kw: ChatOllama(model="qwen2.5", **kw),
+                lambda **kw: ChatOllama(model="qwen2.5", **_ollama_kwargs, **kw),
             )
             cls.register_llm(
                 "ollama-llama3.1",
-                lambda **kw: ChatOllama(model="llama3.1", **kw),
+                lambda **kw: ChatOllama(model="llama3.1", **_ollama_kwargs, **kw),
             )
 
         # Moonshot / Kimi（OpenAI 兼容接口）
@@ -369,3 +388,67 @@ class ModelFactory:
         """返回所有已注册的 Embedding 模型名称列表。"""
         cls._ensure_initialized()
         return sorted(cls._embedding_registry.keys())
+
+    @classmethod
+    def list_available_models(cls) -> list[str]:
+        """返回当前环境实际可用的模型名称列表。
+
+        根据已配置的 API Key 和本地 Ollama 模型动态检测。
+        """
+        cls._ensure_initialized()
+        available: list[str] = []
+
+        # 云端模型：检查对应 API Key
+        key_checks = {
+            "gpt-4o": settings.openai_api_key,
+            "gpt-4o-mini": settings.openai_api_key,
+            "gpt-4-turbo": settings.openai_api_key,
+            "claude-3-5-sonnet": settings.anthropic_api_key,
+            "claude-3-opus": settings.anthropic_api_key,
+            "claude-3-5-haiku": settings.anthropic_api_key,
+            "qwen-max": settings.qwen_api_key,
+            "qwen-plus": settings.qwen_api_key,
+            "qwen-turbo": settings.qwen_api_key,
+            "kimi-for-coding": settings.moonshot_api_key,
+            "kimi-code": settings.moonshot_api_key,
+        }
+        for name, key in key_checks.items():
+            if key and name in cls._llm_registry:
+                available.append(name)
+
+        # Ollama 本地模型：探测服务（使用 httpx 并禁用代理，避免系统代理干扰）
+        if _HAS_OLLAMA:
+            try:
+                import json
+
+                import httpx
+
+                transport = httpx.HTTPTransport(retries=1)
+                with httpx.Client(transport=transport, proxy=None, timeout=3) as client:
+                    resp = client.get("http://localhost:11434/api/tags")
+                    resp.raise_for_status()
+                    data = resp.json()
+                    for m in data.get("models", []):
+                        local_name = m.get("name", "")
+                        mapped = cls._map_ollama_name(local_name)
+                        if mapped and mapped not in available:
+                            available.append(mapped)
+            except Exception:
+                pass  # Ollama 未运行，静默跳过
+
+        return sorted(available)
+
+    @staticmethod
+    def _map_ollama_name(ollama_name: str) -> str | None:
+        """将 Ollama 本地模型名映射为 factory 注册名。"""
+        name_lower = ollama_name.lower()
+        mapping = {
+            "llama3": "ollama-llama3",
+            "llama3:latest": "ollama-llama3",
+            "llama3.1": "ollama-llama3.1",
+            "llama3.1:latest": "ollama-llama3.1",
+            "qwen2.5": "ollama-qwen2.5",
+            "qwen2.5:latest": "ollama-qwen2.5",
+            "qwen2.5:7b": "ollama-qwen2.5",
+        }
+        return mapping.get(name_lower)

@@ -22,7 +22,7 @@ from comedy_agent.evaluation.script_quality import ScriptQualityEvaluator
 from comedy_agent.core.rate_limiter import get_rate_limiter
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
-from comedy_agent.models.factory import ModelConfigError
+from comedy_agent.models.factory import ModelConfigError, ModelFactory
 from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.skills import (
     CrosstalkSkill,
@@ -72,6 +72,7 @@ class StandupRequest(BaseModel):
     style: str = Field(default="日常观察", description="风格")
     duration: int = Field(default=3, description="时长（分钟）")
     audience: str = Field(default="通用", description="受众")
+    model: str | None = Field(default=None, description="指定模型")
 
 
 class StandupResponse(BaseModel):
@@ -278,6 +279,7 @@ async def list_skills() -> SkillListResponse:
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(request: ChatRequest) -> ChatResponse:
+    print("chat-------------")
     """与 Agent 对话。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
@@ -285,12 +287,20 @@ async def chat(request: ChatRequest) -> ChatResponse:
     tracer = get_tracer()
     metrics = get_metrics()
 
+    print("chat-------------", request.chat_history, flush=True)
+
     try:
+        # 若前端指定了模型，运行时切换
+        if request.model:
+            state.orch.set_model(request.model)
+
         with tracer.span(
             "api.chat",
             input_data={"prompt": request.prompt[:200], "user_id": request.user_id},
             metadata={"model": request.model, "endpoint": "/chat"},
         ) as span:
+            print("chat-------------", request.chat_history, flush=True)
+         
             result = state.orch.run(
                 request.prompt,
                 chat_history=request.chat_history,
@@ -315,7 +325,24 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @app.post("/skills/standup", response_model=StandupResponse, tags=["skills"])
 async def skill_standup(request: StandupRequest) -> StandupResponse:
     """直接调用脱口秀创作 Skill。"""
-    skill = StandupSkill()
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    # 优先复用 orchestrator 中已注册的 Skill，保证模型上下文一致
+    skill = None
+    for tool in state.orch.tools:
+        if getattr(tool, "name", None) == "standup":
+            skill = tool
+            break
+
+    # 若未注册，则新建（兼容测试与边缘场景）
+    if skill is None:
+        skill = StandupSkill()
+
+    # 若前端指定了模型，覆盖 Skill 的模型
+    if request.model is not None:
+        skill.model_name = request.model
+
     try:
         content = skill.invoke(
             {
@@ -445,6 +472,22 @@ async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestRespo
             return FeedbackIngestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------ #
+# 模型路由
+# ------------------------------------------------------------------ #
+@app.get("/models", tags=["models"])
+async def list_models() -> dict[str, Any]:
+    """返回当前环境可用的模型列表。"""
+    available = ModelFactory.list_available_models()
+    default = settings.default_model
+    recommended = default if default in available else (available[0] if available else None)
+    return {
+        "models": available,
+        "default": default,
+        "recommended": recommended,
+    }
 
 
 # ------------------------------------------------------------------ #

@@ -74,6 +74,23 @@ class AgentOrchestrator:
     # ------------------------------------------------------------------ #
     # Agent 构建与执行
     # ------------------------------------------------------------------ #
+    def set_model(self, model_name: str | None) -> None:
+        """运行时切换模型。
+
+        Args:
+            model_name: 新模型标识，为 ``None`` 时使用默认模型。
+        """
+        if model_name == self.model_name:
+            return
+        self.model_name = model_name
+        self.llm = ModelFactory.get_model(model_name)
+        self._agent = None  # 强制重建 Agent
+        # 同步更新已注册 Skill 的模型
+        for skill in self.tools:
+            if isinstance(skill, ComedySkill):
+                skill.model_name = model_name
+        logger.info("模型已切换至: %s", model_name)
+
     def _build_agent(self) -> Any:
         """构建或复用 LangChain Agent（CompiledStateGraph）。"""
         if self._agent is not None:
@@ -111,6 +128,7 @@ class AgentOrchestrator:
         chat_history: list[tuple[str, str]] | None = None,
         user_id: str | None = None,
     ) -> dict[str, Any]:
+        print("----------chat_history--------------",chat_history)
         """接收用户输入，由 Agent 路由并执行对应 Skill。
 
         Args:

@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
@@ -167,6 +169,11 @@ state = AppState()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时加载 Prompt、Memory、可观测性与初始化 Orchestrator。"""
+    global _START_TIME
+    import time
+
+    _START_TIME = time.time()
+
     # 自动配置 LangSmith（若配置了 API Key）
     setup_langsmith()
 
@@ -212,6 +219,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# 挂载前端静态文件（如果 frontend/ 目录存在）
+_frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
+if _frontend_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
+
 # 注册限流中间件（Redis 优先，失败降级到内存）
 limiter = get_rate_limiter()
 app.add_middleware(
@@ -225,12 +237,35 @@ app.add_middleware(
 
 
 # ------------------------------------------------------------------ #
+# 健康检查
+# ------------------------------------------------------------------ #
+class HealthResponse(BaseModel):
+    """健康检查响应。"""
+
+    status: str
+    version: str
+    memory_ready: bool
+    orchestrator_ready: bool
+    uptime_seconds: float | None = None
+
+
+@app.get("/health", response_model=HealthResponse, tags=["health"])
+async def health() -> HealthResponse:
+    """健康检查 —— 返回各子系统就绪状态。"""
+    import time
+
+    return HealthResponse(
+        status="ok",
+        version="0.1.0",
+        memory_ready=state.memory is not None,
+        orchestrator_ready=state.orch is not None,
+        uptime_seconds=time.time() - _START_TIME if _START_TIME else None,
+    )
+
+
+# ------------------------------------------------------------------ #
 # 路由
 # ------------------------------------------------------------------ #
-@app.get("/health", tags=["health"])
-async def health() -> dict[str, str]:
-    """健康检查。"""
-    return {"status": "ok"}
 
 
 @app.get("/skills", response_model=SkillListResponse, tags=["skills"])

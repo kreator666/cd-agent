@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comedy Agent — 喜剧创作助手</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 { font-size: 1.25rem; font-weight: 600; }
+        header .status {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            background: #e94560;
+        }
+        header .status.ready { background: #16c79a; }
+        .container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+        }
+        .sidebar {
+            width: 260px;
+            background: #fff;
+            border-right: 1px solid #e0e0e0;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .sidebar label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #666;
+        }
+        .sidebar input, .sidebar select, .sidebar button {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .sidebar button {
+            background: #1a1a2e;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .sidebar button:hover { opacity: 0.9; }
+        .sidebar button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            gap: 1rem;
+        }
+        .chat-area {
+            flex: 1;
+            background: #fff;
+            border-radius: 0.75rem;
+            border: 1px solid #e0e0e0;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .message {
+            max-width: 80%;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 0.9375rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .message.user {
+            align-self: flex-end;
+            background: #1a1a2e;
+            color: #fff;
+        }
+        .message.agent {
+            align-self: flex-start;
+            background: #f0f0f0;
+            color: #333;
+        }
+        .message .meta {
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-bottom: 0.25rem;
+        }
+        .input-area {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .input-area textarea {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 0.75rem;
+            font-size: 0.9375rem;
+            resize: none;
+            height: 3.5rem;
+            font-family: inherit;
+        }
+        .input-area button {
+            padding: 0 1.5rem;
+            background: #1a1a2e;
+            color: #fff;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .input-area button:hover { opacity: 0.9; }
+        .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .empty-state {
+            text-align: center;
+            color: #999;
+            margin: auto;
+        }
+        .empty-state h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .typing {
+            font-size: 0.75rem;
+            color: #999;
+            padding: 0 0.5rem;
+        }
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .container { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎤 Comedy Agent</h1>
+        <span id="status" class="status">检查中...</span>
+    </header>
+    <div class="container">
+        <aside class="sidebar">
+            <label for="model">模型</label>
+            <select id="model">
+                <option value="">默认</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="qwen-max">通义千问 Max</option>
+                <option value="kimi-for-coding">Kimi</option>
+                <option value="ollama-llama3">Ollama Llama3</option>
+            </select>
+
+            <label for="user-id">用户 ID</label>
+            <input id="user-id" type="text" placeholder="anonymous" value="demo-user">
+
+            <label>快捷指令</label>
+            <button onclick="sendQuick('写一个关于职场加班的脱口秀')">🎤 职场脱口秀</button>
+            <button onclick="sendQuick('写一段相声，主题是年轻人谈恋爱')">🎭 恋爱相声</button>
+            <button onclick="sendQuick('创作一个小品剧本，关于相亲')">🎬 相亲小品</button>
+            <button onclick="sendQuick('分析一下这段段子的笑点结构：老板说要给我加薪，结果是加工作量')">🔍 笑点分析</button>
+        </aside>
+        <main class="main">
+            <div class="chat-area" id="chat-area">
+                <div class="empty-state">
+                    <h2>Comedy Agent</h2>
+                    <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
+                </div>
+            </div>
+            <div class="input-area">
+                <textarea id="input" placeholder="输入你的需求，按 Enter 发送..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                <button id="send-btn" onclick="sendMessage()">发送</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const chatArea = document.getElementById('chat-area');
+        const input = document.getElementById('input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusEl = document.getElementById('status');
+        let history = [];
+
+        async function checkHealth() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    statusEl.textContent = '就绪';
+                    statusEl.classList.add('ready');
+                } else {
+                    statusEl.textContent = '异常';
+                }
+            } catch {
+                statusEl.textContent = '离线';
+            }
+        }
+        checkHealth();
+        setInterval(checkHealth, 30000);
+
+        function appendMessage(role, text) {
+            const empty = chatArea.querySelector('.empty-state');
+            if (empty) empty.remove();
+
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.innerHTML = `<div class="meta">${role === 'user' ? '你' : 'Agent'}</div>${escapeHtml(text)}`;
+            chatArea.appendChild(div);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return div;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function setLoading(loading) {
+            sendBtn.disabled = loading;
+            input.disabled = loading;
+            if (loading) {
+                const typing = document.createElement('div');
+                typing.className = 'typing';
+                typing.id = 'typing-indicator';
+                typing.textContent = 'Agent 正在思考...';
+                chatArea.appendChild(typing);
+                chatArea.scrollTop = chatArea.scrollHeight;
+            } else {
+                const t = document.getElementById('typing-indicator');
+                if (t) t.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
+            const model = document.getElementById('model').value || null;
+            const userId = document.getElementById('user-id').value || 'anonymous';
+
+            input.value = '';
+            appendMessage('user', text);
+            setLoading(true);
+
+            try {
+                const res = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: text,
+                        model: model,
+                        user_id: userId,
+                        chat_history: history,
+                    }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    appendMessage('agent', data.output);
+                    history.push(['human', text]);
+                    history.push(['ai', data.output]);
+                    if (history.length > 20) history = history.slice(-20);
+                } else {
+                    appendMessage('agent', `错误: ${data.detail || '未知错误'}`);
+                }
+            } catch (err) {
+                appendMessage('agent', `请求失败: ${err.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function sendQuick(text) {
+            input.value = text;
+            sendMessage();
+        }
+    </script>
+</body>
+</html>

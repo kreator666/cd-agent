@@ -1,0 +1,66 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+.venv/
+env/
+ENV/
+
+# 测试与缓存
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.dmypy.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 文档与日志（保留必要数据）
+*.log
+vibe-log/
+docs/*.png
+docs/*.html
+
+# 不需要进入镜像的大型文件
+chroma_data/*.sqlite3-journal
+chroma_data/*.sqlite3-wal
+
+# 敏感文件
+.env
+.env.*
+!.env.example
+
+# 前端开发依赖（如后续扩展）
+node_modules/

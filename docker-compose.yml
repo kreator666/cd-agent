@@ -1,0 +1,75 @@
+# Comedy Agent —— Docker Compose 编排
+# 包含：API 服务、Redis（缓存/限流/短期记忆）
+#
+# 使用方法：
+#   docker compose up -d          # 启动所有服务
+#   docker compose up -d api      # 仅启动 API
+#   docker compose logs -f api    # 查看 API 日志
+#   docker compose down           # 停止并移除
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comedy-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - VECTOR_DB_PATH=/app/chroma_data
+      - CACHE_TTL=300
+      - RATE_LIMIT_WRITE_MAX=10
+      - RATE_LIMIT_READ_MAX=100
+      # API Keys 请通过 .env 文件或环境变量注入
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-ollama-llama3}
+      - DEFAULT_EMBEDDING_MODEL=${DEFAULT_EMBEDDING_MODEL:-text-embedding-3-small}
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-comedy-agent}
+    volumes:
+      - ./data:/app/data
+      - chroma_data:/app/chroma_data
+      - ./skills:/app/skills
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: comedy-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 可选：Ollama 本地模型服务
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: comedy-agent-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+
+volumes:
+  chroma_data:
+  redis_data:
+  # ollama_data:

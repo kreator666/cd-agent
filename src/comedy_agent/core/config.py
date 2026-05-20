@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
+    # 缓存与限流
+    cache_ttl: int = Field(default=300, alias="CACHE_TTL")
+    rate_limit_write_max: int = Field(default=60, alias="RATE_LIMIT_WRITE_MAX")
+    rate_limit_write_window: int = Field(default=60, alias="RATE_LIMIT_WRITE_WINDOW")
+    rate_limit_read_max: int = Field(default=120, alias="RATE_LIMIT_READ_MAX")
+    rate_limit_read_window: int = Field(default=60, alias="RATE_LIMIT_READ_WINDOW")
+
     # 模型分层配置（任务类型绑定模型）
     creative_model: str = Field(default="claude-3-5-sonnet", alias="CREATIVE_MODEL")
     analytical_model: str = Field(default="gpt-4o", alias="ANALYTICAL_MODEL")

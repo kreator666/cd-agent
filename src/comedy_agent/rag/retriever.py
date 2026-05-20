@@ -8,12 +8,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 from typing import Any
 
 from langchain_core.documents import Document
 
+from comedy_agent.core.cache import Cache
 from comedy_agent.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -83,6 +86,8 @@ class ComedyRetriever:
         vector_store: VectorStore,
         cross_encoder_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
         multi_vector_store: "MultiVectorStore" | None = None,
+        cache: Cache | None = None,
+        cache_ttl: int = 300,
     ) -> None:
         """初始化混合检索器。
 
@@ -91,10 +96,14 @@ class ComedyRetriever:
             cross_encoder_name: Cross-Encoder 模型名称，用于重排序。
             multi_vector_store: 可选的多向量存储实例，启用后检索时会
                 同时从多向量空间中召回结果并合并。
+            cache: 可选的缓存实例，用于缓存检索结果。
+            cache_ttl: 缓存过期时间（秒）。
         """
         self.vector_store = vector_store
         self.cross_encoder_name = cross_encoder_name
         self.multi_vector_store = multi_vector_store
+        self.cache = cache
+        self.cache_ttl = cache_ttl
 
         self._bm25: BM25Okapi | None = None
         self._corpus: list[Document] = []
@@ -138,6 +147,7 @@ class ComedyRetriever:
         top_k: int = 5,
         vector_top_k: int | None = None,
         bm25_top_k: int | None = None,
+        use_cache: bool = True,
     ) -> list[Document]:
         """执行混合检索并返回重排序后的结果。
 
@@ -146,10 +156,20 @@ class ComedyRetriever:
             top_k: 最终返回结果数量。
             vector_top_k: 向量检索召回数量，为 ``None`` 时取 ``top_k * 2``。
             bm25_top_k: BM25 检索召回数量，为 ``None`` 时取 ``top_k * 2``。
+            use_cache: 是否使用缓存。
 
         Returns:
             list[Document]: 按相关性排序的文档列表。
         """
+        # 尝试读取缓存
+        cache_key = None
+        if use_cache and self.cache is not None:
+            cache_key = self._make_cache_key(query, top_k, vector_top_k, bm25_top_k)
+            cached = self.cache.get_json(cache_key)
+            if cached is not None:
+                logger.debug("缓存命中: %s", cache_key)
+                return [Document(page_content=d["content"], metadata=d["metadata"]) for d in cached]
+
         vec_k = vector_top_k or top_k * 2
         bm25_k = bm25_top_k or top_k * 2
 
@@ -181,7 +201,22 @@ class ComedyRetriever:
         # 4. Cross-Encoder 重排序
         reranked = self._rerank(query, merged, top_k=top_k)
         logger.debug("重排序后返回 %d 条", len(reranked))
+
+        # 写入缓存
+        if use_cache and self.cache is not None and cache_key is not None:
+            serializable = [
+                {"content": d.page_content, "metadata": d.metadata}
+                for d in reranked
+            ]
+            self.cache.set_json(cache_key, serializable, ttl=self.cache_ttl)
+
         return reranked
+
+    @staticmethod
+    def _make_cache_key(query: str, top_k: int, vector_top_k: int | None, bm25_top_k: int | None) -> str:
+        """生成检索缓存键。"""
+        raw = f"retrieve:{query}:{top_k}:{vector_top_k}:{bm25_top_k}"
+        return "rag:" + hashlib.md5(raw.encode()).hexdigest()
 
     # ------------------------------------------------------------------ #
     # 内部方法

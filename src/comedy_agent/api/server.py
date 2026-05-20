@@ -15,6 +15,8 @@ from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.core.config import settings
 from comedy_agent.core.observability import get_metrics, get_tracer, reset_observability, setup_langsmith
+from comedy_agent.evaluation.model_quality import ModelOutputEvaluator
+from comedy_agent.evaluation.script_quality import ScriptQualityEvaluator
 from comedy_agent.core.rate_limiter import get_rate_limiter
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
@@ -408,6 +410,68 @@ async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestRespo
             return FeedbackIngestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------ #
+# 评估路由
+# ------------------------------------------------------------------ #
+class EvaluateScriptRequest(BaseModel):
+    """剧本评估请求。"""
+
+    script: str = Field(description="剧本文本内容")
+    script_type: str = Field(default="default", description="剧本类型")
+
+
+class EvaluateScriptResponse(BaseModel):
+    """剧本评估响应。"""
+
+    overall_score: float
+    punchline_density: float
+    dialogue_ratio: float
+    structure_completeness: float
+    word_diversity: float
+    colloquial_score: float
+    length_score: float
+    readability: float
+    suggestions: list[str]
+
+
+class EvaluateOutputRequest(BaseModel):
+    """模型输出评估请求。"""
+
+    output: str = Field(description="模型输出文本")
+    expected_format: str | None = Field(default=None, description="期望格式")
+
+
+class EvaluateOutputResponse(BaseModel):
+    """模型输出评估响应。"""
+
+    overall_score: float
+    format_compliance: float
+    repetition_score: float
+    structure_score: float
+    length_score: float
+    has_punchline: bool
+    has_dialogue: bool
+    suggestions: list[str]
+
+
+@app.post("/evaluate/script", response_model=EvaluateScriptResponse, tags=["evaluation"])
+async def evaluate_script(request: EvaluateScriptRequest) -> EvaluateScriptResponse:
+    """评估剧本质量（基于规则/启发式指标）。"""
+    evaluator = ScriptQualityEvaluator()
+    result = evaluator.evaluate(script=request.script, script_type=request.script_type)
+    return EvaluateScriptResponse(**result.to_dict())
+
+
+@app.post("/evaluate/output", response_model=EvaluateOutputResponse, tags=["evaluation"])
+async def evaluate_output(request: EvaluateOutputRequest) -> EvaluateOutputResponse:
+    """评估模型输出质量。"""
+    evaluator = ModelOutputEvaluator()
+    result = evaluator.evaluate(
+        output=request.output, expected_format=request.expected_format
+    )
+    return EvaluateOutputResponse(**result.to_dict())
 
 
 # ------------------------------------------------------------------ #

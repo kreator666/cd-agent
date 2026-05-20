@@ -48,7 +48,11 @@ class TestHealth:
     def test_health_check(self, client):
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "version" in data
+        assert "memory_ready" in data
+        assert "orchestrator_ready" in data
 
 
 class TestSkills:

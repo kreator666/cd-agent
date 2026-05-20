@@ -188,3 +188,36 @@ class TestFeedbackIngest:
             json={"min_rating": 4.0},
         )
         assert response.status_code == 503
+
+
+
+class TestEvaluateEndpoints:
+    """评估端点测试。"""
+
+    def test_evaluate_script(self, client):
+        response = client.post(
+            "/evaluate/script",
+            json={
+                "script": "大家好！\n\n甲：你好。\n乙：你好。\n\n谢谢大家！",
+                "script_type": "standup",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "overall_score" in data
+        assert 0 <= data["overall_score"] <= 10
+        assert "suggestions" in data
+
+    def test_evaluate_output(self, client):
+        response = client.post(
+            "/evaluate/output",
+            json={
+                "output": "# 报告\n\n- 笑点分析\n- 结构建议\n",
+                "expected_format": "markdown",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "overall_score" in data
+        assert "has_punchline" in data
+        assert "has_dialogue" in data

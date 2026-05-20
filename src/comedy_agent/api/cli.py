@@ -25,6 +25,9 @@ from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
+from comedy_agent.evaluation.script_quality import ScriptQualityEvaluator
+from comedy_agent.evaluation.model_quality import ModelOutputEvaluator
+from comedy_agent.evaluation.regression import EvaluationSuite, run_suite
 from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.rag.ingest import KnowledgeIngestor
 
@@ -429,6 +432,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     ingest_parser = subparsers.add_parser("ingest", help="导入知识库数据")
     ingest_parser.add_argument("--dir", default=None, help="知识库目录路径")
 
+    # evaluate
+    eval_parser = subparsers.add_parser("evaluate", help="运行评估（剧本质量/模型输出/回归套件）")
+    eval_sub = eval_parser.add_subparsers(dest="eval_cmd", help="评估子命令")
+
+    # evaluate script
+    eval_script_parser = eval_sub.add_parser("script", help="评估剧本质量")
+    eval_script_parser.add_argument("--content", required=True, help="剧本文本内容")
+    eval_script_parser.add_argument("--type", default="default", help="剧本类型（standup/crosstalk/sketch/sitcom/joke/default）")
+    eval_script_parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
+
+    # evaluate output
+    eval_output_parser = eval_sub.add_parser("output", help="评估模型输出质量")
+    eval_output_parser.add_argument("--content", required=True, help="模型输出文本")
+    eval_output_parser.add_argument("--format", default=None, help="期望格式（markdown/json/dialogue）")
+    eval_output_parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
+
+    # evaluate suite
+    eval_suite_parser = eval_sub.add_parser("suite", help="运行回归测试套件")
+    eval_suite_parser.add_argument("--file", required=True, help="测试套件 JSON 文件路径")
+    eval_suite_parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
+
     args = parser.parse_args(argv)
 
     if args.version:
@@ -457,6 +481,52 @@ def main(argv: Sequence[str] | None = None) -> int:
             chunk_strategy=args.strategy,
             dry_run=args.dry_run,
         )
+    elif args.command == "evaluate":
+        if args.eval_cmd == "script":
+            evaluator = ScriptQualityEvaluator()
+            result = evaluator.evaluate(script=args.content, script_type=args.type)
+            if args.json:
+                import json as _json
+                print(_json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+            else:
+                print(f"综合评分: {result.overall_score}/10")
+                print(f"  笑点密度: {result.punchline_density}")
+                print(f"  对话占比: {result.dialogue_ratio}")
+                print(f"  结构完整性: {result.structure_completeness}")
+                print(f"  词汇多样性: {result.word_diversity}")
+                print(f"  口语化程度: {result.colloquial_score}")
+                print(f"  长度适中性: {result.length_score}")
+                print(f"  可读性: {result.readability}")
+                print("\n改进建议:")
+                for s in result.suggestions:
+                    print(f"  - {s}")
+        elif args.eval_cmd == "output":
+            evaluator = ModelOutputEvaluator()
+            result = evaluator.evaluate(output=args.content, expected_format=args.format)
+            if args.json:
+                import json as _json
+                print(_json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+            else:
+                print(f"综合评分: {result.overall_score}/10")
+                print(f"  格式合规: {result.format_compliance}")
+                print(f"  重复率得分: {result.repetition_score}")
+                print(f"  结构得分: {result.structure_score}")
+                print(f"  长度得分: {result.length_score}")
+                print(f"  包含笑点: {'是' if result.has_punchline else '否'}")
+                print(f"  包含对话: {'是' if result.has_dialogue else '否'}")
+                print("\n改进建议:")
+                for s in result.suggestions:
+                    print(f"  - {s}")
+        elif args.eval_cmd == "suite":
+            suite = EvaluationSuite.from_json(args.file)
+            report = run_suite(suite)
+            if args.json:
+                print(report.to_json())
+            else:
+                print(report.to_markdown())
+        else:
+            eval_parser.print_help()
+            return 1
     elif args.command == "scripts":
         if args.scripts_cmd == "list":
             cmd_scripts_list(user_id=args.user_id, script_type=args.type)

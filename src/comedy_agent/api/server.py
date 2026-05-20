@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.core.config import settings
+from comedy_agent.core.observability import get_metrics, get_tracer, reset_observability, setup_langsmith
 from comedy_agent.core.rate_limiter import get_rate_limiter
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
@@ -163,7 +164,10 @@ state = AppState()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动时加载 Prompt、Memory 与初始化 Orchestrator。"""
+    """应用生命周期：启动时加载 Prompt、Memory、可观测性与初始化 Orchestrator。"""
+    # 自动配置 LangSmith（若配置了 API Key）
+    setup_langsmith()
+
     # 加载外部 Prompt 模板
     PromptManager().load_from_directory()
 
@@ -196,6 +200,7 @@ async def lifespan(app: FastAPI):
     yield
     state.orch = None
     state.memory = None
+    reset_observability()
 
 
 app = FastAPI(
@@ -240,22 +245,32 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
 
+    tracer = get_tracer()
+    metrics = get_metrics()
+
     try:
-        result = state.orch.run(
-            request.prompt,
-            chat_history=request.chat_history,
-            user_id=request.user_id,
-        )
-        # 将消息对象序列化为 dict
-        messages = []
-        for msg in result.get("messages", []):
-            messages.append(
-                {
-                    "type": getattr(msg, "type", "unknown"),
-                    "content": getattr(msg, "content", ""),
-                }
+        with tracer.span(
+            "api.chat",
+            input_data={"prompt": request.prompt[:200], "user_id": request.user_id},
+            metadata={"model": request.model, "endpoint": "/chat"},
+        ) as span:
+            result = state.orch.run(
+                request.prompt,
+                chat_history=request.chat_history,
+                user_id=request.user_id,
             )
-        return ChatResponse(output=result["output"], messages=messages)
+            # 将消息对象序列化为 dict
+            messages = []
+            for msg in result.get("messages", []):
+                messages.append(
+                    {
+                        "type": getattr(msg, "type", "unknown"),
+                        "content": getattr(msg, "content", ""),
+                    }
+                )
+            span.output_data = {"output": result["output"][:200]}
+            metrics.record("api.chat.duration_ms", span.duration_ms)
+            return ChatResponse(output=result["output"], messages=messages)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -370,16 +385,43 @@ async def feedback_ingest(request: FeedbackIngestRequest) -> FeedbackIngestRespo
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
+    tracer = get_tracer()
+    metrics = get_metrics()
+
     try:
-        loop = FeedbackLoop(
-            memory=state.memory,
-            min_rating=request.min_rating if request.min_rating is not None else 4.0,
-        )
-        result = loop.ingest_high_rated_scripts(
-            user_id=request.user_id,
-            chunk_strategy=request.chunk_strategy or "paragraph",
-            dry_run=request.dry_run,
-        )
-        return FeedbackIngestResponse(**result)
+        with tracer.span(
+            "api.feedback_ingest",
+            input_data={"user_id": request.user_id, "min_rating": request.min_rating},
+            metadata={"endpoint": "/feedback/ingest"},
+        ) as span:
+            loop = FeedbackLoop(
+                memory=state.memory,
+                min_rating=request.min_rating if request.min_rating is not None else 4.0,
+            )
+            result = loop.ingest_high_rated_scripts(
+                user_id=request.user_id,
+                chunk_strategy=request.chunk_strategy or "paragraph",
+                dry_run=request.dry_run,
+            )
+            span.output_data = result
+            metrics.record("api.feedback_ingest.duration_ms", span.duration_ms)
+            return FeedbackIngestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------ #
+# 可观测性路由
+# ------------------------------------------------------------------ #
+@app.get("/metrics", tags=["observability"])
+async def metrics_endpoint() -> dict[str, Any]:
+    """返回最近调用链与聚合指标（内部调试用）。"""
+    tracer = get_tracer()
+    metrics = get_metrics()
+
+    recent_spans = tracer.get_recent(n=20)
+    return {
+        "trace_stats": tracer.get_stats(),
+        "recent_traces": [s.to_dict() for s in recent_spans],
+        "metrics": metrics.get_all(),
+    }

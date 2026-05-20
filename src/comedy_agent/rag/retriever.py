@@ -19,6 +19,16 @@ from comedy_agent.rag.vector_store import VectorStore
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------ #
+# 可选依赖（多向量存储）
+# ------------------------------------------------------------------ #
+try:
+    from comedy_agent.rag.comedy_optimizer import MultiVectorStore
+
+    _HAS_MULTI_VECTOR = True
+except ImportError:  # pragma: no cover
+    _HAS_MULTI_VECTOR = False
+
+# ------------------------------------------------------------------ #
 # 可选依赖
 # ------------------------------------------------------------------ #
 try:
@@ -72,15 +82,19 @@ class ComedyRetriever:
         self,
         vector_store: VectorStore,
         cross_encoder_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        multi_vector_store: "MultiVectorStore" | None = None,
     ) -> None:
         """初始化混合检索器。
 
         Args:
             vector_store: 已初始化的向量存储实例。
             cross_encoder_name: Cross-Encoder 模型名称，用于重排序。
+            multi_vector_store: 可选的多向量存储实例，启用后检索时会
+                同时从多向量空间中召回结果并合并。
         """
         self.vector_store = vector_store
         self.cross_encoder_name = cross_encoder_name
+        self.multi_vector_store = multi_vector_store
 
         self._bm25: BM25Okapi | None = None
         self._corpus: list[Document] = []
@@ -100,6 +114,11 @@ class ComedyRetriever:
 
         # 1. 向量库入库
         self.vector_store.add_documents(documents)
+
+        # 1.5 多向量库入库（如果启用）
+        if self.multi_vector_store is not None:
+            self.multi_vector_store.add_documents(documents)
+            logger.info("多向量库已入库 %d 条文档", len(documents))
 
         # 2. 更新 BM25 索引
         if _HAS_BM25:
@@ -137,6 +156,14 @@ class ComedyRetriever:
         # 1. 向量检索召回
         vec_results = self.vector_store.search(query, top_k=vec_k)
         logger.debug("向量召回 %d 条", len(vec_results))
+
+        # 1.5 多向量检索召回（如果启用）
+        if self.multi_vector_store is not None:
+            mv_results = self.multi_vector_store.search(
+                query, top_k=vec_k, return_original=True
+            )
+            logger.debug("多向量召回 %d 条", len(mv_results))
+            vec_results = self._merge_results(vec_results, mv_results)
 
         # 2. BM25 召回
         bm25_results: list[Document] = []

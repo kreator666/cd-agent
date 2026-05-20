@@ -13,6 +13,7 @@ from langchain_core.documents import Document
 
 from comedy_agent.core.config import settings
 from comedy_agent.rag.chunker import DocumentChunker
+from comedy_agent.rag.comedy_optimizer import MultiVectorStore
 from comedy_agent.rag.document_loader import DocumentLoader
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
@@ -43,6 +44,7 @@ class KnowledgeIngestor:
         chunk_strategy: str = "paragraph",
         chunk_size: int = 800,
         chunk_overlap: int = 100,
+        use_multi_vector: bool = False,
     ) -> None:
         """初始化导入器。
 
@@ -51,13 +53,23 @@ class KnowledgeIngestor:
             chunk_strategy: 分块策略，可选 ``fixed`` / ``paragraph`` / ``scene`` / ``dialogue``。
             chunk_size: 分块大小（固定大小策略使用）。
             chunk_overlap: 分块重叠（固定大小策略使用）。
+            use_multi_vector: 是否启用多向量表示（content / structure / style）。
         """
+        multi_vector_store: MultiVectorStore | None = None
         if retriever is None:
             vector_store = VectorStore(
                 collection_name="comedy_knowledge",
                 persist_path=str(settings.vector_db_path),
             )
-            retriever = ComedyRetriever(vector_store=vector_store)
+            if use_multi_vector:
+                multi_vector_store = MultiVectorStore(
+                    base_collection_name="comedy",
+                    persist_path=str(settings.vector_db_path),
+                )
+            retriever = ComedyRetriever(
+                vector_store=vector_store,
+                multi_vector_store=multi_vector_store,
+            )
 
         self.retriever = retriever
         self.chunk_strategy = chunk_strategy

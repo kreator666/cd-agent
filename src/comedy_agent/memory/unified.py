@@ -83,6 +83,9 @@ class UnifiedMemory(MemoryStore):
     ) -> list[ConversationData]:
         return self._store.list_conversations(user_id, limit)
 
+    def delete_conversation(self, user_id: str, session_id: str) -> bool:
+        return self._store.delete_conversation(user_id, session_id)
+
     def save_preference(self, user_id: str, key: str, value: Any) -> None:
         self._store.save_preference(user_id, key, value)
 

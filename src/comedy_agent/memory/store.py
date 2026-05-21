@@ -90,6 +90,19 @@ class MemoryStore(ABC):
         """
         ...
 
+    @abstractmethod
+    def delete_conversation(self, user_id: str, session_id: str) -> bool:
+        """删除指定会话记录。
+
+        Args:
+            user_id: 用户唯一标识。
+            session_id: 会话唯一标识。
+
+        Returns:
+            bool: 是否成功删除。
+        """
+        ...
+
     # ------------------------------------------------------------------ #
     # 中期记忆 —— 用户偏好
     # ------------------------------------------------------------------ #

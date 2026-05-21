@@ -232,6 +232,21 @@ class SQLMemoryStore(MemoryStore):
                 )
             return results
 
+    def delete_conversation(self, user_id: str, session_id: str) -> bool:
+        """删除指定会话记录。"""
+        with self._new_session() as session:
+            row = (
+                session.query(UserConversation)
+                .filter_by(session_id=session_id, user_id=user_id)
+                .first()
+            )
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted conversation: %s", session_id)
+            return True
+
     # ------------------------------------------------------------------ #
     # 中期记忆 —— 偏好
     # ------------------------------------------------------------------ #

@@ -45,7 +45,7 @@ class ChatRequest(BaseModel):
 
     prompt: str = Field(description="用户输入")
     model: str | None = Field(default=None, description="指定模型")
-    user_id: str | None = Field(default=None, description="用户标识，用于注入记忆上下文")
+    session_id: str | None = Field(default=None, description="会话标识，为空则新建会话")
     chat_history: list[tuple[str, str]] | None = Field(
         default=None, description="历史消息 [(role, content), ...]"
     )
@@ -55,6 +55,7 @@ class ChatResponse(BaseModel):
     """聊天响应。"""
 
     output: str = Field(description="Agent 输出文本")
+    session_id: str | None = Field(default=None, description="会话标识")
     messages: list[dict[str, Any]] = Field(
         default_factory=list, description="完整消息链"
     )
@@ -297,10 +298,14 @@ async def chat(
         if request.model:
             state.orch.set_model(request.model)
 
+        # 生成或复用 session_id
+        import uuid
+        session_id = request.session_id or uuid.uuid4().hex[:16]
+
         with tracer.span(
             "api.chat",
             input_data={"prompt": request.prompt[:200], "user_id": user_id},
-            metadata={"model": request.model, "endpoint": "/chat"},
+            metadata={"model": request.model, "endpoint": "/chat", "session_id": session_id},
         ) as span:
             result = state.orch.run(
                 request.prompt,
@@ -312,13 +317,28 @@ async def chat(
             for msg in result.get("messages", []):
                 messages.append(
                     {
-                        "type": getattr(msg, "type", "unknown"),
-                        "content": getattr(msg, "content", ""),
+                        "role": getattr(msg, "type", "unknown"),
+                        "content": str(getattr(msg, "content", "")),
                     }
                 )
+
+            # 保存会话记录到数据库
+            if state.memory is not None:
+                try:
+                    state.memory.save_conversation(
+                        user_id=user_id,
+                        session_id=session_id,
+                        messages=messages,
+                        summary=result["output"][:80] if result["output"] else None,
+                    )
+                except Exception as save_err:
+                    logger.warning("保存会话记录失败: %s", save_err)
+
             span.output_data = {"output": result["output"][:200]}
             metrics.record("api.chat.duration_ms", span.duration_ms)
-            return ChatResponse(output=result["output"], messages=messages)
+            return ChatResponse(
+                output=result["output"], session_id=session_id, messages=messages
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -493,6 +513,66 @@ async def feedback_ingest(
             return FeedbackIngestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------------------------------------------------------ #
+# 会话管理路由
+# ------------------------------------------------------------------ #
+@app.get("/conversations", tags=["conversations"])
+async def list_conversations(
+    limit: int = 10,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """列出当前用户的近期会话。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    conversations = state.memory.list_conversations(user_id, limit=limit)
+    return {
+        "conversations": [
+            {
+                "session_id": c.session_id,
+                "summary": c.summary,
+                "message_count": len(c.messages),
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            }
+            for c in conversations
+        ]
+    }
+
+
+@app.get("/conversations/{session_id}", tags=["conversations"])
+async def get_conversation(
+    session_id: str,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """获取单个会话的完整聊天记录。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    conv = state.memory.load_conversation(user_id, session_id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="会话不存在或已过期")
+    return {
+        "session_id": conv.session_id,
+        "messages": conv.messages,
+        "summary": conv.summary,
+        "created_at": conv.created_at.isoformat() if conv.created_at else None,
+        "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+    }
+
+
+@app.delete("/conversations/{session_id}", response_model=SuccessResponse, tags=["conversations"])
+async def delete_conversation(
+    session_id: str,
+    user_id: str = Depends(get_current_user),
+) -> SuccessResponse:
+    """删除指定会话。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    ok = state.memory.delete_conversation(user_id, session_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return SuccessResponse(success=True)
 
 
 # ------------------------------------------------------------------ #

@@ -147,6 +147,44 @@
             color: #999;
             padding: 0 0.5rem;
         }
+        .conversation-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+        }
+        .conversation-item {
+            padding: 0.5rem 0.625rem;
+            border-radius: 0.5rem;
+            background: #f8f8f8;
+            cursor: pointer;
+            font-size: 0.8125rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.15s;
+        }
+        .conversation-item:hover { background: #eee; }
+        .conversation-item.active { background: #1a1a2e; color: #fff; }
+        .conversation-item .conv-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .conversation-item .conv-del {
+            font-size: 0.75rem;
+            color: #e94560;
+            padding: 0 0.25rem;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .conversation-item:hover .conv-del { opacity: 1; }
+        .conversation-item.active .conv-del { color: #ffb3b3; }
+        .new-chat-btn {
+            background: #16c79a !important;
+        }
         @media (max-width: 768px) {
             .sidebar { display: none; }
             .container { padding: 0; }
@@ -172,11 +210,18 @@
             <label for="user-id">当前用户</label>
             <input id="user-id" type="text" readonly style="background:#f0f0f0;cursor:default;">
 
+            <button class="new-chat-btn" onclick="startNewChat()">➕ 新对话</button>
+
             <label>快捷指令</label>
             <button onclick="sendQuick('写一个关于职场加班的脱口秀')">🎤 职场脱口秀</button>
             <button onclick="sendQuick('写一段相声，主题是年轻人谈恋爱')">🎭 恋爱相声</button>
             <button onclick="sendQuick('创作一个小品剧本，关于相亲')">🎬 相亲小品</button>
             <button onclick="sendQuick('分析一下这段段子的笑点结构：老板说要给我加薪，结果是加工作量')">🔍 笑点分析</button>
+
+            <label>历史会话</label>
+            <div class="conversation-list" id="conversation-list">
+                <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
+            </div>
         </aside>
         <main class="main">
             <div class="chat-area" id="chat-area">
@@ -199,6 +244,7 @@
         const sendBtn = document.getElementById('send-btn');
         const statusEl = document.getElementById('status');
         let history = [];
+        let currentSessionId = null;
 
         // 登录检查
         const token = localStorage.getItem('token');
@@ -208,6 +254,102 @@
         }
         document.getElementById('user-id').value = currentUserId || '';
         document.getElementById('current-user').textContent = currentUserId || '';
+
+        function startNewChat() {
+            currentSessionId = null;
+            history = [];
+            chatArea.innerHTML = `
+                <div class="empty-state">
+                    <h2>Comedy Agent</h2>
+                    <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
+                </div>
+            `;
+            renderConversationList();
+        }
+
+        async function loadConversations() {
+            const listEl = document.getElementById('conversation-list');
+            try {
+                const res = await fetch(`${API_BASE}/conversations?limit=20`, { headers: authHeaders() });
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                window._conversations = data.conversations || [];
+                renderConversationList();
+            } catch {
+                listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载失败</div>';
+            }
+        }
+
+        function renderConversationList() {
+            const listEl = document.getElementById('conversation-list');
+            const conversations = window._conversations || [];
+            if (conversations.length === 0) {
+                listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">暂无历史会话</div>';
+                return;
+            }
+            listEl.innerHTML = '';
+            conversations.forEach(conv => {
+                const item = document.createElement('div');
+                item.className = 'conversation-item' + (conv.session_id === currentSessionId ? ' active' : '');
+                const title = conv.summary || '未命名会话';
+                const time = conv.updated_at ? new Date(conv.updated_at).toLocaleDateString() : '';
+                item.innerHTML = `<span class="conv-title" title="${title}">${title}</span><span style="font-size:0.7rem;color:#888;white-space:nowrap;">${time}</span><span class="conv-del" onclick="event.stopPropagation();deleteConversation('${conv.session_id}')">✕</span>`;
+                item.onclick = () => loadConversation(conv.session_id);
+                listEl.appendChild(item);
+            });
+        }
+
+        async function loadConversation(sessionId) {
+            try {
+                const res = await fetch(`${API_BASE}/conversations/${sessionId}`, { headers: authHeaders() });
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                currentSessionId = data.session_id;
+                history = [];
+                chatArea.innerHTML = '';
+                if (data.messages && data.messages.length > 0) {
+                    data.messages.forEach(msg => {
+                        if (msg.role === 'human') {
+                            appendMessage('user', msg.content);
+                            history.push(['human', msg.content]);
+                        } else if (msg.role === 'ai') {
+                            appendMessage('agent', msg.content);
+                            history.push(['ai', msg.content]);
+                        }
+                    });
+                }
+                if (chatArea.children.length === 0) {
+                    chatArea.innerHTML = `
+                        <div class="empty-state">
+                            <h2>Comedy Agent</h2>
+                            <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
+                        </div>
+                    `;
+                }
+                renderConversationList();
+            } catch (err) {
+                alert('加载会话失败: ' + err.message);
+            }
+        }
+
+        async function deleteConversation(sessionId) {
+            if (!confirm('确定删除该会话？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/conversations/${sessionId}`, {
+                    method: 'DELETE',
+                    headers: authHeaders(),
+                });
+                if (!res.ok) throw new Error('删除失败');
+                if (currentSessionId === sessionId) {
+                    startNewChat();
+                }
+                loadConversations();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+
+        loadConversations();
 
         function logout() {
             localStorage.removeItem('token');
@@ -348,6 +490,7 @@
                     body: JSON.stringify({
                         prompt: text,
                         model: model,
+                        session_id: currentSessionId,
                         chat_history: history,
                     }),
                 });
@@ -357,6 +500,8 @@
                     history.push(['human', text]);
                     history.push(['ai', data.output]);
                     if (history.length > 20) history = history.slice(-20);
+                    currentSessionId = data.session_id || currentSessionId;
+                    loadConversations();
                 } else {
                     appendMessage('agent', `错误: ${data.detail || '未知错误'}`);
                 }

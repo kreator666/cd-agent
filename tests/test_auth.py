@@ -29,6 +29,7 @@ def client():
     ) as mock_auth_store_cls:
         mock_orch = MagicMock()
         mock_orch.list_skills.return_value = ["standup_generator"]
+        mock_orch.run.return_value = {"output": "test response", "messages": []}
         mock_orch_cls.return_value = mock_orch
 
         # auth router 使用内存数据库
@@ -163,3 +164,76 @@ class TestProtectedRoutes:
         data = response.json()
         assert data["user_id"] == "meuser"
         assert data["nickname"] == "Me"
+
+
+class TestConversations:
+    def _get_token(self, client, user_id="convuser"):
+        client.post("/auth/register", json={"user_id": user_id, "password": "secret"})
+        login_resp = client.post("/auth/login", json={"user_id": user_id, "password": "secret"})
+        return login_resp.json()["access_token"]
+
+    def test_chat_saves_conversation(self, client):
+        token = self._get_token(client)
+        response = client.post(
+            "/chat",
+            json={"prompt": "hello"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["session_id"] is not None
+        assert len(data["session_id"]) > 0
+
+    def test_list_conversations(self, client):
+        token = self._get_token(client)
+        # 先发起两次对话
+        r1 = client.post("/chat", json={"prompt": "first"}, headers={"Authorization": f"Bearer {token}"})
+        r2 = client.post("/chat", json={"prompt": "second"}, headers={"Authorization": f"Bearer {token}"})
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+        # 获取会话列表
+        response = client.get("/conversations", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["conversations"]) == 2
+
+    def test_get_conversation_detail(self, client):
+        token = self._get_token(client)
+        chat_resp = client.post("/chat", json={"prompt": "detail test"}, headers={"Authorization": f"Bearer {token}"})
+        session_id = chat_resp.json()["session_id"]
+
+        response = client.get(
+            f"/conversations/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["session_id"] == session_id
+        assert "messages" in data
+
+    def test_delete_conversation(self, client):
+        token = self._get_token(client)
+        chat_resp = client.post("/chat", json={"prompt": "delete me"}, headers={"Authorization": f"Bearer {token}"})
+        session_id = chat_resp.json()["session_id"]
+
+        # 删除
+        del_resp = client.delete(
+            f"/conversations/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert del_resp.status_code == 200
+
+        # 确认已删除
+        get_resp = client.get(
+            f"/conversations/{session_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert get_resp.status_code == 404
+
+    def test_list_conversations_empty(self, client):
+        token = self._get_token(client, user_id="emptyuser")
+        response = client.get("/conversations", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["conversations"] == []

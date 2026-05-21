@@ -44,9 +44,7 @@ chroma_data/
 *.sqlite3
 
 # Data and outputs
-data/raw/
-data/processed/
-data/vectors/
+data/
 outputs/
 
 # Logs
@@ -57,4 +55,3 @@ uvicorn.pid
 # OS
 .DS_Store
 Thumbs.db
-data/memory.db

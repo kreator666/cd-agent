@@ -185,6 +185,26 @@
         .new-chat-btn {
             background: #16c79a !important;
         }
+        .preference-section {
+            font-size: 0.8125rem;
+        }
+        .preference-section summary {
+            font-weight: 500;
+            color: #555;
+            cursor: pointer;
+            user-select: none;
+        }
+        .preference-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.75rem;
+        }
+        .preference-item:last-child { border-bottom: none; }
+        .preference-item .pref-key { color: #666; }
+        .preference-item .pref-val { color: #333; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .preference-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
         @media (max-width: 768px) {
             .sidebar { display: none; }
             .container { padding: 0; }
@@ -222,6 +242,13 @@
             <div class="conversation-list" id="conversation-list">
                 <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
             </div>
+
+            <details class="preference-section" id="preference-section">
+                <summary>我的偏好</summary>
+                <div id="preference-list">
+                    <div class="preference-empty">暂无记录</div>
+                </div>
+            </details>
         </aside>
         <main class="main">
             <div class="chat-area" id="chat-area">
@@ -349,7 +376,48 @@
             }
         }
 
+        async function loadPreferences() {
+            const listEl = document.getElementById('preference-list');
+            try {
+                const res = await fetch(`${API_BASE}/preferences`, { headers: authHeaders() });
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                const prefs = data.preferences || [];
+                if (prefs.length === 0) {
+                    listEl.innerHTML = '<div class="preference-empty">暂无记录</div>';
+                    return;
+                }
+                const keyMap = {
+                    'preferred_style': '风格',
+                    'disliked_tropes': '讨厌',
+                    'preferred_duration': '时长',
+                    'preferred_audience': '受众',
+                    'preferred_script_type': '类型',
+                    'creative_notes': '备注'
+                };
+                listEl.innerHTML = '';
+                prefs.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'preference-item';
+                    const label = keyMap[p.key] || p.key;
+                    let val = '';
+                    if (Array.isArray(p.value)) {
+                        val = p.value.join(', ');
+                    } else if (typeof p.value === 'object' && p.value !== null) {
+                        val = JSON.stringify(p.value);
+                    } else {
+                        val = String(p.value);
+                    }
+                    item.innerHTML = `<span class="pref-key">${label}</span><span class="pref-val" title="${val}">${val}</span>`;
+                    listEl.appendChild(item);
+                });
+            } catch {
+                listEl.innerHTML = '<div class="preference-empty">加载失败</div>';
+            }
+        }
+
         loadConversations();
+        loadPreferences();
 
         function logout() {
             localStorage.removeItem('token');

@@ -237,3 +237,31 @@ class TestConversations:
         assert response.status_code == 200
         data = response.json()
         assert data["conversations"] == []
+
+
+class TestPreferences:
+    def _get_token(self, client, user_id="prefuser"):
+        client.post("/auth/register", json={"user_id": user_id, "password": "secret"})
+        login_resp = client.post("/auth/login", json={"user_id": user_id, "password": "secret"})
+        return login_resp.json()["access_token"]
+
+    def test_list_preferences_empty(self, client):
+        token = self._get_token(client)
+        response = client.get("/preferences", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["preferences"] == []
+
+    def test_list_preferences_with_data(self, client):
+        token = self._get_token(client)
+        # 通过 state.memory 写入偏好（与 API 使用同一个实例）
+        from comedy_agent.api.server import state
+        state.memory.save_preference("prefuser", "preferred_style", "吐槽风")
+        state.memory.save_preference("prefuser", "preferred_duration", "3分钟")
+
+        response = client.get("/preferences", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 200
+        data = response.json()
+        prefs = {p["key"]: p["value"] for p in data["preferences"]}
+        assert prefs.get("preferred_style") == "吐槽风"
+        assert prefs.get("preferred_duration") == "3分钟"

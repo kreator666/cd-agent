@@ -86,9 +86,6 @@ class UnifiedMemory(MemoryStore):
     def delete_conversation(self, user_id: str, session_id: str) -> bool:
         return self._store.delete_conversation(user_id, session_id)
 
-    def clean_expired_conversations(self, user_id: str | None = None) -> int:
-        return self._store.clean_expired_conversations(user_id)
-
     def save_preference(self, user_id: str, key: str, value: Any) -> None:
         self._store.save_preference(user_id, key, value)
 

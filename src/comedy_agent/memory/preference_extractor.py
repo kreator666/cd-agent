@@ -98,7 +98,7 @@ def extract_preferences(
         return {}
 
     try:
-        llm = ModelFactory.get_model_with_fallback(task_type="fast")
+        llm = ModelFactory.get_model(task_type="fast")
     except Exception as e:
         logger.warning("偏好提取：无法加载 fast_model: %s", e)
         return {}

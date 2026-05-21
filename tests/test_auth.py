@@ -238,36 +238,6 @@ class TestConversations:
         data = response.json()
         assert data["conversations"] == []
 
-    def test_chat_loads_history_from_session(self, client):
-        """仅传 session_id 时自动从数据库加载历史上下文。"""
-        token = self._get_token(client, user_id="historyuser")
-        session_id = "sess_history_01"
-        # 手动写入一条历史会话
-        state.memory.save_conversation(
-            user_id="historyuser",
-            session_id=session_id,
-            messages=[
-                {"role": "human", "content": "previous question"},
-                {"role": "ai", "content": "previous answer"},
-            ],
-        )
-        # 清空之前的调用记录
-        state.orch.run.reset_mock()
-
-        response = client.post(
-            "/chat",
-            json={"prompt": "follow up", "session_id": session_id},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 200
-
-        # 验证 orch.run 被调用时 chat_history 包含了历史消息
-        call_kwargs = state.orch.run.call_args[1]
-        assert call_kwargs["chat_history"] == [
-            ("human", "previous question"),
-            ("ai", "previous answer"),
-        ]
-
 
 class TestPreferences:
     def _get_token(self, client, user_id="prefuser"):

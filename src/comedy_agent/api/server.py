@@ -5,11 +5,14 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
+
+logger = logging.getLogger("comedy-agent")
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -302,6 +305,20 @@ async def chat(
         import uuid
         session_id = request.session_id or uuid.uuid4().hex[:16]
 
+        # 若指定了 session_id 但未传 chat_history，自动从数据库加载历史上下文
+        chat_history = request.chat_history
+        if chat_history is None and request.session_id and state.memory is not None:
+            try:
+                conv = state.memory.load_conversation(user_id, session_id)
+                if conv and conv.messages:
+                    chat_history = [
+                        (msg.get("role", "human"), str(msg.get("content", "")))
+                        for msg in conv.messages
+                    ]
+                    logger.debug("加载历史会话 %s: %d 条消息", session_id, len(chat_history))
+            except Exception as load_err:
+                logger.warning("加载历史会话失败: %s", load_err)
+
         with tracer.span(
             "api.chat",
             input_data={"prompt": request.prompt[:200], "user_id": user_id},
@@ -309,7 +326,7 @@ async def chat(
         ) as span:
             result = state.orch.run(
                 request.prompt,
-                chat_history=request.chat_history,
+                chat_history=chat_history,
                 user_id=user_id,
             )
             # 将消息对象序列化为 dict

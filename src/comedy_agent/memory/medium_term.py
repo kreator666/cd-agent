@@ -71,6 +71,11 @@ class SQLMemoryStore(MemoryStore):
                 conn.commit()
                 logger.info("Migrated user_profiles: added password_hash column")
         self.Session = sessionmaker(bind=self.engine)
+        # 启动时清理所有过期会话
+        try:
+            self.clean_expired_conversations()
+        except Exception as e:
+            logger.warning("启动时清理过期会话失败: %s", e)
         logger.info("SQLMemoryStore initialized: %s", db_url)
 
     # ------------------------------------------------------------------ #
@@ -181,6 +186,11 @@ class SQLMemoryStore(MemoryStore):
                 conv.updated_at = self._now()
             session.commit()
             logger.debug("Saved conversation: %s", session_id)
+            # 顺带清理该用户的过期会话
+            try:
+                self.clean_expired_conversations(user_id=user_id)
+            except Exception as e:
+                logger.warning("清理过期会话失败: %s", e)
 
     def load_conversation(
         self, user_id: str, session_id: str
@@ -246,6 +256,27 @@ class SQLMemoryStore(MemoryStore):
             session.commit()
             logger.debug("Deleted conversation: %s", session_id)
             return True
+
+    def clean_expired_conversations(self, user_id: str | None = None) -> int:
+        """物理删除已过期会话记录。
+
+        Args:
+            user_id: 若指定则只清理该用户的过期会话，否则清理全部。
+
+        Returns:
+            删除的记录数。
+        """
+        with self._new_session() as session:
+            query = session.query(UserConversation).filter(
+                UserConversation.expires_at < datetime.utcnow()
+            )
+            if user_id:
+                query = query.filter_by(user_id=user_id)
+            deleted = query.delete(synchronize_session=False)
+            session.commit()
+            if deleted:
+                logger.info("清理过期会话: %d 条", deleted)
+            return deleted
 
     # ------------------------------------------------------------------ #
     # 中期记忆 —— 偏好

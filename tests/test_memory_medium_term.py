@@ -109,6 +109,52 @@ class TestConversationShortTerm:
         assert store.load_conversation("u015", "s005") is None
         assert store.list_conversations("u015") == []
 
+    def test_clean_expired_conversations_all(self, store: SQLMemoryStore) -> None:
+        """清理所有过期会话。"""
+        store.get_or_create_user("u016")
+        store.get_or_create_user("u017")
+        from comedy_agent.memory.schema import UserConversation
+
+        with store._new_session() as session:
+            for uid in ("u016", "u017"):
+                session.add(
+                    UserConversation(
+                        session_id=f"s_{uid}",
+                        user_id=uid,
+                        messages=[],
+                        expires_at=datetime.utcnow() - timedelta(hours=1),
+                    )
+                )
+            session.commit()
+
+        deleted = store.clean_expired_conversations()
+        assert deleted == 2
+        assert store.load_conversation("u016", "s_u016") is None
+        assert store.load_conversation("u017", "s_u017") is None
+
+    def test_clean_expired_conversations_by_user(self, store: SQLMemoryStore) -> None:
+        """按用户清理过期会话。"""
+        store.get_or_create_user("u018")
+        store.get_or_create_user("u019")
+        from comedy_agent.memory.schema import UserConversation
+
+        with store._new_session() as session:
+            for uid in ("u018", "u019"):
+                session.add(
+                    UserConversation(
+                        session_id=f"s_{uid}",
+                        user_id=uid,
+                        messages=[],
+                        expires_at=datetime.utcnow() - timedelta(hours=1),
+                    )
+                )
+            session.commit()
+
+        deleted = store.clean_expired_conversations(user_id="u018")
+        assert deleted == 1
+        assert store.load_conversation("u018", "s_u018") is None
+        assert store.load_conversation("u019", "s_u019") is None
+
 
 class TestPreferences:
     """用户偏好测试。"""

@@ -39,6 +39,26 @@ class TestUnifiedMemoryPassthrough:
         assert loaded is not None
         assert loaded.title == "Test"
 
+    def test_clean_expired_conversations(self, memory: UnifiedMemory) -> None:
+        memory.get_or_create_user("u103")
+        from comedy_agent.memory.schema import UserConversation
+        from datetime import datetime, timedelta
+
+        with memory._store._new_session() as session:
+            session.add(
+                UserConversation(
+                    session_id="s_exp",
+                    user_id="u103",
+                    messages=[],
+                    expires_at=datetime.utcnow() - timedelta(hours=1),
+                )
+            )
+            session.commit()
+
+        deleted = memory.clean_expired_conversations(user_id="u103")
+        assert deleted == 1
+        assert memory.load_conversation("u103", "s_exp") is None
+
 
 class TestBuildContextText:
     """上下文文本生成测试。"""

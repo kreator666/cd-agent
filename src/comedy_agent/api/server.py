@@ -344,7 +344,7 @@ async def chat(
                     new_prefs = extract_preferences(messages)
                     merge_preferences(user_id, new_prefs, memory=state.memory)
                 except Exception as pref_err:
-                    logger.debug("偏好提取失败（已忽略）: %s", pref_err)
+                    logger.warning("偏好提取失败（已忽略）: %s", pref_err)
 
             span.output_data = {"output": result["output"][:200]}
             metrics.record("api.chat.duration_ms", span.duration_ms)

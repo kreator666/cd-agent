@@ -205,6 +205,89 @@
         .preference-item .pref-key { color: #666; }
         .preference-item .pref-val { color: #333; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .preference-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
+        .script-section { font-size: 0.8125rem; }
+        .script-section summary { font-weight: 500; color: #555; cursor: pointer; user-select: none; }
+        .script-list { display: flex; flex-direction: column; gap: 0.375rem; }
+        .script-item {
+            padding: 0.5rem 0.625rem;
+            border-radius: 0.5rem;
+            background: #f8f8f8;
+            cursor: pointer;
+            font-size: 0.8125rem;
+            transition: background 0.15s;
+        }
+        .script-item:hover { background: #eee; }
+        .script-item .script-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.25rem;
+        }
+        .script-item .script-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            font-weight: 500;
+        }
+        .script-item .script-type {
+            font-size: 0.7rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            background: #1a1a2e;
+            color: #fff;
+            white-space: nowrap;
+        }
+        .script-item .script-rating {
+            font-size: 0.75rem;
+            color: #f5a623;
+        }
+        .script-item .script-time {
+            font-size: 0.7rem;
+            color: #888;
+        }
+        .script-item .script-actions {
+            display: flex;
+            gap: 0.375rem;
+            margin-top: 0.375rem;
+        }
+        .script-item .script-actions button {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            width: auto;
+        }
+        .script-item .script-actions .btn-view { background: #1a1a2e; color: #fff; }
+        .script-item .script-actions .btn-del { background: #e94560; color: #fff; }
+        .script-item .script-detail {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: #fff;
+            border-radius: 0.375rem;
+            font-size: 0.8125rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+        }
+        .script-item .script-detail.collapsed { display: none; }
+        .script-item .rating-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.375rem;
+        }
+        .script-item .rating-bar span {
+            cursor: pointer;
+            font-size: 1rem;
+            color: #ddd;
+            transition: color 0.15s;
+        }
+        .script-item .rating-bar span.active { color: #f5a623; }
+        .script-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
         @media (max-width: 768px) {
             .sidebar { display: none; }
             .container { padding: 0; }
@@ -247,6 +330,13 @@
                 <summary>我的偏好</summary>
                 <div id="preference-list">
                     <div class="preference-empty">暂无记录</div>
+                </div>
+            </details>
+
+            <details class="script-section" id="script-section">
+                <summary>我的作品</summary>
+                <div id="script-list">
+                    <div class="script-empty">暂无作品</div>
                 </div>
             </details>
         </aside>
@@ -418,6 +508,95 @@
 
         loadConversations();
         loadPreferences();
+        loadScripts();
+
+        async function loadScripts() {
+            const listEl = document.getElementById('script-list');
+            try {
+                const res = await fetch(`${API_BASE}/scripts`, { headers: authHeaders() });
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                window._scripts = data.scripts || [];
+                renderScriptList();
+            } catch {
+                listEl.innerHTML = '<div class="script-empty">加载失败</div>';
+            }
+        }
+
+        function renderScriptList() {
+            const listEl = document.getElementById('script-list');
+            const scripts = window._scripts || [];
+            if (scripts.length === 0) {
+                listEl.innerHTML = '<div class="script-empty">暂无作品</div>';
+                return;
+            }
+            listEl.innerHTML = '';
+            scripts.forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'script-item';
+                item.id = `script-item-${s.script_id}`;
+                const title = s.title || '未命名作品';
+                const typeLabel = s.script_type || '作品';
+                const time = s.updated_at ? new Date(s.updated_at).toLocaleDateString() : '';
+                const rating = s.rating != null ? Math.round(s.rating) : 0;
+                let starsHtml = '';
+                for (let i = 1; i <= 5; i++) {
+                    starsHtml += `<span class="${i <= rating ? 'active' : ''}" onclick="event.stopPropagation();rateScript('${s.script_id}', ${i})">★</span>`;
+                }
+                item.innerHTML = `
+                    <div class="script-header" onclick="viewScript('${s.script_id}')">
+                        <span class="script-title" title="${title}">${title}</span>
+                        <span class="script-type">${typeLabel}</span>
+                        <span class="script-rating">${starsHtml}</span>
+                        <span class="script-time">${time}</span>
+                    </div>
+                    <div class="script-detail collapsed" id="script-detail-${s.script_id}">${escapeHtml(s.content)}</div>
+                    <div class="script-actions">
+                        <button class="btn-view" onclick="viewScript('${s.script_id}')">查看</button>
+                        <button class="btn-del" onclick="deleteScript('${s.script_id}')">删除</button>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        function viewScript(scriptId) {
+            const detail = document.getElementById(`script-detail-${scriptId}`);
+            if (detail) {
+                detail.classList.toggle('collapsed');
+            }
+        }
+
+        async function deleteScript(scriptId) {
+            if (!confirm('确定删除该作品？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/scripts/${scriptId}`, {
+                    method: 'DELETE',
+                    headers: authHeaders(),
+                });
+                if (!res.ok) throw new Error('删除失败');
+                loadScripts();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+
+        async function rateScript(scriptId, rating) {
+            try {
+                const res = await fetch(`${API_BASE}/scripts/${scriptId}/rate`, {
+                    method: 'PATCH',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ rating: rating }),
+                });
+                if (!res.ok) throw new Error('评分失败');
+                // 更新本地数据并重新渲染
+                const s = (window._scripts || []).find(x => x.script_id === scriptId);
+                if (s) s.rating = rating;
+                renderScriptList();
+            } catch (err) {
+                alert('评分失败: ' + err.message);
+            }
+        }
 
         function logout() {
             localStorage.removeItem('token');

@@ -128,7 +128,6 @@ class AgentOrchestrator:
         chat_history: list[tuple[str, str]] | None = None,
         user_id: str | None = None,
     ) -> dict[str, Any]:
-        print("----------chat_history--------------",chat_history)
         """接收用户输入，由 Agent 路由并执行对应 Skill。
 
         Args:

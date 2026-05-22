@@ -135,16 +135,10 @@ class FeedbackLoop:
     def _fetch_scripts(self, user_id: str | None = None) -> list[ScriptData]:
         """获取高评分作品列表。"""
         if user_id:
-            scripts = self.memory.list_scripts(user_id)
+            scripts = self.memory.list_scripts(user_id, min_rating=self.min_rating)
         else:
             scripts = self.memory.list_all_scripts(min_rating=self.min_rating)
-
-        # 按评分过滤（list_scripts 不支持 min_rating）
-        return [
-            s
-            for s in scripts
-            if s.rating is not None and s.rating >= self.min_rating
-        ]
+        return scripts
 
     def _is_already_ingested(self, script_id: str) -> bool:
         """检查作品是否已入库（通过 source_script_id 查询向量库）。"""

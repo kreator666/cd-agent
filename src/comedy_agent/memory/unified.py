@@ -102,9 +102,9 @@ class UnifiedMemory(MemoryStore):
         return self._store.load_script(script_id)
 
     def list_scripts(
-        self, user_id: str, script_type: str | None = None
+        self, user_id: str, script_type: str | None = None, min_rating: float | None = None
     ) -> list[ScriptData]:
-        return self._store.list_scripts(user_id, script_type)
+        return self._store.list_scripts(user_id, script_type, min_rating)
 
     def list_all_scripts(
         self, min_rating: float | None = None
@@ -152,62 +152,78 @@ class UnifiedMemory(MemoryStore):
         Returns:
             str: 格式化后的记忆上下文文本，若无可注入记忆则返回空字符串。
         """
-        parts: list[str] = []
         ctx = self.build_user_context(user_id, max_conversations=max_conversations)
+        items: list[tuple[int, str]] = []  # (priority, text)
 
         # 1. 用户偏好（最高优先级）
         if include_preferences and ctx.preferences:
             pref_lines = [f"- {p.key}: {p.value}" for p in ctx.preferences]
-            parts.append("【用户偏好】\n" + "\n".join(pref_lines))
+            items.append((1, "【用户偏好】\n" + "\n".join(pref_lines)))
 
-        # 2. 近期会话
+        # 2. 近期会话（逐条加入，支持段内截断）
         if include_recent_conversations and ctx.recent_conversations:
-            conv_lines = []
+            conv_items = []
             for conv in ctx.recent_conversations[:max_conversations]:
                 if conv.summary:
-                    conv_lines.append(f"- 会话 {conv.session_id}: {conv.summary}")
+                    conv_items.append(f"- 会话 {conv.session_id}: {conv.summary}")
                 else:
-                    # 取最后一条消息作为摘要
                     last_msg = conv.messages[-1] if conv.messages else {}
-                    content = last_msg.get("content", "")[:40]
-                    conv_lines.append(f"- 会话 {conv.session_id}: {content}...")
-            parts.append("【近期会话摘要】\n" + "\n".join(conv_lines))
+                    content = str(last_msg.get("content", ""))[:60]
+                    conv_items.append(f"- 会话 {conv.session_id}: {content}...")
+            if conv_items:
+                items.append((2, "【近期会话摘要】\n" + "\n".join(conv_items)))
 
-        # 3. 近期作品
+        # 3. 近期作品（逐条加入，支持段内截断）
         if include_recent_scripts and ctx.recent_scripts:
-            script_lines = []
+            script_items = []
             for sc in ctx.recent_scripts[:max_scripts]:
                 info = sc.title or sc.script_id
                 if sc.script_type:
                     info += f" ({sc.script_type})"
                 if sc.rating is not None:
                     info += f" [评分: {sc.rating}]"
-                script_lines.append(f"- {info}")
-            parts.append("【近期作品】\n" + "\n".join(script_lines))
+                script_items.append(f"- {info}")
+            if script_items:
+                items.append((3, "【近期作品】\n" + "\n".join(script_items)))
 
-        # Token 预算控制：从低优先级开始截断
-        full_text = "\n\n".join(parts)
-        if _estimate_tokens(full_text) <= max_tokens:
-            return full_text
-
-        # 逐段截断
-        truncated: list[str] = []
+        # Token 预算控制：逐段处理，段内逐条截断
+        result_parts: list[str] = []
         current_tokens = 0
-        for part in parts:
-            part_tokens = _estimate_tokens(part)
-            if current_tokens + part_tokens > max_tokens:
-                if not truncated:
-                    # 第一段就超预算：强行截断
-                    part = _truncate_text(part, max_tokens)
-                else:
-                    break
-            truncated.append(part)
-            current_tokens += _estimate_tokens(part)
-            if current_tokens >= max_tokens:
-                break
+        omitted = False
 
-        result = "\n\n".join(truncated)
-        if len(truncated) < len(parts):
+        for priority, part in items:
+            part_tokens = _estimate_tokens(part)
+            if current_tokens + part_tokens <= max_tokens:
+                result_parts.append(part)
+                current_tokens += part_tokens
+                continue
+
+            # 该段超预算，尝试段内逐条截断
+            lines = part.split("\n")
+            header = lines[0] if lines else ""
+            header_tokens = _estimate_tokens(header)
+            if current_tokens + header_tokens > max_tokens:
+                # 连标题都放不下，直接省略整段
+                omitted = True
+                continue
+
+            kept_lines = [header]
+            current_tokens += header_tokens
+            for line in lines[1:]:
+                line_tokens = _estimate_tokens(line)
+                if current_tokens + line_tokens > max_tokens:
+                    omitted = True
+                    break
+                kept_lines.append(line)
+                current_tokens += line_tokens
+
+            if len(kept_lines) > 1:
+                result_parts.append("\n".join(kept_lines))
+            else:
+                omitted = True
+
+        result = "\n\n".join(result_parts)
+        if omitted:
             result += "\n\n...（更多记忆因 Token 预算限制已省略）"
         return result
 

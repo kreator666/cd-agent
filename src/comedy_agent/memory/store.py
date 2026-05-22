@@ -172,13 +172,14 @@ class MemoryStore(ABC):
 
     @abstractmethod
     def list_scripts(
-        self, user_id: str, script_type: str | None = None
+        self, user_id: str, script_type: str | None = None, min_rating: float | None = None
     ) -> list[ScriptData]:
         """列出用户作品。
 
         Args:
             user_id: 用户唯一标识。
             script_type: 可选的作品类型过滤。
+            min_rating: 可选的最低评分过滤。
 
         Returns:
             list[ScriptData]: 作品列表，按创建时间倒序。

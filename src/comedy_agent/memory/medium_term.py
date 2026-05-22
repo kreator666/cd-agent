@@ -346,12 +346,14 @@ class SQLMemoryStore(MemoryStore):
             )
 
     def list_scripts(
-        self, user_id: str, script_type: str | None = None
+        self, user_id: str, script_type: str | None = None, min_rating: float | None = None
     ) -> list[ScriptData]:
         with self._new_session() as session:
             query = session.query(UserScript).filter_by(user_id=user_id)
             if script_type:
                 query = query.filter_by(script_type=script_type)
+            if min_rating is not None:
+                query = query.filter(UserScript.rating >= min_rating)
             rows = query.order_by(UserScript.created_at.desc()).all()
             return [
                 ScriptData(

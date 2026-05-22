@@ -205,6 +205,64 @@
         .preference-item .pref-key { color: #666; }
         .preference-item .pref-val { color: #333; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .preference-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
+        .message-actions {
+            margin-top: 0.375rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        .message-actions button {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            background: #e0e0e0;
+            color: #333;
+            width: auto;
+        }
+        .message-actions button:hover { background: #d0d0d0; }
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            width: 360px;
+            max-width: 90vw;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .modal-box h3 { margin: 0; font-size: 1rem; }
+        .modal-box input, .modal-box select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            width: 100%;
+        }
+        .modal-box .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+        .modal-box .modal-actions button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .modal-box .modal-actions .btn-cancel { background: #e0e0e0; color: #333; }
+        .modal-box .modal-actions .btn-save { background: #1a1a2e; color: #fff; }
         .script-section { font-size: 0.8125rem; }
         .script-section summary { font-weight: 500; color: #555; cursor: pointer; user-select: none; }
         .script-list { display: flex; flex-direction: column; gap: 0.375rem; }
@@ -687,16 +745,61 @@
         loadModels();
         setInterval(checkHealth, 30000);
 
+        let _pendingScriptContent = '';
+
         function appendMessage(role, text) {
             const empty = chatArea.querySelector('.empty-state');
             if (empty) empty.remove();
 
             const div = document.createElement('div');
             div.className = `message ${role}`;
-            div.innerHTML = `<div class="meta">${role === 'user' ? '你' : 'Agent'}</div>${escapeHtml(text)}`;
+            let actionsHtml = '';
+            if (role === 'agent') {
+                actionsHtml = `<div class="message-actions"><button onclick="openSaveModal(this)" data-content="${escapeHtml(text).replace(/"/g, '&quot;')}">💾 保存为作品</button></div>`;
+            }
+            div.innerHTML = `<div class="meta">${role === 'user' ? '你' : 'Agent'}</div>${escapeHtml(text)}${actionsHtml}`;
             chatArea.appendChild(div);
             chatArea.scrollTop = chatArea.scrollHeight;
             return div;
+        }
+
+        function openSaveModal(btn) {
+            _pendingScriptContent = btn.getAttribute('data-content') || '';
+            document.getElementById('script-title').value = '';
+            document.getElementById('script-type').value = '';
+            document.getElementById('save-script-modal').classList.add('active');
+        }
+
+        function closeSaveModal() {
+            document.getElementById('save-script-modal').classList.remove('active');
+            _pendingScriptContent = '';
+        }
+
+        async function confirmSaveScript() {
+            const title = document.getElementById('script-title').value.trim();
+            const type = document.getElementById('script-type').value;
+            if (!title) {
+                alert('请输入作品标题');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/scripts`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({
+                        user_id: currentUserId,
+                        title: title,
+                        content: _pendingScriptContent,
+                        script_type: type || null,
+                    }),
+                });
+                if (!res.ok) throw new Error('保存失败');
+                closeSaveModal();
+                loadScripts();
+                alert('作品已保存到「我的作品」');
+            } catch (err) {
+                alert('保存失败: ' + err.message);
+            }
         }
 
         function escapeHtml(text) {

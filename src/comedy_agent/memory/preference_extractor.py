@@ -32,10 +32,27 @@ DEFAULT_PROMPT = """\
   "creative_notes": "其他创作相关的偏好或习惯，没有则省略"
 }}
 
+字段说明：
+- preferred_style: 用户整体偏好的喜剧风格基调（犀利、温情、荒诞、讽刺等）
+- disliked_tropes: 用户明确排斥的梗/套路列表（如谐音梗、屎尿屁、说教等）
+- preferred_duration: 作品时长偏好（如3分钟、5-10分钟、15分钟以上）
+- preferred_audience: 目标受众描述（如年轻人、职场人、亲子、中老年）
+- preferred_script_type: 作品形式偏好（standup/脱口秀、sketch/素描喜剧、crosstalk/相声、sitcom/情景喜剧）
+- creative_notes: 其他创作习惯或偏好（如喜欢多角色对话、偏好第一人称叙事、要求有callback等）
+
+示例1：
+输入对话：用户说"我喜欢犀利吐槽职场的脱口秀，不要太温情脉脉的那种，5分钟左右最合适。"
+输出：{{"preferred_style": "犀利吐槽风", "disliked_tropes": ["温情"], "preferred_duration": "5分钟", "preferred_script_type": "standup", "preferred_audience": "职场人"}}
+
+示例2：
+输入对话：用户说"写个相声吧，要传统一点的，不要太网络用语。"
+输出：{{"preferred_script_type": "crosstalk", "creative_notes": "偏好传统风格，排斥网络用语"}}
+
 注意：
 1. 只提取用户明确表达或强烈暗示的偏好
 2. 如果某一项无法确定，直接省略该字段，不要编造
-3. 不要输出任何解释，只输出 JSON
+3. 如果对话中没有新的偏好信息，输出空字典 {{}}
+4. 不要输出任何解释，只输出 JSON
 """
 
 
@@ -48,7 +65,7 @@ def _build_conversation_text(messages: list[dict[str, Any]]) -> str:
         if not content:
             continue
         role_name = {"human": "用户", "ai": "AI", "system": "系统", "tool": "工具"}.get(role, role)
-        lines.append(f"{role_name}: {content[:300]}")
+        lines.append(f"{role_name}: {content[:1000]}")
     return "\n\n".join(lines)
 
 

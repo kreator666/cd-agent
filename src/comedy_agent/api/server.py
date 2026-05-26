@@ -64,7 +64,24 @@ class ChatResponse(BaseModel):
 class SkillListResponse(BaseModel):
     """Skill 列表响应。"""
 
-    skills: list[str] = Field(description="已注册 Skill 名称列表")
+    skills: list[dict[str, Any]] = Field(description="已注册 Skill 详细信息列表")
+
+
+class SkillInstallRequest(BaseModel):
+    """安装 Skill 请求。"""
+
+    name: str = Field(description="Skill 名称标识（只允许字母/数字/下划线/连字符）")
+    skill_md: str = Field(description="SKILL.md 文件内容")
+    prompt_txt: str = Field(description="prompt.txt 文件内容")
+    skill_py: str | None = Field(default=None, description="可选的 skill.py 代码内容")
+
+
+class SkillReloadResponse(BaseModel):
+    """热重载响应。"""
+
+    added: int = Field(description="新增 Skill 数量")
+    removed: int = Field(description="移除 Skill 数量")
+    unchanged: int = Field(description="未变更 Skill 数量")
 
 
 class StandupRequest(BaseModel):
@@ -280,6 +297,93 @@ async def list_skills() -> SkillListResponse:
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
     return SkillListResponse(skills=state.orch.list_skills())
+
+
+@app.post("/skills/install", response_model=SkillListResponse, tags=["skills"])
+async def install_skill(
+    request: SkillInstallRequest,
+    user_id: str = Depends(get_current_user),
+) -> SkillListResponse:
+    """安装新 Skill（声明式或代码式）。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    from comedy_agent.skills.loader import (
+        is_builtin_skill,
+        load_single_skill,
+        validate_skill_name,
+        validate_skill_py,
+    )
+
+    name = request.name.strip()
+    if not validate_skill_name(name):
+        raise HTTPException(status_code=400, detail="Skill 名称不合法，只允许字母、数字、下划线和连字符")
+    if is_builtin_skill(name):
+        raise HTTPException(status_code=400, detail=f"'{name}' 是内置 Skill，禁止覆盖")
+
+    # 校验 skill_py 语法
+    if request.skill_py:
+        if not validate_skill_py(request.skill_py):
+            raise HTTPException(status_code=400, detail="skill.py 代码语法错误")
+
+    # 写入 skills/ 目录
+    skills_dir = Path(settings.skills_dir)
+    skill_dir = skills_dir / name
+    try:
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(request.skill_md, encoding="utf-8")
+        (skill_dir / "prompt.txt").write_text(request.prompt_txt, encoding="utf-8")
+        if request.skill_py:
+            (skill_dir / "skill.py").write_text(request.skill_py, encoding="utf-8")
+    except Exception as e:
+        logger.error("写入 Skill 文件失败: %s", e)
+        raise HTTPException(status_code=500, detail="写入 Skill 文件失败")
+
+    # 加载并注册
+    skill = load_single_skill(skill_dir)
+    if skill is None:
+        raise HTTPException(status_code=500, detail="Skill 加载失败，请检查 SKILL.md 格式")
+
+    state.orch.register_skill(skill)
+    return SkillListResponse(skills=state.orch.list_skills())
+
+
+@app.delete("/skills/{name}", response_model=dict[str, Any], tags=["skills"])
+async def uninstall_skill(
+    name: str,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """卸载插件 Skill。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    from comedy_agent.skills.loader import is_builtin_skill
+
+    if is_builtin_skill(name):
+        raise HTTPException(status_code=400, detail=f"'{name}' 是内置 Skill，禁止卸载")
+
+    # 注销 Skill
+    if not state.orch.unregister_skill(name):
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' 未找到")
+
+    # 删除目录
+    skill_dir = Path(settings.skills_dir) / name
+    if skill_dir.exists():
+        import shutil
+        shutil.rmtree(skill_dir)
+
+    return {"success": True, "name": name}
+
+
+@app.post("/skills/reload", response_model=SkillReloadResponse, tags=["skills"])
+async def reload_skills(
+    user_id: str = Depends(get_current_user),
+) -> SkillReloadResponse:
+    """热重载所有插件 Skill。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+    stats = state.orch.reload_plugins()
+    return SkillReloadResponse(**stats)
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])

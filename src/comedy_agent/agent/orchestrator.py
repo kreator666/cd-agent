@@ -67,9 +67,84 @@ class AgentOrchestrator:
         self._agent = None
         logger.info("Registered skill: %s", skill.name)
 
-    def list_skills(self) -> list[str]:
-        """返回已注册的所有 Skill 名称列表。"""
-        return [tool.name for tool in self.tools]
+    def unregister_skill(self, name: str) -> bool:
+        """注销指定 Skill。
+
+        Args:
+            name: Skill 名称标识。
+
+        Returns:
+            是否成功移除。
+        """
+        for i, tool in enumerate(self.tools):
+            if tool.name == name:
+                self.tools.pop(i)
+                self._agent = None
+                logger.info("Unregistered skill: %s", name)
+                return True
+        logger.warning("Skill not found for unregister: %s", name)
+        return False
+
+    def reload_plugins(self, skills_dir: str | None = None) -> dict[str, int]:
+        """热重载所有插件 Skill。
+
+        扫描 skills/ 目录，对比当前已加载的插件：
+        - 新增：磁盘上有但 tools 中没有的 → 加载并注册
+        - 移除：tools 中有但磁盘上已不存在的 → 注销
+        - 不变：两者都有的 → 保持不变
+
+        Args:
+            skills_dir: Skill 插件根目录，默认使用 settings.skills_dir。
+
+        Returns:
+            dict: {added, removed, unchanged} 统计。
+        """
+        from comedy_agent.skills.loader import (
+            load_single_skill,
+            scan_skills_dir,
+        )
+
+        scanned = scan_skills_dir(skills_dir)
+        scanned_names = {p.name for p in scanned}
+        current_plugin_names = {
+            t.name for t in self.tools if getattr(t, "name", None) not in _BUILTIN_SKILL_NAMES
+        }
+
+        added = 0
+        removed = 0
+
+        # 移除已不存在的插件
+        for name in list(current_plugin_names):
+            if name not in scanned_names:
+                if self.unregister_skill(name):
+                    removed += 1
+
+        # 注册新插件
+        for skill_dir in scanned:
+            if skill_dir.name not in current_plugin_names:
+                skill = load_single_skill(skill_dir)
+                if skill is not None:
+                    self.register_skill(skill)
+                    added += 1
+
+        unchanged = len(scanned_names & current_plugin_names)
+        logger.info("Reload plugins: added=%d, removed=%d, unchanged=%d", added, removed, unchanged)
+        return {"added": added, "removed": removed, "unchanged": unchanged}
+
+    def list_skills(self) -> list[dict[str, Any]]:
+        """返回已注册的所有 Skill 详细信息列表。"""
+        from comedy_agent.skills.loader import _BUILTIN_SKILL_NAMES
+
+        result = []
+        for tool in self.tools:
+            info: dict[str, Any] = {
+                "name": tool.name,
+                "description": getattr(tool, "description", ""),
+                "task_type": getattr(tool, "task_type", "creative"),
+                "source": "builtin" if tool.name in _BUILTIN_SKILL_NAMES else "plugin",
+            }
+            result.append(info)
+        return result
 
     # ------------------------------------------------------------------ #
     # Agent 构建与执行

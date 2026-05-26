@@ -324,3 +324,109 @@ def load_plugin_skills(skills_dir: Path | str | None = None) -> list[ComedySkill
             logger.error("加载 Skill %s 失败: %s", subdir.name, e)
 
     return loaded
+
+
+# ------------------------------------------------------------------ #
+# 安全校验
+# ------------------------------------------------------------------ #
+
+_BUILTIN_SKILL_NAMES = {
+    "standup_generator",
+    "crosstalk_generator",
+    "sketch_generator",
+    "sitcom_generator",
+    "joke_analyzer",
+    "script_evaluator",
+}
+
+
+_SKILL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def is_builtin_skill(name: str) -> bool:
+    """判断是否为内置 Skill（禁止卸载/覆盖）。"""
+    return name in _BUILTIN_SKILL_NAMES
+
+
+def validate_skill_name(name: str) -> bool:
+    """校验 Skill 名称合法性。"""
+    return bool(_SKILL_NAME_PATTERN.match(name))
+
+
+def validate_skill_py(code: str) -> bool:
+    """校验 Python 代码语法合法性。"""
+    import ast
+
+    try:
+        ast.parse(code)
+        return True
+    except SyntaxError:
+        return False
+
+
+# ------------------------------------------------------------------ #
+# 热重载支持
+# ------------------------------------------------------------------ #
+
+
+def scan_skills_dir(skills_dir: Path | str | None = None) -> list[Path]:
+    """扫描 skills/ 目录，返回所有合法的 Skill 目录路径。"""
+    if skills_dir is None:
+        skills_dir = settings.skills_dir
+    path = Path(skills_dir)
+    if not path.exists():
+        return []
+    result: list[Path] = []
+    for subdir in sorted(path.iterdir()):
+        if not subdir.is_dir():
+            continue
+        if subdir.name.startswith(".") or subdir.name.startswith("__"):
+            continue
+        if not (subdir / "SKILL.md").exists():
+            continue
+        result.append(subdir)
+    return result
+
+
+def load_single_skill(skill_dir: Path) -> ComedySkill | None:
+    """加载单个 Skill 目录并返回实例。
+
+    Args:
+        skill_dir: Skill 目录路径。
+
+    Returns:
+        ComedySkill 实例，加载失败返回 None。
+    """
+    skill_md = skill_dir / "SKILL.md"
+    prompt_txt = skill_dir / "prompt.txt"
+
+    if not skill_md.exists():
+        logger.error("缺少 SKILL.md: %s", skill_dir)
+        return None
+
+    try:
+        meta = SkillMeta.from_markdown(skill_md.read_text(encoding="utf-8"), skill_dir)
+    except Exception as e:
+        logger.error("解析 %s 失败: %s", skill_md, e)
+        return None
+
+    if prompt_txt.exists():
+        meta.prompt_template = prompt_txt.read_text(encoding="utf-8")
+    else:
+        logger.warning("%s 缺少 prompt.txt", skill_dir.name)
+
+    skill_py = skill_dir / "skill.py"
+    try:
+        if skill_py.exists():
+            cls = _load_code_skill(skill_dir, meta)
+            if cls is not None:
+                logger.info("加载代码式 Skill: %s", meta.name)
+                return cls()
+        else:
+            cls = _create_declarative_skill(meta)
+            logger.info("加载声明式 Skill: %s", meta.name)
+            return cls()
+    except Exception as e:
+        logger.error("加载 Skill %s 失败: %s", skill_dir.name, e)
+
+    return None

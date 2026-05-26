@@ -48,7 +48,9 @@ class TestAgentOrchestrator:
         ):
             orch = AgentOrchestrator()
             orch.register_skill(dummy_skill)
-            assert orch.list_skills() == ["dummy_hello"]
+            skills = orch.list_skills()
+            assert len(skills) == 1
+            assert skills[0]["name"] == "dummy_hello"
 
     def test_list_skills_empty_by_default(self, mock_llm):
         with patch(
@@ -57,6 +59,25 @@ class TestAgentOrchestrator:
         ):
             orch = AgentOrchestrator()
             assert orch.list_skills() == []
+
+    def test_unregister_skill(self, mock_llm, dummy_skill):
+        with patch(
+            "comedy_agent.agent.orchestrator.ModelFactory.get_model",
+            return_value=mock_llm,
+        ):
+            orch = AgentOrchestrator()
+            orch.register_skill(dummy_skill)
+            assert len(orch.list_skills()) == 1
+            assert orch.unregister_skill("dummy_hello") is True
+            assert orch.list_skills() == []
+
+    def test_unregister_skill_not_found(self, mock_llm):
+        with patch(
+            "comedy_agent.agent.orchestrator.ModelFactory.get_model",
+            return_value=mock_llm,
+        ):
+            orch = AgentOrchestrator()
+            assert orch.unregister_skill("nonexistent") is False
 
     # ------------------------------------------------------------------ #
     # Agent 构建

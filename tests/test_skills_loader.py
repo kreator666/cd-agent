@@ -175,3 +175,60 @@ class TestLoadPluginSkills:
             assert len(skills) == 3
             names = {s.name for s in skills}
             assert names == {"Skill 0", "Skill 1", "Skill 2"}
+
+
+class TestSkillSecurity:
+    """Skill 安全校验测试。"""
+
+    def test_validate_skill_name(self):
+        from comedy_agent.skills.loader import validate_skill_name
+        assert validate_skill_name("my-skill_01") is True
+        assert validate_skill_name("my skill") is False
+        assert validate_skill_name("../etc") is False
+        assert validate_skill_name("") is False
+
+    def test_is_builtin_skill(self):
+        from comedy_agent.skills.loader import is_builtin_skill
+        assert is_builtin_skill("standup_generator") is True
+        assert is_builtin_skill("my_plugin") is False
+
+    def test_validate_skill_py(self):
+        from comedy_agent.skills.loader import validate_skill_py
+        assert validate_skill_py("def hello(): pass") is True
+        assert validate_skill_py("def hello(: pass") is False
+
+
+class TestScanAndLoadSingle:
+    """热重载辅助函数测试。"""
+
+    def test_scan_skills_dir(self):
+        from comedy_agent.skills.loader import scan_skills_dir
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir) / "valid_skill"
+            d.mkdir()
+            (d / "SKILL.md").write_text("# Valid\n\n## 描述\n\nDesc.\n", encoding="utf-8")
+            (d / "prompt.txt").write_text("Prompt", encoding="utf-8")
+            result = scan_skills_dir(tmpdir)
+            assert len(result) == 1
+            assert result[0].name == "valid_skill"
+
+    def test_scan_skills_dir_skips_invalid(self):
+        from comedy_agent.skills.loader import scan_skills_dir
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "no_md").mkdir()
+            (Path(tmpdir) / ".hidden").mkdir()
+            result = scan_skills_dir(tmpdir)
+            assert len(result) == 0
+
+    def test_load_single_skill(self):
+        from comedy_agent.skills.loader import load_single_skill
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir) / "single"
+            d.mkdir()
+            (d / "SKILL.md").write_text(
+                "# Single Skill\n\n## 描述\n\nA test skill.\n", encoding="utf-8"
+            )
+            (d / "prompt.txt").write_text("Hello {name}", encoding="utf-8")
+            skill = load_single_skill(d)
+            assert skill is not None
+            assert skill.name == "Single Skill"

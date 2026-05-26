@@ -30,7 +30,9 @@ def client():
         "comedy_agent.auth.router.SQLMemoryStore"
     ) as mock_auth_store_cls:
         mock_orch = MagicMock()
-        mock_orch.list_skills.return_value = ["standup_generator"]
+        mock_orch.list_skills.return_value = [
+            {"name": "standup_generator", "description": "", "task_type": "creative", "source": "builtin"}
+        ]
         mock_orch_cls.return_value = mock_orch
 
         # auth router 使用内存数据库
@@ -77,7 +79,8 @@ class TestSkills:
         assert response.status_code == 200
         data = response.json()
         assert "skills" in data
-        assert "standup_generator" in data["skills"]
+        names = [s["name"] for s in data["skills"]]
+        assert "standup_generator" in names
 
 
 class TestChat:

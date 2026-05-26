@@ -37,6 +37,7 @@ class AgentOrchestrator:
         model_name: str | None = None,
         system_prompt: str | None = None,
         memory: UnifiedMemory | None = None,
+        retriever: Any | None = None,
     ) -> None:
         """初始化 Orchestrator。
 
@@ -44,12 +45,14 @@ class AgentOrchestrator:
             model_name: 模型标识，为 ``None`` 时使用 ``settings.default_model``。
             system_prompt: 系统提示词，覆盖默认值。
             memory: 可选的统一记忆接口，用于注入用户上下文。
+            retriever: 可选的知识库混合检索器，用于根据用户查询注入相关知识。
         """
         self.model_name = model_name
         self.llm = ModelFactory.get_model(model_name)
         self.tools: list[BaseTool] = []
         self.system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
         self.memory = memory
+        self.retriever = retriever
         self._agent: Any | None = None
 
     # ------------------------------------------------------------------ #
@@ -183,19 +186,52 @@ class AgentOrchestrator:
         )
         return self._agent
 
-    def _build_memory_system_prompt(self, user_id: str | None = None) -> str | None:
-        """若配置了 memory 和 user_id，构建包含用户记忆的 system prompt。"""
+    def _build_system_prompt(
+        self, user_input: str, user_id: str | None = None
+    ) -> str:
+        """构建完整的 System Prompt，整合基础提示 + 用户记忆 + 知识库。
+
+        Args:
+            user_input: 用户当前输入，用于知识库检索。
+            user_id: 可选的用户标识，用于注入用户记忆。
+
+        Returns:
+            完整的 System Prompt 文本。
+        """
+        parts: list[str] = [self.system_prompt]
+
+        # 1. 注入用户记忆
         if self.memory and user_id:
             memory_text = self.memory.build_context_text(user_id)
             if memory_text:
-                return (
-                    f"{self.system_prompt}\n\n"
+                parts.append(
                     f"【关于用户】\n"
                     f"以下是该用户的历史偏好与创作习惯，请在回答时参考：\n\n"
                     f"{memory_text}\n"
                     f"【关于用户结束】"
                 )
-        return None
+
+        # 2. 注入知识库检索结果
+        if self.retriever is not None:
+            try:
+                docs = self.retriever.retrieve(user_input, top_k=5)
+                if docs:
+                    knowledge_lines: list[str] = []
+                    for idx, doc in enumerate(docs, 1):
+                        source = doc.metadata.get("source", "未知来源")
+                        text = doc.page_content.strip().replace("\n", " ")
+                        knowledge_lines.append(f"[{idx}] 来源: {source}\n{text}")
+                    knowledge_text = "\n\n".join(knowledge_lines)
+                    parts.append(
+                        f"【知识库参考】\n"
+                        f"以下是与用户问题相关的喜剧行业知识，请在回答时参考：\n\n"
+                        f"{knowledge_text}\n"
+                        f"【知识库参考结束】"
+                    )
+            except Exception:
+                logger.debug("知识库检索失败，跳过注入", exc_info=True)
+
+        return "\n\n".join(parts)
 
     def run(
         self,
@@ -228,12 +264,9 @@ class AgentOrchestrator:
 
             messages: list[Any] = []
 
-            # 若存在用户记忆，作为第一条 system message 注入
-            memory_prompt = self._build_memory_system_prompt(user_id)
-            if memory_prompt:
-                messages.append(("system", memory_prompt))
-            elif self.system_prompt:
-                messages.append(("system", self.system_prompt))
+            # 构建并注入完整的 System Prompt（基础提示 + 用户记忆 + 知识库）
+            system_prompt = self._build_system_prompt(user_input, user_id)
+            messages.append(("system", system_prompt))
 
             if chat_history:
                 for role, content in chat_history:
@@ -282,11 +315,8 @@ class AgentOrchestrator:
 
             messages: list[Any] = []
 
-            memory_prompt = self._build_memory_system_prompt(user_id)
-            if memory_prompt:
-                messages.append(("system", memory_prompt))
-            elif self.system_prompt:
-                messages.append(("system", self.system_prompt))
+            system_prompt = self._build_system_prompt(user_input, user_id)
+            messages.append(("system", system_prompt))
 
             if chat_history:
                 for role, content in chat_history:

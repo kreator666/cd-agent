@@ -25,6 +25,8 @@ from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError, ModelFactory
 from comedy_agent.rag.feedback_loop import FeedbackLoop
+from comedy_agent.rag.retriever import ComedyRetriever
+from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills import (
     CrosstalkSkill,
     JokeAnalyzerSkill,
@@ -209,8 +211,23 @@ async def lifespan(app: FastAPI):
         logging.getLogger("comedy-agent").warning("记忆系统初始化失败: %s", e)
         state.memory = None
 
+    # 初始化知识库检索器
+    retriever: ComedyRetriever | None = None
     try:
-        state.orch = AgentOrchestrator(memory=state.memory)
+        vector_store = VectorStore(
+            collection_name="comedy_knowledge",
+            persist_path=str(settings.vector_db_path),
+        )
+        retriever = ComedyRetriever(vector_store=vector_store)
+        import logging
+        logging.getLogger("comedy-agent").info("知识库检索器已初始化")
+    except Exception as e:
+        import logging
+        logging.getLogger("comedy-agent").warning("知识库检索器初始化失败: %s", e)
+        retriever = None
+
+    try:
+        state.orch = AgentOrchestrator(memory=state.memory, retriever=retriever)
         state.orch.register_skill(StandupSkill())
         state.orch.register_skill(CrosstalkSkill())
         state.orch.register_skill(SketchSkill())

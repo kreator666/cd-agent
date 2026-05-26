@@ -412,6 +412,25 @@
         </main>
     </div>
 
+    <!-- 保存作品 Modal -->
+    <div class="modal-overlay" id="save-script-modal">
+        <div class="modal-box">
+            <h3>保存为作品</h3>
+            <input type="text" id="script-title" placeholder="作品标题" />
+            <select id="script-type">
+                <option value="">选择类型</option>
+                <option value="standup">单口喜剧</option>
+                <option value="crosstalk">相声</option>
+                <option value="sketch">小品</option>
+                <option value="sitcom">情景喜剧</option>
+            </select>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeSaveModal()">取消</button>
+                <button class="btn-save" onclick="confirmSaveScript()">保存</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = window.location.origin;
         const chatArea = document.getElementById('chat-area');
@@ -576,7 +595,8 @@
                 const data = await res.json();
                 window._scripts = data.scripts || [];
                 renderScriptList();
-            } catch {
+            } catch (err) {
+                console.error('加载作品失败:', err);
                 listEl.innerHTML = '<div class="script-empty">加载失败</div>';
             }
         }

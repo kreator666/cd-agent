@@ -75,7 +75,7 @@ class StandupSkill(ComedySkill):
         perspective_count: int = 2,
         user_id: str | None = None,
     ) -> str:
-        docs = self._retrieve_knowledge(topic, user_id)
+        docs = self._retrieve_knowledge(topic, user_id, kind="standup", style=style)
         knowledge_text = self._format_knowledge(docs)
         system_prompt = self.SYSTEM_PROMPT
         if knowledge_text:

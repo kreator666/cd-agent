@@ -206,3 +206,48 @@ class TestStandupSkill:
                 assert captured_messages is not None
                 system_msg = captured_messages[0][1]
                 assert "【知识库参考】" not in system_msg
+
+    def test_knowledge_injection_with_kind_filter(self, mock_llm):
+        """验证 Skill 会按 kind/style 过滤检索知识库。"""
+        from langchain_core.documents import Document
+
+        mock_llm.return_value = "result with filtered knowledge"
+        with patch(
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
+            return_value=mock_llm,
+        ):
+            skill = StandupSkill()
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = [
+                Document(page_content="脱口秀节奏技巧", metadata={"source": "test.pdf", "kind": "standup"})
+            ]
+            skill.retriever = mock_retriever
+
+            skill._run(topic="职场", style="自嘲", user_id="test_user")
+
+            # 验证 retrieve 被调用时传入了 filter_dict
+            call_kwargs = mock_retriever.retrieve.call_args.kwargs
+            assert call_kwargs.get("filter_dict") == {"kind": "standup", "style": "自嘲"}
+
+    def test_knowledge_injection_with_default_kind(self, mock_llm):
+        """验证 Skill 默认会按自身 kind 过滤，但不强制 style 过滤。"""
+        from langchain_core.documents import Document
+
+        mock_llm.return_value = "result"
+        with patch(
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
+            return_value=mock_llm,
+        ):
+            skill = StandupSkill()
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = []
+            skill.retriever = mock_retriever
+
+            skill._run(topic="职场")
+
+            call_kwargs = mock_retriever.retrieve.call_args.kwargs
+            filter_dict = call_kwargs.get("filter_dict")
+            assert filter_dict is not None
+            assert filter_dict.get("kind") == "standup"
+            # 默认 style 是 "日常观察"，所以也会传入
+            assert "style" in filter_dict

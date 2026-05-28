@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -950,6 +950,8 @@ async def delete_conversation(
 @app.post("/documents/upload", response_model=list[DocumentUploadResponse], tags=["documents"])
 async def upload_documents(
     files: list[UploadFile] = File(...),
+    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
+    style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
     user_id: str = Depends(get_current_user),
 ) -> list[DocumentUploadResponse]:
     """上传文档到个人知识库。支持多文件上传，自动解析并入库。"""
@@ -997,7 +999,7 @@ async def upload_documents(
             )
             user_retriever = ComedyRetriever(vector_store=user_vector_store)
             ingestor.retriever = user_retriever
-            result = ingestor.ingest_file(save_path)
+            result = ingestor.ingest_file(save_path, kind=kind, style=style)
 
             # 更新状态
             doc.status = "ingested"

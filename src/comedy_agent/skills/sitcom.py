@@ -75,7 +75,7 @@ class SitcomSkill(ComedySkill):
         user_id: str | None = None,
     ) -> str:
         query = f"{scenario} {episode_theme}"
-        docs = self._retrieve_knowledge(query, user_id)
+        docs = self._retrieve_knowledge(query, user_id, kind="sitcom")
         knowledge_text = self._format_knowledge(docs)
         system_prompt = self.SYSTEM_PROMPT
         if knowledge_text:

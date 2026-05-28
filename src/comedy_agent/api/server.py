@@ -32,7 +32,9 @@ from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills import (
     CrosstalkSkill,
+    JapaneseSketchSkill,
     JokeAnalyzerSkill,
+    ManzaiSkill,
     ScriptEvaluatorSkill,
     SitcomSkill,
     SketchSkill,
@@ -99,6 +101,8 @@ class StandupRequest(BaseModel):
     style: str = Field(default="日常观察", description="风格")
     duration: int = Field(default=3, description="时长（分钟）")
     audience: str = Field(default="通用", description="受众")
+    density: str = Field(default="标准", description="笑点密度：密集/标准/稀疏")
+    perspective_count: int = Field(default=2, description="多视角版本数量（2-3）")
     model: str | None = Field(default=None, description="指定模型")
 
 
@@ -106,6 +110,57 @@ class StandupResponse(BaseModel):
     """脱口秀创作响应。"""
 
     content: str = Field(description="生成的段子")
+
+
+class SketchRequest(BaseModel):
+    """小品创作请求。"""
+
+    theme: str = Field(description="主题")
+    characters_count: int = Field(default=3, description="角色数量（2-5人）")
+    setting: str = Field(default="家庭", description="场景设定")
+    duration: int = Field(default=8, description="时长（分钟）")
+    conflict_type: str = Field(default="执念vs现实", description="冲突类型：执念vs现实/执念vs执念/信息差")
+    model: str | None = Field(default=None, description="指定模型")
+
+
+class SketchResponse(BaseModel):
+    """小品创作响应。"""
+
+    content: str = Field(description="生成的剧本")
+
+
+class ManzaiRequest(BaseModel):
+    """漫才创作请求。"""
+
+    topic: str = Field(description="话题")
+    duration: int = Field(default=5, description="时长（分钟）")
+    segments_count: int = Field(default=3, description="段落数量")
+    absurd_level: str = Field(default="标准", description="荒谬等级：轻微/标准/极致")
+    model: str | None = Field(default=None, description="指定模型")
+
+
+class ManzaiResponse(BaseModel):
+    """漫才创作响应。"""
+
+    content: str = Field(description="生成的对白")
+
+
+class JapaneseSketchRequest(BaseModel):
+    """日式短剧创作请求。"""
+
+    theme: str = Field(description="主题")
+    characters_count: int = Field(default=2, description="角色数量（2-3人）")
+    setting: str = Field(default="便利店", description="场景设定")
+    duration: int = Field(default=5, description="时长（分钟）")
+    character_type: str = Field(default="偏执", description="极端性格：偏执/懦弱/自大/较真")
+    punchline_density: int = Field(default=4, description="笑点密度（个/分钟）")
+    model: str | None = Field(default=None, description="指定模型")
+
+
+class JapaneseSketchResponse(BaseModel):
+    """日式短剧创作响应。"""
+
+    content: str = Field(description="生成的剧本")
 
 
 # ------------------------------------------------------------------ #
@@ -297,6 +352,8 @@ async def lifespan(app: FastAPI):
         state.orch.register_skill(CrosstalkSkill())
         state.orch.register_skill(SketchSkill())
         state.orch.register_skill(SitcomSkill())
+        state.orch.register_skill(ManzaiSkill())
+        state.orch.register_skill(JapaneseSketchSkill())
         state.orch.register_skill(JokeAnalyzerSkill())
         state.orch.register_skill(ScriptEvaluatorSkill())
 
@@ -574,9 +631,116 @@ async def skill_standup(
                 "style": request.style,
                 "duration": request.duration,
                 "audience": request.audience,
+                "density": request.density,
+                "perspective_count": request.perspective_count,
             }
         )
         return StandupResponse(content=content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/skills/sketch", response_model=SketchResponse, tags=["skills"])
+async def skill_sketch(
+    request: SketchRequest, user_id: str = Depends(get_current_user)
+) -> SketchResponse:
+    """直接调用小品创作 Skill。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    skill = None
+    for tool in state.orch.tools:
+        if getattr(tool, "name", None) == "sketch_generator":
+            skill = tool
+            break
+
+    if skill is None:
+        skill = SketchSkill()
+
+    if request.model is not None:
+        skill.model_name = request.model
+
+    try:
+        content = skill.invoke(
+            {
+                "theme": request.theme,
+                "characters_count": request.characters_count,
+                "setting": request.setting,
+                "duration": request.duration,
+                "conflict_type": request.conflict_type,
+            }
+        )
+        return SketchResponse(content=content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/skills/manzai", response_model=ManzaiResponse, tags=["skills"])
+async def skill_manzai(
+    request: ManzaiRequest, user_id: str = Depends(get_current_user)
+) -> ManzaiResponse:
+    """直接调用漫才创作 Skill。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    skill = None
+    for tool in state.orch.tools:
+        if getattr(tool, "name", None) == "manzai_generator":
+            skill = tool
+            break
+
+    if skill is None:
+        skill = ManzaiSkill()
+
+    if request.model is not None:
+        skill.model_name = request.model
+
+    try:
+        content = skill.invoke(
+            {
+                "topic": request.topic,
+                "duration": request.duration,
+                "segments_count": request.segments_count,
+                "absurd_level": request.absurd_level,
+            }
+        )
+        return ManzaiResponse(content=content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/skills/japanese-sketch", response_model=JapaneseSketchResponse, tags=["skills"])
+async def skill_japanese_sketch(
+    request: JapaneseSketchRequest, user_id: str = Depends(get_current_user)
+) -> JapaneseSketchResponse:
+    """直接调用日式短剧创作 Skill。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    skill = None
+    for tool in state.orch.tools:
+        if getattr(tool, "name", None) == "japanese_sketch_generator":
+            skill = tool
+            break
+
+    if skill is None:
+        skill = JapaneseSketchSkill()
+
+    if request.model is not None:
+        skill.model_name = request.model
+
+    try:
+        content = skill.invoke(
+            {
+                "theme": request.theme,
+                "characters_count": request.characters_count,
+                "setting": request.setting,
+                "duration": request.duration,
+                "character_type": request.character_type,
+                "punchline_density": request.punchline_density,
+            }
+        )
+        return JapaneseSketchResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

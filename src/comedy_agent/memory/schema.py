@@ -51,6 +51,9 @@ class UserProfile(Base):
     documents: Mapped[list["UserDocument"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
+    knowledge_cards: Mapped[list["KnowledgeCard"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -176,3 +179,37 @@ class UserDocument(Base):
 
     # Relationship
     user: Mapped["UserProfile"] = relationship(back_populates="documents")
+
+
+# ------------------------------------------------------------------ #
+# KnowledgeCard —— 知识卡片（技巧/概念/公式/模式）
+# ------------------------------------------------------------------ #
+class KnowledgeCard(Base):
+    """知识卡片表。存储从文档中提取或手动创建的结构化技巧。"""
+
+    __tablename__ = "knowledge_cards"
+
+    card_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    card_type: Mapped[str] = mapped_column(
+        String(32), default="technique", nullable=False, comment="technique / concept / formula / pattern"
+    )
+    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    source_doc_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="knowledge_cards")

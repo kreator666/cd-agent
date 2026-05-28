@@ -395,6 +395,18 @@
                 </div>
             </details>
 
+            <button onclick="openLearnModal()" style="background:#e94560;">📚 学习模式</button>
+
+            <details class="preference-section" id="card-section">
+                <summary>技巧库</summary>
+                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;">
+                    <button onclick="openCreateCardModal()" style="font-size:0.75rem;">➕ 新建卡片</button>
+                    <div id="card-list">
+                        <div class="preference-empty">暂无卡片</div>
+                    </div>
+                </div>
+            </details>
+
             <details class="preference-section" id="preference-section">
                 <summary>我的偏好</summary>
                 <div id="preference-list">
@@ -432,6 +444,48 @@
                 <button id="send-btn" onclick="sendMessage()">发送</button>
             </div>
         </main>
+    </div>
+
+    <!-- 学习模式 Modal -->
+    <div class="modal-overlay" id="learn-modal">
+        <div class="modal-box" style="width: 560px; max-height: 90vh; overflow-y: auto;">
+            <h3>📚 学习模式</h3>
+            <select id="learn-mode" style="margin-bottom:0.5rem;">
+                <option value="explain">💡 解释概念</option>
+                <option value="analyze">🔍 分析案例笑点结构</option>
+                <option value="extract">✂️ 提取可复用技巧</option>
+            </select>
+            <textarea id="learn-query" placeholder="输入你的问题，例如：分析一下这个案例的笑点结构" style="height:4rem;margin-bottom:0.5rem;"></textarea>
+            <label style="font-size:0.75rem;color:#666;">选择参考文档（不选则检索全部）</label>
+            <div id="learn-doc-select" style="max-height:100px;overflow-y:auto;font-size:0.75rem;margin-bottom:0.5rem;border:1px solid #ddd;border-radius:0.375rem;padding:0.5rem;">
+                <span style="color:#999;">暂无文档</span>
+            </div>
+            <div id="learn-output" style="background:#f8f8f8;padding:0.75rem;border-radius:0.5rem;font-size:0.875rem;line-height:1.6;white-space:pre-wrap;max-height:300px;overflow-y:auto;display:none;"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeLearnModal()">关闭</button>
+                <button class="btn-save" onclick="sendLearnQuery()">分析</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建技巧卡片 Modal -->
+    <div class="modal-overlay" id="create-card-modal">
+        <div class="modal-box">
+            <h3>新建技巧卡片</h3>
+            <input type="text" id="card-title" placeholder="技巧名称" />
+            <select id="card-type">
+                <option value="technique">技巧</option>
+                <option value="concept">概念</option>
+                <option value="formula">公式</option>
+                <option value="pattern">模式</option>
+            </select>
+            <input type="text" id="card-tags" placeholder="标签，用逗号分隔" />
+            <textarea id="card-content" placeholder="技巧内容/说明" style="height:6rem;"></textarea>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeCreateCardModal()">取消</button>
+                <button class="btn-save" onclick="confirmCreateCard()">保存</button>
+            </div>
+        </div>
     </div>
 
     <!-- 安装 Skill Modal -->
@@ -641,6 +695,134 @@
             }
         }
 
+        // 学习模式
+        function openLearnModal() {
+            document.getElementById('learn-modal').classList.add('active');
+            renderLearnDocSelect();
+        }
+        function closeLearnModal() {
+            document.getElementById('learn-modal').classList.remove('active');
+            document.getElementById('learn-output').style.display = 'none';
+            document.getElementById('learn-output').textContent = '';
+        }
+        async function renderLearnDocSelect() {
+            const container = document.getElementById('learn-doc-select');
+            try {
+                const res = await fetch(`${API_BASE}/documents`, { headers: authHeaders() });
+                const data = await res.json();
+                const docs = data.documents || [];
+                if (docs.length === 0) {
+                    container.innerHTML = '<span style="color:#999;">暂无文档，请先上传</span>';
+                    return;
+                }
+                container.innerHTML = '';
+                docs.forEach(d => {
+                    const label = document.createElement('label');
+                    label.style.display = 'block';
+                    label.style.marginBottom = '0.25rem';
+                    label.innerHTML = `<input type="checkbox" class="learn-doc-checkbox" value="${d.doc_id}" /> ${escapeHtml(d.filename)}`;
+                    container.appendChild(label);
+                });
+            } catch {
+                container.innerHTML = '<span style="color:#999;">加载文档失败</span>';
+            }
+        }
+        async function sendLearnQuery() {
+            const query = document.getElementById('learn-query').value.trim();
+            if (!query) { alert('请输入问题'); return; }
+            const mode = document.getElementById('learn-mode').value;
+            const checkboxes = document.querySelectorAll('.learn-doc-checkbox:checked');
+            const doc_ids = Array.from(checkboxes).map(cb => cb.value);
+            const outputEl = document.getElementById('learn-output');
+            outputEl.style.display = 'block';
+            outputEl.textContent = '分析中...';
+            try {
+                const res = await fetch(`${API_BASE}/learn/chat`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ query, mode, doc_ids: doc_ids.length ? doc_ids : null }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    outputEl.textContent = data.output;
+                } else {
+                    outputEl.textContent = '错误: ' + (data.detail || '未知错误');
+                }
+            } catch (err) {
+                outputEl.textContent = '请求失败: ' + err.message;
+            }
+        }
+
+        // 技巧库
+        function openCreateCardModal() {
+            document.getElementById('create-card-modal').classList.add('active');
+        }
+        function closeCreateCardModal() {
+            document.getElementById('create-card-modal').classList.remove('active');
+            document.getElementById('card-title').value = '';
+            document.getElementById('card-content').value = '';
+            document.getElementById('card-tags').value = '';
+        }
+        async function confirmCreateCard() {
+            const title = document.getElementById('card-title').value.trim();
+            const content = document.getElementById('card-content').value.trim();
+            if (!title || !content) { alert('请填写标题和内容'); return; }
+            const card_type = document.getElementById('card-type').value;
+            const tags = document.getElementById('card-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+            try {
+                const res = await fetch(`${API_BASE}/learn/cards`, {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ user_id: currentUserId, title, content, card_type, tags }),
+                });
+                if (!res.ok) throw new Error('保存失败');
+                closeCreateCardModal();
+                loadKnowledgeCards();
+            } catch (err) {
+                alert('保存失败: ' + err.message);
+            }
+        }
+        async function loadKnowledgeCards() {
+            const listEl = document.getElementById('card-list');
+            try {
+                const res = await fetch(`${API_BASE}/learn/cards`, { headers: authHeaders() });
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                const cards = data.cards || [];
+                if (cards.length === 0) {
+                    listEl.innerHTML = '<div class="preference-empty">暂无卡片</div>';
+                    return;
+                }
+                listEl.innerHTML = '';
+                cards.forEach(c => {
+                    const item = document.createElement('div');
+                    item.className = 'preference-item';
+                    item.style.flexDirection = 'column';
+                    item.style.alignItems = 'flex-start';
+                    item.style.gap = '0.25rem';
+                    const typeLabel = { technique: '技巧', concept: '概念', formula: '公式', pattern: '模式' }[c.card_type] || c.card_type;
+                    const tagsHtml = c.tags ? c.tags.map(t => `<span style="font-size:0.7rem;background:#eee;padding:0.125rem 0.375rem;border-radius:0.25rem;">${t}</span>`).join(' ') : '';
+                    item.innerHTML = `<div style="display:flex;justify-content:space-between;width:100%;align-items:center;"><strong style="font-size:0.875rem;">${escapeHtml(c.title)}</strong><span style="font-size:0.7rem;color:#888;">${typeLabel}</span><span style="color:#e94560;cursor:pointer;font-size:0.75rem;" onclick="deleteKnowledgeCard('${c.card_id}')">✕</span></div><div style="font-size:0.75rem;color:#555;white-space:pre-wrap;">${escapeHtml(c.content)}</div><div style="display:flex;gap:0.25rem;flex-wrap:wrap;">${tagsHtml}</div>`;
+                    listEl.appendChild(item);
+                });
+            } catch {
+                listEl.innerHTML = '<div class="preference-empty">加载失败</div>';
+            }
+        }
+        async function deleteKnowledgeCard(cardId) {
+            if (!confirm('确定删除该卡片？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/learn/cards/${cardId}`, {
+                    method: 'DELETE',
+                    headers: authHeaders(),
+                });
+                if (!res.ok) throw new Error('删除失败');
+                loadKnowledgeCards();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+
         async function loadPreferences() {
             const listEl = document.getElementById('preference-list');
             try {
@@ -683,6 +865,7 @@
 
         loadConversations();
         loadDocuments();
+        loadKnowledgeCards();
         loadPreferences();
         loadScripts();
         loadSkills();

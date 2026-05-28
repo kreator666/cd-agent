@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ from comedy_agent.skills import (
 )
 from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
+from comedy_agent.models.factory import ModelFactory
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +196,47 @@ class DocumentListResponse(BaseModel):
     """文档列表响应。"""
 
     documents: list[DocumentData] = Field(description="文档列表")
+
+
+# ------------------------------------------------------------------ #
+# 学习模式请求/响应模型
+# ------------------------------------------------------------------ #
+class LearnChatRequest(BaseModel):
+    """学习模式对话请求。"""
+
+    query: str = Field(description="学习问题")
+    doc_ids: list[str] | None = Field(default=None, description="指定文档 ID 列表，为空则检索全部个人知识库")
+    mode: str = Field(default="explain", description="分析模式：explain / analyze / extract")
+
+
+class LearnChatResponse(BaseModel):
+    """学习模式对话响应。"""
+
+    output: str = Field(description="AI 分析回答")
+    references: list[dict[str, Any]] = Field(default_factory=list, description="引用的参考资料")
+
+
+# ------------------------------------------------------------------ #
+# 技巧库请求/响应模型
+# ------------------------------------------------------------------ #
+class KnowledgeCardData(BaseModel):
+    """技巧卡片数据。"""
+
+    card_id: str | None = Field(default=None, description="卡片唯一标识")
+    user_id: str = Field(description="所属用户")
+    title: str = Field(description="技巧名称")
+    content: str = Field(description="技巧内容/说明")
+    card_type: str = Field(default="technique", description="卡片类型：technique / concept / formula / pattern")
+    tags: list[str] | None = Field(default=None, description="标签列表")
+    source_doc_id: str | None = Field(default=None, description="来源文档 ID")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+class KnowledgeCardListResponse(BaseModel):
+    """技巧卡片列表响应。"""
+
+    cards: list[KnowledgeCardData] = Field(description="卡片列表")
 
 
 # ------------------------------------------------------------------ #
@@ -978,6 +1021,127 @@ async def evaluate_output(request: EvaluateOutputRequest) -> EvaluateOutputRespo
         output=request.output, expected_format=request.expected_format
     )
     return EvaluateOutputResponse(**result.to_dict())
+
+
+# ------------------------------------------------------------------ #
+# 学习模式路由
+# ------------------------------------------------------------------ #
+@app.post("/learn/chat", response_model=LearnChatResponse, tags=["learn"])
+async def learn_chat(
+    request: LearnChatRequest,
+    user_id: str = Depends(get_current_user),
+) -> LearnChatResponse:
+    """学习模式对话：针对用户上传的文档进行问答、分析、技巧提取。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    # 1. 从用户个人知识库检索相关文档
+    try:
+        user_vector_store = VectorStore(
+            collection_name=f"user_knowledge_{user_id}",
+            persist_path=str(settings.vector_db_path),
+        )
+        filter_dict = None
+        if request.doc_ids:
+            # ChromaDB where 过滤：source_doc_id 在列表中
+            filter_dict = {"source_doc_id": {"$in": request.doc_ids}}
+        docs = user_vector_store.search(request.query, top_k=5, filter_dict=filter_dict)
+    except Exception as e:
+        logger.warning("学习模式检索失败: %s", e)
+        docs = []
+
+    if not docs:
+        return LearnChatResponse(
+            output="未在个人知识库中找到相关资料。请先上传相关文档。",
+            references=[],
+        )
+
+    # 2. 格式化参考资料
+    references: list[dict[str, Any]] = []
+    ref_lines: list[str] = []
+    for idx, doc in enumerate(docs, 1):
+        source = doc.metadata.get("source", "未知来源")
+        text = doc.page_content.strip()
+        ref_lines.append(f"[{idx}] 来源: {source}\n{text}")
+        references.append({"source": source, "content": text[:200]})
+    references_text = "\n\n".join(ref_lines)
+
+    # 3. 渲染学习模式 Prompt
+    pm = PromptManager()
+    try:
+        system_prompt = pm.render(
+            "learn_system",
+            variables={"references": references_text},
+        )
+    except Exception:
+        system_prompt = (
+            "你是一位资深喜剧理论导师。请基于以下参考资料回答用户问题。\n\n"
+            f"{references_text}"
+        )
+
+    # 4. 调用 LLM
+    try:
+        llm = ModelFactory.get_model(task_type="analytical")
+        messages = [
+            ("system", system_prompt),
+            ("human", f"【分析模式】{request.mode}\n\n【问题】{request.query}"),
+        ]
+        result = llm.invoke(messages)
+        output = str(result.content) if hasattr(result, "content") else str(result)
+    except Exception as e:
+        logger.warning("学习模式 LLM 调用失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"AI 分析失败: {e}")
+
+    return LearnChatResponse(output=output, references=references)
+
+
+# ------------------------------------------------------------------ #
+# 技巧库路由
+# ------------------------------------------------------------------ #
+@app.post("/learn/cards", response_model=KnowledgeCardData, tags=["learn"])
+async def create_knowledge_card(
+    request: KnowledgeCardData,
+    user_id: str = Depends(get_current_user),
+) -> KnowledgeCardData:
+    """创建知识卡片（技巧/概念/公式/模式）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    card = KnowledgeCardData(
+        user_id=user_id,
+        title=request.title,
+        content=request.content,
+        card_type=request.card_type,
+        tags=request.tags,
+        source_doc_id=request.source_doc_id,
+    )
+    return state.memory.save_knowledge_card(card)
+
+
+@app.get("/learn/cards", response_model=KnowledgeCardListResponse, tags=["learn"])
+async def list_knowledge_cards(
+    card_type: str | None = None,
+    tag: str | None = None,
+    user_id: str = Depends(get_current_user),
+) -> KnowledgeCardListResponse:
+    """列出当前用户的知识卡片。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    cards = state.memory.list_knowledge_cards(user_id, card_type=card_type, tag=tag)
+    return KnowledgeCardListResponse(cards=cards)
+
+
+@app.delete("/learn/cards/{card_id}", response_model=SuccessResponse, tags=["learn"])
+async def delete_knowledge_card(
+    card_id: str,
+    user_id: str = Depends(get_current_user),
+) -> SuccessResponse:
+    """删除指定知识卡片。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    ok = state.memory.delete_knowledge_card(user_id, card_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="卡片不存在")
+    return SuccessResponse(success=True)
 
 
 # ------------------------------------------------------------------ #

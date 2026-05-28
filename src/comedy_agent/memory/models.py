@@ -75,6 +75,20 @@ class DocumentData(BaseModel):
     updated_at: datetime | None = Field(default=None, description="更新时间")
 
 
+class KnowledgeCardData(BaseModel):
+    """知识卡片数据。"""
+
+    card_id: str | None = Field(default=None, description="卡片唯一标识，留空则自动生成")
+    user_id: str = Field(description="所属用户")
+    title: str = Field(description="技巧名称")
+    content: str = Field(description="技巧内容/说明")
+    card_type: str = Field(default="technique", description="卡片类型：technique / concept / formula / pattern")
+    tags: list[str] | None = Field(default=None, description="标签列表")
+    source_doc_id: str | None = Field(default=None, description="来源文档 ID")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
 class UserContext(BaseModel):
     """用户完整上下文（用于注入 Agent Prompt）。"""
 

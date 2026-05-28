@@ -386,23 +386,6 @@
                 <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
             </div>
 
-            <details class="script-section" id="script-section">
-                <summary>我的作品</summary>
-                <div id="script-list">
-                    <div class="script-empty">暂无作品</div>
-                </div>
-            </details>
-
-            <details class="skill-section" id="skill-section">
-                <summary>Skill 管理</summary>
-                <div id="skill-list">
-                    <div class="skill-empty">加载中...</div>
-                </div>
-                <div class="skill-actions-bar">
-                    <button onclick="openInstallSkillModal()">安装 Skill</button>
-                    <button onclick="reloadSkills()">热重载</button>
-                </div>
-            </details>
         </aside>
         <main class="main">
             <div class="chat-area" id="chat-area">
@@ -836,7 +819,6 @@
         }
 
         loadConversations();
-        loadScripts();
         loadSkills();
 
         async function loadSkills() {

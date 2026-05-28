@@ -25,7 +25,7 @@ class TestStandupSkill:
         skill = StandupSkill()
         assert skill.name == "standup_generator"
         assert "脱口秀" in skill.description
-        assert "callback" in skill.description.lower()
+        assert "预期违背" in skill.description
 
     def test_args_schema(self):
         """验证 args_schema 字段完整。"""
@@ -36,10 +36,14 @@ class TestStandupSkill:
         assert "style" in fields
         assert "duration" in fields
         assert "audience" in fields
+        assert "density" in fields
+        assert "perspective_count" in fields
         # 默认值检查
         assert fields["style"].default == "日常观察"
         assert fields["duration"].default == 3
         assert fields["audience"].default == "通用"
+        assert fields["density"].default == "标准"
+        assert fields["perspective_count"].default == 2
 
     def test_build_prompt_structure(self, mock_llm):
         """验证 Prompt 构建包含关键要素。"""
@@ -53,13 +57,15 @@ class TestStandupSkill:
                 style="自嘲",
                 duration=5,
                 audience="互联网从业者",
+                density="密集",
+                perspective_count=3,
             )
             assert "职场加班" in prompt_text
             assert "自嘲" in prompt_text
             assert "5分钟" in prompt_text
             assert "互联网从业者" in prompt_text
-            assert "开场钩子" in prompt_text
-            assert "Callback" in prompt_text
+            assert "密集" in prompt_text
+            assert "3 个不同视角" in prompt_text
 
     def test_run_returns_content(self, mock_llm):
         """验证 _run 返回 LLM 生成的内容。"""

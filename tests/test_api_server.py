@@ -149,11 +149,85 @@ class TestStandupSkill:
                     "style": "自嘲",
                     "duration": 3,
                     "audience": "年轻人",
+                    "density": "密集",
+                    "perspective_count": 3,
                 },
             )
             assert response.status_code == 200
             data = response.json()
             assert data["content"] == "生成的段子"
+
+
+class TestSketchSkill:
+    def test_sketch_skill(self, client):
+        with patch(
+            "comedy_agent.api.server.SketchSkill"
+        ) as mock_skill_cls:
+            mock_skill = MagicMock()
+            mock_skill.invoke.return_value = "生成的小品"
+            mock_skill_cls.return_value = mock_skill
+
+            response = client.post(
+                "/skills/sketch",
+                json={
+                    "theme": "家庭聚餐",
+                    "characters_count": 4,
+                    "setting": "家庭",
+                    "duration": 10,
+                    "conflict_type": "执念vs执念",
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["content"] == "生成的小品"
+
+
+class TestManzaiSkill:
+    def test_manzai_skill(self, client):
+        with patch(
+            "comedy_agent.api.server.ManzaiSkill"
+        ) as mock_skill_cls:
+            mock_skill = MagicMock()
+            mock_skill.invoke.return_value = "生成的漫才"
+            mock_skill_cls.return_value = mock_skill
+
+            response = client.post(
+                "/skills/manzai",
+                json={
+                    "topic": "职场加班",
+                    "duration": 5,
+                    "segments_count": 4,
+                    "absurd_level": "极致",
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["content"] == "生成的漫才"
+
+
+class TestJapaneseSketchSkill:
+    def test_japanese_sketch_skill(self, client):
+        with patch(
+            "comedy_agent.api.server.JapaneseSketchSkill"
+        ) as mock_skill_cls:
+            mock_skill = MagicMock()
+            mock_skill.invoke.return_value = "生成的日式短剧"
+            mock_skill_cls.return_value = mock_skill
+
+            response = client.post(
+                "/skills/japanese-sketch",
+                json={
+                    "theme": "便利店打工",
+                    "characters_count": 3,
+                    "setting": "便利店",
+                    "duration": 5,
+                    "character_type": "自大",
+                    "punchline_density": 6,
+                },
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["content"] == "生成的日式短剧"
 
 
 class TestFeedbackIngest:

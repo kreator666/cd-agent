@@ -597,7 +597,8 @@
                     item.className = 'preference-item';
                     const statusColor = d.status === 'ingested' ? '#16c79a' : (d.status === 'failed' ? '#e94560' : '#999');
                     const statusText = d.status === 'ingested' ? '已入库' : (d.status === 'failed' ? '失败' : '处理中');
-                    item.innerHTML = `<span class="pref-key" title="${d.filename}">${d.filename}</span><span style="color:${statusColor};font-size:0.7rem;">${statusText}</span><span style="color:#e94560;cursor:pointer;font-size:0.75rem;" onclick="deleteDocument('${d.doc_id}')">✕</span>`;
+                    const errorTip = d.error_msg ? ` title="${d.error_msg.replace(/"/g, '&quot;')}"` : '';
+                    item.innerHTML = `<span class="pref-key" title="${d.filename}">${d.filename}</span><span style="color:${statusColor};font-size:0.7rem;"${errorTip}>${statusText}</span><span style="color:#e94560;cursor:pointer;font-size:0.75rem;" onclick="deleteDocument('${d.doc_id}')">✕</span>`;
                     listEl.appendChild(item);
                 });
             } catch {

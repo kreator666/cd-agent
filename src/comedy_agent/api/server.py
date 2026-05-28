@@ -802,8 +802,18 @@ async def upload_documents(
                 )
             )
         except Exception as e:
+            err_text = str(e)
+            # 给常见错误更友好的提示
+            if "429" in err_text and "quota" in err_text.lower():
+                err_text = "OpenAI API 配额不足，请切换 Embedding 模型（如 hf-local）或充值"
+            elif "429" in err_text:
+                err_text = "API 请求过于频繁，请稍后再试"
+            elif "401" in err_text or "Unauthorized" in err_text:
+                err_text = "API Key 无效或未配置"
+            elif "Connection" in err_text or "Timeout" in err_text:
+                err_text = "网络连接超时，请检查网络或切换本地模型"
             doc.status = "failed"
-            doc.error_msg = str(e)
+            doc.error_msg = err_text
             state.memory.save_document(doc)
             results.append(
                 DocumentUploadResponse(

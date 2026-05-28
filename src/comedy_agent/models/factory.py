@@ -214,6 +214,20 @@ class ModelFactory:
                 ),
             )
 
+        # 本地 HuggingFace Embedding（无需 API Key，适合离线环境）
+        try:
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+
+            cls.register_embedding(
+                "hf-local",
+                lambda **kw: HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2",
+                    **kw,
+                ),
+            )
+        except ImportError:
+            pass
+
     # ------------------------------------------------------------------ #
     # 公共 API
     # ------------------------------------------------------------------ #

@@ -12,6 +12,7 @@ from typing import Any
 from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
+    KnowledgeCardData,
     PreferenceItem,
     ScriptData,
     UserContext,
@@ -291,6 +292,63 @@ class MemoryStore(ABC):
         Args:
             user_id: 用户唯一标识。
             doc_id: 文档唯一标识。
+
+        Returns:
+            bool: 是否成功删除。
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 知识卡片（技巧库）
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_knowledge_card(self, card: KnowledgeCardData) -> KnowledgeCardData:
+        """保存或更新知识卡片。
+
+        Args:
+            card: 知识卡片数据。
+
+        Returns:
+            KnowledgeCardData: 保存后的卡片数据。
+        """
+        ...
+
+    @abstractmethod
+    def list_knowledge_cards(
+        self, user_id: str, card_type: str | None = None, tag: str | None = None
+    ) -> list[KnowledgeCardData]:
+        """列出用户的知识卡片。
+
+        Args:
+            user_id: 用户唯一标识。
+            card_type: 可选的卡片类型过滤。
+            tag: 可选的标签过滤。
+
+        Returns:
+            list[KnowledgeCardData]: 卡片列表。
+        """
+        ...
+
+    @abstractmethod
+    def get_knowledge_card(self, user_id: str, card_id: str) -> KnowledgeCardData | None:
+        """获取单个知识卡片。
+
+        Args:
+            user_id: 用户唯一标识。
+            card_id: 卡片唯一标识。
+
+        Returns:
+            KnowledgeCardData: 卡片数据，不存在则返回 None。
+        """
+        ...
+
+    @abstractmethod
+    def delete_knowledge_card(self, user_id: str, card_id: str) -> bool:
+        """删除知识卡片。
+
+        Args:
+            user_id: 用户唯一标识。
+            card_id: 卡片唯一标识。
 
         Returns:
             bool: 是否成功删除。

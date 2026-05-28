@@ -19,6 +19,7 @@ from comedy_agent.core.config import settings
 from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
+    KnowledgeCardData,
     PreferenceItem,
     ScriptData,
     UserContext,
@@ -26,6 +27,7 @@ from comedy_agent.memory.models import (
 )
 from comedy_agent.memory.schema import (
     Base,
+    KnowledgeCard,
     UserConversation,
     UserDocument,
     UserPreference,
@@ -523,6 +525,116 @@ class SQLMemoryStore(MemoryStore):
             session.delete(row)
             session.commit()
             logger.debug("Deleted document record: %s", doc_id)
+            return True
+
+    # ------------------------------------------------------------------ #
+    # 知识卡片（技巧库）
+    # ------------------------------------------------------------------ #
+    def save_knowledge_card(self, card: KnowledgeCardData) -> KnowledgeCardData:
+        """保存或更新知识卡片。"""
+        with self._new_session() as session:
+            existing = (
+                session.query(KnowledgeCard)
+                .filter_by(card_id=card.card_id, user_id=card.user_id)
+                .first()
+            ) if card.card_id else None
+            if existing is None:
+                row = KnowledgeCard(
+                    card_id=card.card_id or uuid.uuid4().hex[:16],
+                    user_id=card.user_id,
+                    title=card.title,
+                    content=card.content,
+                    card_type=card.card_type,
+                    tags=card.tags,
+                    source_doc_id=card.source_doc_id,
+                )
+                session.add(row)
+            else:
+                existing.title = card.title
+                existing.content = card.content
+                existing.card_type = card.card_type
+                existing.tags = card.tags
+                existing.source_doc_id = card.source_doc_id
+            session.commit()
+            row = (
+                session.query(KnowledgeCard)
+                .filter_by(card_id=(row.card_id if existing is None else existing.card_id))
+                .first()
+            )
+            return KnowledgeCardData(
+                card_id=row.card_id,
+                user_id=row.user_id,
+                title=row.title,
+                content=row.content,
+                card_type=row.card_type,
+                tags=row.tags,
+                source_doc_id=row.source_doc_id,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def list_knowledge_cards(
+        self, user_id: str, card_type: str | None = None, tag: str | None = None
+    ) -> list[KnowledgeCardData]:
+        """列出用户的知识卡片，支持按类型和标签过滤。"""
+        with self._new_session() as session:
+            query = session.query(KnowledgeCard).filter_by(user_id=user_id)
+            if card_type:
+                query = query.filter_by(card_type=card_type)
+            if tag:
+                # SQLite JSON 数组包含查询（简单实现）
+                query = query.filter(KnowledgeCard.tags.like(f'%"{tag}"%'))
+            rows = query.order_by(KnowledgeCard.created_at.desc()).all()
+            return [
+                KnowledgeCardData(
+                    card_id=r.card_id,
+                    user_id=r.user_id,
+                    title=r.title,
+                    content=r.content,
+                    card_type=r.card_type,
+                    tags=r.tags,
+                    source_doc_id=r.source_doc_id,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def get_knowledge_card(self, user_id: str, card_id: str) -> KnowledgeCardData | None:
+        """获取单个知识卡片。"""
+        with self._new_session() as session:
+            row = (
+                session.query(KnowledgeCard)
+                .filter_by(card_id=card_id, user_id=user_id)
+                .first()
+            )
+            if row is None:
+                return None
+            return KnowledgeCardData(
+                card_id=row.card_id,
+                user_id=row.user_id,
+                title=row.title,
+                content=row.content,
+                card_type=row.card_type,
+                tags=row.tags,
+                source_doc_id=row.source_doc_id,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def delete_knowledge_card(self, user_id: str, card_id: str) -> bool:
+        """删除知识卡片。"""
+        with self._new_session() as session:
+            row = (
+                session.query(KnowledgeCard)
+                .filter_by(card_id=card_id, user_id=user_id)
+                .first()
+            )
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted knowledge card: %s", card_id)
             return True
 
     # ------------------------------------------------------------------ #

@@ -13,6 +13,7 @@ from comedy_agent.memory.medium_term import SQLMemoryStore
 from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
+    KnowledgeCardData,
     PreferenceItem,
     ScriptData,
     UserContext,
@@ -137,6 +138,23 @@ class UnifiedMemory(MemoryStore):
 
     def delete_document(self, user_id: str, doc_id: str) -> bool:
         return self._store.delete_document(user_id, doc_id)
+
+    # ------------------------------------------------------------------ #
+    # 知识卡片（技巧库）
+    # ------------------------------------------------------------------ #
+    def save_knowledge_card(self, card: KnowledgeCardData) -> KnowledgeCardData:
+        return self._store.save_knowledge_card(card)
+
+    def list_knowledge_cards(
+        self, user_id: str, card_type: str | None = None, tag: str | None = None
+    ) -> list[KnowledgeCardData]:
+        return self._store.list_knowledge_cards(user_id, card_type=card_type, tag=tag)
+
+    def get_knowledge_card(self, user_id: str, card_id: str) -> KnowledgeCardData | None:
+        return self._store.get_knowledge_card(user_id, card_id)
+
+    def delete_knowledge_card(self, user_id: str, card_id: str) -> bool:
+        return self._store.delete_knowledge_card(user_id, card_id)
 
     # ------------------------------------------------------------------ #
     # 高级接口：Token 预算控制的上下文文本

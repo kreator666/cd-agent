@@ -66,9 +66,13 @@ class AgentOrchestrator:
 
         注册新 Skill 后会重置内部 Agent 缓存，下次 ``run`` 时自动重建。
         如果 Orchestrator 指定了 model_name，会同步传播给 ComedySkill。
+        同时注入知识库检索器，使 Skill 内部也能检索 RAG。
         """
-        if isinstance(skill, ComedySkill) and self.model_name is not None:
-            skill.model_name = self.model_name
+        if isinstance(skill, ComedySkill):
+            if self.model_name is not None:
+                skill.model_name = self.model_name
+            if self.retriever is not None:
+                skill.retriever = self.retriever
         self.tools.append(skill)
         self._agent = None
         logger.info("Registered skill: %s", skill.name)

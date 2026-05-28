@@ -58,9 +58,16 @@ class JokeAnalyzerSkill(ComedySkill):
         self,
         content: str,
         analysis_type: str = "综合分析",
+        user_id: str | None = None,
     ) -> str:
+        query = content[:100]
+        docs = self._retrieve_knowledge(query, user_id)
+        knowledge_text = self._format_knowledge(docs)
+        system_prompt = self.SYSTEM_PROMPT
+        if knowledge_text:
+            system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
+            ("system", system_prompt),
             ("human", self._build_prompt(content, analysis_type)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
@@ -72,5 +79,6 @@ class JokeAnalyzerSkill(ComedySkill):
         self,
         content: str,
         analysis_type: str = "综合分析",
+        user_id: str | None = None,
     ) -> str:
-        return self._run(content, analysis_type)
+        return self._run(content, analysis_type, user_id)

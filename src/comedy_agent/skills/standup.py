@@ -73,9 +73,15 @@ class StandupSkill(ComedySkill):
         audience: str = "通用",
         density: str = "标准",
         perspective_count: int = 2,
+        user_id: str | None = None,
     ) -> str:
+        docs = self._retrieve_knowledge(topic, user_id)
+        knowledge_text = self._format_knowledge(docs)
+        system_prompt = self.SYSTEM_PROMPT
+        if knowledge_text:
+            system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
+            ("system", system_prompt),
             ("human", self._build_user_prompt(topic, style, duration, audience, density, perspective_count)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
@@ -93,5 +99,6 @@ class StandupSkill(ComedySkill):
         audience: str = "通用",
         density: str = "标准",
         perspective_count: int = 2,
+        user_id: str | None = None,
     ) -> str:
-        return self._run(topic, style, duration, audience, density, perspective_count)
+        return self._run(topic, style, duration, audience, density, perspective_count, user_id)

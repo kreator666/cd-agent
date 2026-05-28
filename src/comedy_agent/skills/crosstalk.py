@@ -66,9 +66,15 @@ class CrosstalkSkill(ComedySkill):
         style: str = "新相声",
         length: str = "中等",
         characters: str = "逗哏活泼、捧哏稳重",
+        user_id: str | None = None,
     ) -> str:
+        docs = self._retrieve_knowledge(topic, user_id)
+        knowledge_text = self._format_knowledge(docs)
+        system_prompt = self.SYSTEM_PROMPT
+        if knowledge_text:
+            system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
+            ("system", system_prompt),
             ("human", self._build_prompt(topic, style, length, characters)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
@@ -82,5 +88,6 @@ class CrosstalkSkill(ComedySkill):
         style: str = "新相声",
         length: str = "中等",
         characters: str = "逗哏活泼、捧哏稳重",
+        user_id: str | None = None,
     ) -> str:
-        return self._run(topic, style, length, characters)
+        return self._run(topic, style, length, characters, user_id)

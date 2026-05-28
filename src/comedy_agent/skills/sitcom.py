@@ -72,9 +72,16 @@ class SitcomSkill(ComedySkill):
         episode_theme: str,
         characters: str = "",
         scenes: int = 3,
+        user_id: str | None = None,
     ) -> str:
+        query = f"{scenario} {episode_theme}"
+        docs = self._retrieve_knowledge(query, user_id)
+        knowledge_text = self._format_knowledge(docs)
+        system_prompt = self.SYSTEM_PROMPT
+        if knowledge_text:
+            system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
+            ("system", system_prompt),
             ("human", self._build_prompt(scenario, episode_theme, characters, scenes)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
@@ -88,5 +95,6 @@ class SitcomSkill(ComedySkill):
         episode_theme: str,
         characters: str = "",
         scenes: int = 3,
+        user_id: str | None = None,
     ) -> str:
-        return self._run(scenario, episode_theme, characters, scenes)
+        return self._run(scenario, episode_theme, characters, scenes, user_id)

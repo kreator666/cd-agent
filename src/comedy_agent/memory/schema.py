@@ -48,6 +48,9 @@ class UserProfile(Base):
     scripts: Mapped[list["UserScript"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
+    documents: Mapped[list["UserDocument"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -137,3 +140,39 @@ class UserScript(Base):
 
     # Relationship
     user: Mapped["UserProfile"] = relationship(back_populates="scripts")
+
+
+# ------------------------------------------------------------------ #
+# UserDocument —— 用户上传的知识库文档
+# ------------------------------------------------------------------ #
+class UserDocument(Base):
+    """用户上传文档表。记录文档元数据及解析入库状态。"""
+
+    __tablename__ = "user_documents"
+
+    doc_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    doc_type: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="theory / case / mixed"
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), default="pending", nullable=False, comment="pending / ingested / failed"
+    )
+    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="documents")

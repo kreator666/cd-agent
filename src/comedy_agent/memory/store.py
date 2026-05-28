@@ -11,6 +11,7 @@ from typing import Any
 
 from comedy_agent.memory.models import (
     ConversationData,
+    DocumentData,
     PreferenceItem,
     ScriptData,
     UserContext,
@@ -240,5 +241,58 @@ class MemoryStore(ABC):
 
         Returns:
             UserContext: 包含画像、偏好、近期会话、近期作品的完整上下文。
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 用户文档（知识库上传）
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_document(self, document: DocumentData) -> DocumentData:
+        """保存或更新用户上传文档记录。
+
+        Args:
+            document: 文档数据。
+
+        Returns:
+            DocumentData: 保存后的文档数据（包含自动生成的 doc_id）。
+        """
+        ...
+
+    @abstractmethod
+    def list_documents(self, user_id: str) -> list[DocumentData]:
+        """列出用户上传的所有文档。
+
+        Args:
+            user_id: 用户唯一标识。
+
+        Returns:
+            list[DocumentData]: 文档列表，按创建时间倒序。
+        """
+        ...
+
+    @abstractmethod
+    def get_document(self, user_id: str, doc_id: str) -> DocumentData | None:
+        """获取单个文档记录。
+
+        Args:
+            user_id: 用户唯一标识。
+            doc_id: 文档唯一标识。
+
+        Returns:
+            DocumentData: 文档数据，不存在则返回 None。
+        """
+        ...
+
+    @abstractmethod
+    def delete_document(self, user_id: str, doc_id: str) -> bool:
+        """删除用户文档记录。
+
+        Args:
+            user_id: 用户唯一标识。
+            doc_id: 文档唯一标识。
+
+        Returns:
+            bool: 是否成功删除。
         """
         ...

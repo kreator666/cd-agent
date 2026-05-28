@@ -12,9 +12,11 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
 
+from comedy_agent.core.config import settings
 from comedy_agent.core.observability import get_metrics, get_tracer
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelFactory
+from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills.base import ComedySkill
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,7 @@ class AgentOrchestrator:
         self.memory = memory
         self.retriever = retriever
         self._agent: Any | None = None
+        self._user_vector_stores: dict[str, VectorStore] = {}
 
     # ------------------------------------------------------------------ #
     # Skill 管理
@@ -186,6 +189,26 @@ class AgentOrchestrator:
         )
         return self._agent
 
+    def _get_user_vector_store(self, user_id: str) -> VectorStore:
+        """获取或创建用户的个人知识库向量存储。"""
+        if user_id not in self._user_vector_stores:
+            self._user_vector_stores[user_id] = VectorStore(
+                collection_name=f"user_knowledge_{user_id}",
+                persist_path=str(settings.vector_db_path),
+            )
+        return self._user_vector_stores[user_id]
+
+    def _retrieve_user_knowledge(
+        self, query: str, user_id: str, top_k: int = 3
+    ) -> list[Any]:
+        """检索用户个人知识库。"""
+        try:
+            store = self._get_user_vector_store(user_id)
+            return store.search(query, top_k=top_k)
+        except Exception:
+            logger.debug("用户个人知识库检索失败", exc_info=True)
+            return []
+
     def _build_system_prompt(
         self, user_input: str, user_id: str | None = None
     ) -> str:
@@ -211,25 +234,44 @@ class AgentOrchestrator:
                     f"【关于用户结束】"
                 )
 
-        # 2. 注入知识库检索结果
+        # 2. 注入知识库检索结果（个人库优先 + 默认库）
+        all_docs: list[Any] = []
+
+        # 2.1 用户个人知识库
+        if user_id:
+            user_docs = self._retrieve_user_knowledge(user_input, user_id, top_k=3)
+            all_docs.extend(user_docs)
+
+        # 2.2 默认知识库
         if self.retriever is not None:
             try:
-                docs = self.retriever.retrieve(user_input, top_k=5)
-                if docs:
-                    knowledge_lines: list[str] = []
-                    for idx, doc in enumerate(docs, 1):
-                        source = doc.metadata.get("source", "未知来源")
-                        text = doc.page_content.strip().replace("\n", " ")
-                        knowledge_lines.append(f"[{idx}] 来源: {source}\n{text}")
-                    knowledge_text = "\n\n".join(knowledge_lines)
-                    parts.append(
-                        f"【知识库参考】\n"
-                        f"以下是与用户问题相关的喜剧行业知识，请在回答时参考：\n\n"
-                        f"{knowledge_text}\n"
-                        f"【知识库参考结束】"
-                    )
+                default_docs = self.retriever.retrieve(user_input, top_k=5)
+                all_docs.extend(default_docs)
             except Exception:
-                logger.debug("知识库检索失败，跳过注入", exc_info=True)
+                logger.debug("默认知识库检索失败，跳过注入", exc_info=True)
+
+        # 去重并格式化
+        if all_docs:
+            seen: set[str] = set()
+            unique_docs: list[Any] = []
+            for doc in all_docs:
+                key = doc.metadata.get("doc_id") or doc.page_content
+                if key and key not in seen:
+                    seen.add(key)
+                    unique_docs.append(doc)
+
+            knowledge_lines: list[str] = []
+            for idx, doc in enumerate(unique_docs[:6], 1):
+                source = doc.metadata.get("source", "未知来源")
+                text = doc.page_content.strip().replace("\n", " ")
+                knowledge_lines.append(f"[{idx}] 来源: {source}\n{text}")
+            knowledge_text = "\n\n".join(knowledge_lines)
+            parts.append(
+                f"【知识库参考】\n"
+                f"以下是与用户问题相关的喜剧行业知识，请在回答时参考：\n\n"
+                f"{knowledge_text}\n"
+                f"【知识库参考结束】"
+            )
 
         return "\n\n".join(parts)
 

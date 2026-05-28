@@ -385,6 +385,16 @@
                 <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
             </div>
 
+            <details class="preference-section" id="document-section">
+                <summary>我的知识库</summary>
+                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;">
+                    <input type="file" id="doc-upload-input" multiple style="font-size:0.75rem;" onchange="uploadDocuments()" />
+                    <div id="document-list">
+                        <div class="preference-empty">暂无文档</div>
+                    </div>
+                </div>
+            </details>
+
             <details class="preference-section" id="preference-section">
                 <summary>我的偏好</summary>
                 <div id="preference-list">
@@ -570,6 +580,66 @@
             }
         }
 
+        async function loadDocuments() {
+            const listEl = document.getElementById('document-list');
+            try {
+                const res = await fetch(`${API_BASE}/documents`, { headers: authHeaders() });
+                if (!res.ok) throw new Error('加载失败');
+                const data = await res.json();
+                const docs = data.documents || [];
+                if (docs.length === 0) {
+                    listEl.innerHTML = '<div class="preference-empty">暂无文档</div>';
+                    return;
+                }
+                listEl.innerHTML = '';
+                docs.forEach(d => {
+                    const item = document.createElement('div');
+                    item.className = 'preference-item';
+                    const statusColor = d.status === 'ingested' ? '#16c79a' : (d.status === 'failed' ? '#e94560' : '#999');
+                    const statusText = d.status === 'ingested' ? '已入库' : (d.status === 'failed' ? '失败' : '处理中');
+                    item.innerHTML = `<span class="pref-key" title="${d.filename}">${d.filename}</span><span style="color:${statusColor};font-size:0.7rem;">${statusText}</span><span style="color:#e94560;cursor:pointer;font-size:0.75rem;" onclick="deleteDocument('${d.doc_id}')">✕</span>`;
+                    listEl.appendChild(item);
+                });
+            } catch {
+                listEl.innerHTML = '<div class="preference-empty">加载失败</div>';
+            }
+        }
+
+        async function uploadDocuments() {
+            const input = document.getElementById('doc-upload-input');
+            if (!input.files || input.files.length === 0) return;
+            const formData = new FormData();
+            for (const file of input.files) {
+                formData.append('files', file);
+            }
+            try {
+                const res = await fetch(`${API_BASE}/documents/upload`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData,
+                });
+                if (!res.ok) throw new Error('上传失败');
+                input.value = '';
+                loadDocuments();
+            } catch (err) {
+                alert('上传失败: ' + err.message);
+            }
+        }
+
+        async function deleteDocument(docId) {
+            if (!confirm('确定删除该文档？')) return;
+            try {
+                const res = await fetch(`${API_BASE}/documents/${docId}`, {
+                    method: 'DELETE',
+                    headers: authHeaders(),
+                });
+                if (!res.ok) throw new Error('删除失败');
+                loadDocuments();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+
         async function loadPreferences() {
             const listEl = document.getElementById('preference-list');
             try {
@@ -611,6 +681,7 @@
         }
 
         loadConversations();
+        loadDocuments();
         loadPreferences();
         loadScripts();
         loadSkills();

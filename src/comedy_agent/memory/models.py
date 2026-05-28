@@ -61,6 +61,20 @@ class ScriptData(BaseModel):
 # ------------------------------------------------------------------ #
 # 聚合模型
 # ------------------------------------------------------------------ #
+class DocumentData(BaseModel):
+    """用户上传文档数据。"""
+
+    doc_id: str | None = Field(default=None, description="文档唯一标识，留空则自动生成")
+    user_id: str = Field(description="所属用户")
+    filename: str = Field(description="原始文件名")
+    doc_type: str | None = Field(default=None, description="文档类型：theory / case / mixed")
+    status: str = Field(default="pending", description="入库状态：pending / ingested / failed")
+    chunk_count: int | None = Field(default=None, description="分块数量")
+    error_msg: str | None = Field(default=None, description="错误信息")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
 class UserContext(BaseModel):
     """用户完整上下文（用于注入 Agent Prompt）。"""
 

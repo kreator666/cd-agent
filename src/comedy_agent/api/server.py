@@ -981,6 +981,27 @@ async def evaluate_output(request: EvaluateOutputRequest) -> EvaluateOutputRespo
 
 
 # ------------------------------------------------------------------ #
+# Debug 路由 —— 知识库检索调试
+# ------------------------------------------------------------------ #
+class DebugRetrieveRequest(BaseModel):
+    """检索调试请求。"""
+
+    query: str = Field(description="测试查询")
+
+
+@app.post("/debug/retrieve", tags=["debug"])
+async def debug_retrieve(
+    request: DebugRetrieveRequest,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """调试知识库检索：输入查询，返回检索到的文档和 Prompt 注入片段。"""
+    if state.orch is None:
+        raise HTTPException(status_code=503, detail="Orchestrator 未就绪")
+    result = state.orch.debug_retrieval(request.query, user_id=user_id)
+    return result
+
+
+# ------------------------------------------------------------------ #
 # 可观测性路由
 # ------------------------------------------------------------------ #
 @app.get("/metrics", tags=["observability"])

@@ -209,6 +209,70 @@ class AgentOrchestrator:
             logger.debug("用户个人知识库检索失败", exc_info=True)
             return []
 
+    def debug_retrieval(
+        self, query: str, user_id: str | None = None
+    ) -> dict[str, Any]:
+        """调试接口：返回知识库检索的完整中间结果。
+
+        Returns:
+            dict: 包含个人库结果、默认库结果、合并结果、Prompt 注入片段。
+        """
+        result: dict[str, Any] = {"query": query, "user_id": user_id}
+
+        # 1. 个人知识库
+        user_docs: list[Any] = []
+        if user_id:
+            user_docs = self._retrieve_user_knowledge(query, user_id, top_k=5)
+        result["personal_docs"] = [
+            {"content": d.page_content, "metadata": d.metadata}
+            for d in user_docs
+        ]
+
+        # 2. 默认知识库
+        default_docs: list[Any] = []
+        if self.retriever is not None:
+            try:
+                default_docs = self.retriever.retrieve(query, top_k=5)
+            except Exception as e:
+                result["default_error"] = str(e)
+        result["default_docs"] = [
+            {"content": d.page_content, "metadata": d.metadata}
+            for d in default_docs
+        ]
+
+        # 3. 合并去重
+        all_docs = user_docs + default_docs
+        seen: set[str] = set()
+        unique_docs: list[Any] = []
+        for doc in all_docs:
+            key = doc.metadata.get("doc_id") or doc.page_content
+            if key and key not in seen:
+                seen.add(key)
+                unique_docs.append(doc)
+        result["merged_docs"] = [
+            {"content": d.page_content, "metadata": d.metadata}
+            for d in unique_docs[:6]
+        ]
+
+        # 4. 模拟 Prompt 注入片段
+        if unique_docs:
+            knowledge_lines: list[str] = []
+            for idx, doc in enumerate(unique_docs[:6], 1):
+                source = doc.metadata.get("source", "未知来源")
+                text = doc.page_content.strip().replace("\n", " ")
+                knowledge_lines.append(f"[{idx}] 来源: {source}\n{text}")
+            knowledge_text = "\n\n".join(knowledge_lines)
+            result["prompt_injection"] = (
+                f"【知识库参考】\n"
+                f"以下是与用户问题相关的喜剧行业知识，请在回答时参考：\n\n"
+                f"{knowledge_text}\n"
+                f"【知识库参考结束】"
+            )
+        else:
+            result["prompt_injection"] = ""
+
+        return result
+
     def _build_system_prompt(
         self, user_input: str, user_id: str | None = None
     ) -> str:

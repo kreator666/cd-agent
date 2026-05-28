@@ -143,3 +143,66 @@ class TestStandupSkill:
             result = asyncio.run(skill._arun(topic="健身"))
 
             assert result == "async result"
+
+    def test_knowledge_injection(self, mock_llm):
+        """验证传入 user_id 时 Skill 会在 system prompt 中注入知识库。"""
+        from langchain_core.documents import Document
+        from langchain_core.prompts import ChatPromptTemplate
+
+        captured_messages = None
+        original_from_messages = ChatPromptTemplate.from_messages
+
+        def capture_from_messages(msgs):
+            nonlocal captured_messages
+            prompt = original_from_messages(msgs)
+            captured_messages = msgs
+            return prompt
+
+        mock_llm.return_value = "result with knowledge"
+        with patch(
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
+            return_value=mock_llm,
+        ):
+            with patch.object(ChatPromptTemplate, "from_messages", side_effect=capture_from_messages):
+                skill = StandupSkill()
+                # 注入 mock retriever
+                mock_retriever = MagicMock()
+                mock_retriever.retrieve.return_value = [
+                    Document(page_content="测试知识：脱口秀需要开场钩子", metadata={"source": "test.pdf"})
+                ]
+                skill.retriever = mock_retriever
+
+                skill._run(topic="职场", user_id="test_user")
+
+                assert captured_messages is not None
+                system_msg = captured_messages[0][1]
+                assert "【知识库参考】" in system_msg
+                assert "测试知识：脱口秀需要开场钩子" in system_msg
+                assert "test.pdf" in system_msg
+
+    def test_knowledge_injection_disabled_without_user_id(self, mock_llm):
+        """验证不传 user_id 且 retriever 为 None 时不会注入知识库。"""
+        from langchain_core.prompts import ChatPromptTemplate
+
+        captured_messages = None
+        original_from_messages = ChatPromptTemplate.from_messages
+
+        def capture_from_messages(msgs):
+            nonlocal captured_messages
+            prompt = original_from_messages(msgs)
+            captured_messages = msgs
+            return prompt
+
+        mock_llm.return_value = "result without knowledge"
+        with patch(
+            "comedy_agent.skills.standup.ModelFactory.get_model_with_fallback",
+            return_value=mock_llm,
+        ):
+            with patch.object(ChatPromptTemplate, "from_messages", side_effect=capture_from_messages):
+                skill = StandupSkill()
+                skill.retriever = None
+                skill._run(topic="职场")
+
+                assert captured_messages is not None
+                system_msg = captured_messages[0][1]
+                assert "【知识库参考】" not in system_msg

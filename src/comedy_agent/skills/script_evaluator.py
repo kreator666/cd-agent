@@ -65,9 +65,16 @@ class ScriptEvaluatorSkill(ComedySkill):
         self,
         script: str,
         criteria: str = "全部维度",
+        user_id: str | None = None,
     ) -> str:
+        query = script[:100]
+        docs = self._retrieve_knowledge(query, user_id)
+        knowledge_text = self._format_knowledge(docs)
+        system_prompt = self.SYSTEM_PROMPT
+        if knowledge_text:
+            system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
+            ("system", system_prompt),
             ("human", self._build_prompt(script, criteria)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
@@ -79,5 +86,6 @@ class ScriptEvaluatorSkill(ComedySkill):
         self,
         script: str,
         criteria: str = "全部维度",
+        user_id: str | None = None,
     ) -> str:
-        return self._run(script, criteria)
+        return self._run(script, criteria, user_id)

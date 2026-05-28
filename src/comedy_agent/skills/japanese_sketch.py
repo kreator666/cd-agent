@@ -78,9 +78,15 @@ class JapaneseSketchSkill(ComedySkill):
         duration: int = 5,
         character_type: str = "偏执",
         punchline_density: int = 4,
+        user_id: str | None = None,
     ) -> str:
+        docs = self._retrieve_knowledge(theme, user_id)
+        knowledge_text = self._format_knowledge(docs)
+        system_prompt = self.SYSTEM_PROMPT
+        if knowledge_text:
+            system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
+            ("system", system_prompt),
             ("human", self._build_prompt(theme, characters_count, setting, duration, character_type, punchline_density)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
@@ -96,5 +102,6 @@ class JapaneseSketchSkill(ComedySkill):
         duration: int = 5,
         character_type: str = "偏执",
         punchline_density: int = 4,
+        user_id: str | None = None,
     ) -> str:
-        return self._run(theme, characters_count, setting, duration, character_type, punchline_density)
+        return self._run(theme, characters_count, setting, duration, character_type, punchline_density, user_id)

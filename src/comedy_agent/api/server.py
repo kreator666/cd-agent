@@ -633,6 +633,7 @@ async def skill_standup(
                 "audience": request.audience,
                 "density": request.density,
                 "perspective_count": request.perspective_count,
+                "user_id": user_id,
             }
         )
         return StandupResponse(content=content)
@@ -668,6 +669,7 @@ async def skill_sketch(
                 "setting": request.setting,
                 "duration": request.duration,
                 "conflict_type": request.conflict_type,
+                "user_id": user_id,
             }
         )
         return SketchResponse(content=content)
@@ -702,6 +704,7 @@ async def skill_manzai(
                 "duration": request.duration,
                 "segments_count": request.segments_count,
                 "absurd_level": request.absurd_level,
+                "user_id": user_id,
             }
         )
         return ManzaiResponse(content=content)
@@ -738,6 +741,7 @@ async def skill_japanese_sketch(
                 "duration": request.duration,
                 "character_type": request.character_type,
                 "punchline_density": request.punchline_density,
+                "user_id": user_id,
             }
         )
         return JapaneseSketchResponse(content=content)

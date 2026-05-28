@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -21,10 +22,11 @@ from comedy_agent.core.observability import get_metrics, get_tracer, reset_obser
 from comedy_agent.evaluation.model_quality import ModelOutputEvaluator
 from comedy_agent.evaluation.script_quality import ScriptQualityEvaluator
 from comedy_agent.core.rate_limiter import get_rate_limiter
-from comedy_agent.memory.models import ScriptData
+from comedy_agent.memory.models import DocumentData, ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError, ModelFactory
 from comedy_agent.rag.feedback_loop import FeedbackLoop
+from comedy_agent.rag.ingest import KnowledgeIngestor
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills import (
@@ -37,6 +39,8 @@ from comedy_agent.skills import (
 )
 from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------ #
@@ -172,6 +176,24 @@ class FeedbackIngestResponse(BaseModel):
     script_ids: list[str] = Field(description="回流作品 ID 列表")
     skipped: list[str] = Field(description="已入库被跳过的作品 ID 列表")
     dry_run: bool = Field(description="是否为模拟运行")
+
+
+# ------------------------------------------------------------------ #
+# 文档管理请求/响应模型
+# ------------------------------------------------------------------ #
+class DocumentUploadResponse(BaseModel):
+    """文档上传响应。"""
+
+    doc_id: str = Field(description="文档标识")
+    filename: str = Field(description="文件名")
+    status: str = Field(description="处理状态")
+    chunks: int = Field(description="分块数量")
+
+
+class DocumentListResponse(BaseModel):
+    """文档列表响应。"""
+
+    documents: list[DocumentData] = Field(description="文档列表")
 
 
 # ------------------------------------------------------------------ #
@@ -708,6 +730,147 @@ async def delete_conversation(
     ok = state.memory.delete_conversation(user_id, session_id)
     if not ok:
         raise HTTPException(status_code=404, detail="会话不存在")
+    return SuccessResponse(success=True)
+
+
+# ------------------------------------------------------------------ #
+# 文档管理路由
+# ------------------------------------------------------------------ #
+@app.post("/documents/upload", response_model=list[DocumentUploadResponse], tags=["documents"])
+async def upload_documents(
+    files: list[UploadFile] = File(...),
+    user_id: str = Depends(get_current_user),
+) -> list[DocumentUploadResponse]:
+    """上传文档到个人知识库。支持多文件上传，自动解析并入库。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    results: list[DocumentUploadResponse] = []
+    upload_dir = Path(settings.data_dir) / "uploads" / user_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    for file in files:
+        safe_name = Path(file.filename or "unknown").name
+        save_path = upload_dir / safe_name
+        # 若重名则加序号
+        counter = 1
+        original_save_path = save_path
+        while save_path.exists():
+            stem = original_save_path.stem
+            suffix = original_save_path.suffix
+            save_path = upload_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+        # 保存文件
+        content = await file.read()
+        save_path.write_bytes(content)
+
+        # 创建文档记录
+        doc = DocumentData(
+            user_id=user_id,
+            filename=safe_name,
+            status="pending",
+        )
+        doc = state.memory.save_document(doc)
+
+        # 导入知识库
+        try:
+            ingestor = KnowledgeIngestor(
+                retriever=None,
+                chunk_strategy="paragraph",
+            )
+            # 使用用户个人向量库
+            user_vector_store = VectorStore(
+                collection_name=f"user_knowledge_{user_id}",
+                persist_path=str(settings.vector_db_path),
+            )
+            user_retriever = ComedyRetriever(vector_store=user_vector_store)
+            ingestor.retriever = user_retriever
+            result = ingestor.ingest_file(save_path)
+
+            # 更新状态
+            doc.status = "ingested"
+            doc.chunk_count = result.get("chunks", 0)
+            state.memory.save_document(doc)
+
+            results.append(
+                DocumentUploadResponse(
+                    doc_id=doc.doc_id,
+                    filename=safe_name,
+                    status="ingested",
+                    chunks=result.get("chunks", 0),
+                )
+            )
+        except Exception as e:
+            doc.status = "failed"
+            doc.error_msg = str(e)
+            state.memory.save_document(doc)
+            results.append(
+                DocumentUploadResponse(
+                    doc_id=doc.doc_id,
+                    filename=safe_name,
+                    status="failed",
+                    chunks=0,
+                )
+            )
+    return results
+
+
+@app.get("/documents", response_model=DocumentListResponse, tags=["documents"])
+async def list_documents(
+    user_id: str = Depends(get_current_user),
+) -> DocumentListResponse:
+    """列出当前用户上传的文档。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    docs = state.memory.list_documents(user_id)
+    return DocumentListResponse(documents=docs)
+
+
+@app.delete("/documents/{doc_id}", response_model=SuccessResponse, tags=["documents"])
+async def delete_document(
+    doc_id: str,
+    user_id: str = Depends(get_current_user),
+) -> SuccessResponse:
+    """删除指定文档，同时清理向量库中的对应内容。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    doc = state.memory.get_document(user_id, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    # 清理向量库（按 source_doc_id 或 doc_id 过滤）
+    try:
+        user_vector_store = VectorStore(
+            collection_name=f"user_knowledge_{user_id}",
+            persist_path=str(settings.vector_db_path),
+        )
+        # ChromaDB 元数据过滤：匹配 doc_id 或 source_doc_id
+        filter_conditions = {
+            "$or": [
+                {"doc_id": doc_id},
+                {"source_doc_id": doc_id},
+            ]
+        }
+        matched = user_vector_store.get_by_filter(filter_conditions)
+        if matched:
+            ids_to_delete = [m.metadata.get("doc_id") for m in matched if m.metadata.get("doc_id")]
+            if ids_to_delete:
+                user_vector_store.delete(ids_to_delete)
+    except Exception:
+        logger.warning("清理向量库文档失败: %s", doc_id, exc_info=True)
+
+    # 删除本地文件
+    upload_dir = Path(settings.data_dir) / "uploads" / user_id
+    file_path = upload_dir / doc.filename
+    if file_path.exists():
+        file_path.unlink()
+
+    # 删除数据库记录
+    ok = state.memory.delete_document(user_id, doc_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="文档不存在")
     return SuccessResponse(success=True)
 
 

@@ -12,6 +12,7 @@ from typing import Any
 from comedy_agent.memory.medium_term import SQLMemoryStore
 from comedy_agent.memory.models import (
     ConversationData,
+    DocumentData,
     PreferenceItem,
     ScriptData,
     UserContext,
@@ -121,6 +122,21 @@ class UnifiedMemory(MemoryStore):
         self, user_id: str, max_conversations: int = 3
     ) -> UserContext:
         return self._store.build_user_context(user_id, max_conversations)
+
+    # ------------------------------------------------------------------ #
+    # 用户文档（知识库上传）
+    # ------------------------------------------------------------------ #
+    def save_document(self, document: DocumentData) -> DocumentData:
+        return self._store.save_document(document)
+
+    def list_documents(self, user_id: str) -> list[DocumentData]:
+        return self._store.list_documents(user_id)
+
+    def get_document(self, user_id: str, doc_id: str) -> DocumentData | None:
+        return self._store.get_document(user_id, doc_id)
+
+    def delete_document(self, user_id: str, doc_id: str) -> bool:
+        return self._store.delete_document(user_id, doc_id)
 
     # ------------------------------------------------------------------ #
     # 高级接口：Token 预算控制的上下文文本

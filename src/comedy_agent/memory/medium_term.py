@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from comedy_agent.core.config import settings
 from comedy_agent.memory.models import (
     ConversationData,
+    DocumentData,
     PreferenceItem,
     ScriptData,
     UserContext,
@@ -26,6 +27,7 @@ from comedy_agent.memory.models import (
 from comedy_agent.memory.schema import (
     Base,
     UserConversation,
+    UserDocument,
     UserPreference,
     UserProfile,
     UserScript,
@@ -414,6 +416,113 @@ class SQLMemoryStore(MemoryStore):
             row.updated_at = self._now()
             session.commit()
             logger.debug("Rated script: %s -> %.1f", script_id, rating)
+            return True
+
+    # ------------------------------------------------------------------ #
+    # 用户文档（知识库上传）
+    # ------------------------------------------------------------------ #
+    def save_document(self, document: DocumentData) -> DocumentData:
+        """保存或更新用户上传文档记录。"""
+        with self._new_session() as session:
+            existing = (
+                session.query(UserDocument)
+                .filter_by(doc_id=document.doc_id, user_id=document.user_id)
+                .first()
+            )
+            if existing is None:
+                row = UserDocument(
+                    doc_id=document.doc_id or uuid.uuid4().hex[:16],
+                    user_id=document.user_id,
+                    filename=document.filename,
+                    doc_type=document.doc_type,
+                    status=document.status,
+                    chunk_count=document.chunk_count,
+                    error_msg=document.error_msg,
+                )
+                session.add(row)
+            else:
+                existing.filename = document.filename
+                existing.doc_type = document.doc_type
+                existing.status = document.status
+                existing.chunk_count = document.chunk_count
+                existing.error_msg = document.error_msg
+            session.commit()
+            row = (
+                session.query(UserDocument)
+                .filter_by(doc_id=(row.doc_id if existing is None else existing.doc_id))
+                .first()
+            )
+            return DocumentData(
+                doc_id=row.doc_id,
+                user_id=row.user_id,
+                filename=row.filename,
+                doc_type=row.doc_type,
+                status=row.status,
+                chunk_count=row.chunk_count,
+                error_msg=row.error_msg,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def list_documents(self, user_id: str) -> list[DocumentData]:
+        """列出用户上传的所有文档，按创建时间倒序。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(UserDocument)
+                .filter_by(user_id=user_id)
+                .order_by(UserDocument.created_at.desc())
+                .all()
+            )
+            return [
+                DocumentData(
+                    doc_id=r.doc_id,
+                    user_id=r.user_id,
+                    filename=r.filename,
+                    doc_type=r.doc_type,
+                    status=r.status,
+                    chunk_count=r.chunk_count,
+                    error_msg=r.error_msg,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def get_document(self, user_id: str, doc_id: str) -> DocumentData | None:
+        """获取单个文档记录。"""
+        with self._new_session() as session:
+            row = (
+                session.query(UserDocument)
+                .filter_by(doc_id=doc_id, user_id=user_id)
+                .first()
+            )
+            if row is None:
+                return None
+            return DocumentData(
+                doc_id=row.doc_id,
+                user_id=row.user_id,
+                filename=row.filename,
+                doc_type=row.doc_type,
+                status=row.status,
+                chunk_count=row.chunk_count,
+                error_msg=row.error_msg,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def delete_document(self, user_id: str, doc_id: str) -> bool:
+        """删除用户文档记录。"""
+        with self._new_session() as session:
+            row = (
+                session.query(UserDocument)
+                .filter_by(doc_id=doc_id, user_id=user_id)
+                .first()
+            )
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted document record: %s", doc_id)
             return True
 
     # ------------------------------------------------------------------ #

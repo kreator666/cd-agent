@@ -1,6 +1,7 @@
 """脱口秀创作 Skill —— 按模板规范输出。
 
-基于 data/write-output/standup-template.md 的规范进行创作。
+基于 data/write-output/standup-template.md 的规范进行创作，
+同时参考 data/knowledge/standup_skills.md 中的核心创作技巧。
 """
 
 from pathlib import Path
@@ -13,9 +14,13 @@ from comedy_agent.models.factory import ModelFactory
 from comedy_agent.core.config import settings
 
 
-# 加载模板文件
+# 加载创作模板
 _TEMPLATE_PATH = Path(settings.data_dir).parent / "data" / "write-output" / "standup-template.md"
 _STANDUP_TEMPLATE = _TEMPLATE_PATH.read_text(encoding="utf-8") if _TEMPLATE_PATH.exists() else ""
+
+# 加载核心创作技巧
+_SKILLS_PATH = Path(settings.data_dir).parent / "data" / "knowledge" / "standup_skills.md"
+_STANDUP_SKILLS = _SKILLS_PATH.read_text(encoding="utf-8") if _SKILLS_PATH.exists() else ""
 
 
 class StandupArgs(BaseModel):
@@ -32,7 +37,8 @@ class StandupArgs(BaseModel):
 class StandupSkill(ComedySkill):
     """脱口秀段子生成器。
 
-    基于 standup-template.md 规范输出，包含预期违背、反逻辑、角色视角、多视角选择。
+    基于 standup-template.md 规范与 standup_skills.md 核心技巧输出，
+    包含预期违背、反逻辑、角色视角。
     """
 
     task_type: str = "creative"
@@ -47,7 +53,10 @@ class StandupSkill(ComedySkill):
         "你是一位资深脱口秀编剧。\n\n"
         + _STANDUP_TEMPLATE
         + "\n\n"
-        "创作时严格按照上述模板规范执行，输出干净的脱口秀文本（不含结构标签）。"
+        "【核心创作技巧参考】\n\n"
+        + _STANDUP_SKILLS
+        + "\n\n"
+        "创作时严格按照上述模板规范和核心技巧执行，输出干净的脱口秀文本（不含结构标签）。"
     )
 
     def _build_user_prompt(self, topic: str, style: str, duration: int, audience: str, density: str, perspective_count: int) -> str:
@@ -60,7 +69,7 @@ class StandupSkill(ComedySkill):
             f"- 笑点密度：{density}\n\n"
             f"输出要求：\n"
             f"1. 正文不含【结构标签】，只输出干净的脱口秀文本\n"
-            f"2. 包含 {perspective_count} 个不同视角的版本供选择（自嘲式/愤怒式/荒诞式）\n"
+            f"2. 根据主题和风格，选择合适的叙事视角（第一人称自嘲、观察式、角色扮演等）\n"
             f"3. 每个笑点标注手法类型（预期违背/反逻辑/Call Back 等）\n"
             f"4. 结尾有自然 Call Back"
         )

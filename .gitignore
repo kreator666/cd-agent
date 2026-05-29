@@ -46,6 +46,7 @@ chroma_data/
 # Data and outputs
 data/
 !data/knowledge/
+!data/write-output/
 outputs/
 
 # Logs

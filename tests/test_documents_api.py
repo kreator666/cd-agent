@@ -80,6 +80,7 @@ class TestDocumentAPI:
                 res = client.post(
                     "/documents/upload",
                     files={"files": ("theory_test.txt", f, "text/plain")},
+                    data={"kind": "sketch", "style": "traditional", "chunk_strategy": "scene"},
                 )
             assert res.status_code == 200, res.text
             data = res.json()
@@ -87,12 +88,27 @@ class TestDocumentAPI:
             assert data[0]["filename"] == "theory_test.txt"
             assert data[0]["status"] == "ingested"
             assert data[0]["chunks"] == 3
+            assert data[0]["kind"] == "sketch"
+            assert data[0]["style"] == "traditional"
+            assert data[0]["chunk_strategy"] == "scene"
+            # 验证 ingestor 使用了正确的分块策略
+            mock_ingestor_cls.assert_called_once()
+            call_kwargs = mock_ingestor_cls.call_args.kwargs
+            assert call_kwargs.get("chunk_strategy") == "scene"
+            mock_ingestor.ingest_file.assert_called_once()
+            ingest_file_args = mock_ingestor.ingest_file.call_args
+            assert ingest_file_args.kwargs.get("kind") == "sketch"
+            assert ingest_file_args.kwargs.get("style") == "traditional"
 
         # 列出文档
         res2 = client.get("/documents")
         assert res2.status_code == 200
         docs = res2.json()["documents"]
-        assert any(d["filename"] == "theory_test.txt" for d in docs)
+        matched = [d for d in docs if d["filename"] == "theory_test.txt"]
+        assert len(matched) == 1
+        assert matched[0]["kind"] == "sketch"
+        assert matched[0]["style"] == "traditional"
+        assert matched[0]["chunk_strategy"] == "scene"
 
     def test_delete_document(self, client, temp_doc):
         """测试删除文档后列表中不再出现。"""

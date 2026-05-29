@@ -165,6 +165,15 @@ class UserDocument(Base):
     doc_type: Mapped[str | None] = mapped_column(
         String(32), nullable=True, comment="theory / case / mixed"
     )
+    kind: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="喜剧种类：standup / sketch / manzai / japanese_sketch / crosstalk / sitcom / general"
+    )
+    style: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="风格标识：traditional / modern / 自嘲 / 讽刺 / 愤怒式 / 荒诞式 / 日常观察"
+    )
+    chunk_strategy: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="分块策略：fixed / paragraph / scene / dialogue / subtitle"
+    )
     status: Mapped[str] = mapped_column(
         String(32), default="pending", nullable=False, comment="pending / ingested / failed"
     )

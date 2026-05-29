@@ -80,7 +80,7 @@ class JapaneseSketchSkill(ComedySkill):
         punchline_density: int = 4,
         user_id: str | None = None,
     ) -> str:
-        docs = self._retrieve_knowledge(theme, user_id)
+        docs = self._retrieve_knowledge(theme, user_id, kind="japanese_sketch")
         knowledge_text = self._format_knowledge(docs)
         system_prompt = self.SYSTEM_PROMPT
         if knowledge_text:

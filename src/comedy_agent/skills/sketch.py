@@ -75,7 +75,7 @@ class SketchSkill(ComedySkill):
         conflict_type: str = "执念vs现实",
         user_id: str | None = None,
     ) -> str:
-        docs = self._retrieve_knowledge(theme, user_id)
+        docs = self._retrieve_knowledge(theme, user_id, kind="sketch")
         knowledge_text = self._format_knowledge(docs)
         system_prompt = self.SYSTEM_PROMPT
         if knowledge_text:

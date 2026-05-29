@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -243,6 +243,10 @@ class DocumentUploadResponse(BaseModel):
 
     doc_id: str = Field(description="文档标识")
     filename: str = Field(description="文件名")
+    kind: str | None = Field(default=None, description="喜剧种类")
+    style: str | None = Field(default=None, description="风格标识")
+    chunk_strategy: str | None = Field(default=None, description="分块策略")
+    topic: str | None = Field(default=None, description="文档主题")
     status: str = Field(description="处理状态")
     chunks: int = Field(description="分块数量")
 
@@ -950,6 +954,10 @@ async def delete_conversation(
 @app.post("/documents/upload", response_model=list[DocumentUploadResponse], tags=["documents"])
 async def upload_documents(
     files: list[UploadFile] = File(...),
+    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
+    style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
+    chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
+    topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
     user_id: str = Depends(get_current_user),
 ) -> list[DocumentUploadResponse]:
     """上传文档到个人知识库。支持多文件上传，自动解析并入库。"""
@@ -980,6 +988,10 @@ async def upload_documents(
         doc = DocumentData(
             user_id=user_id,
             filename=safe_name,
+            kind=kind,
+            style=style,
+            chunk_strategy=chunk_strategy,
+            topic=topic,
             status="pending",
         )
         doc = state.memory.save_document(doc)
@@ -988,7 +1000,7 @@ async def upload_documents(
         try:
             ingestor = KnowledgeIngestor(
                 retriever=None,
-                chunk_strategy="paragraph",
+                chunk_strategy=chunk_strategy,
             )
             # 使用用户个人向量库
             user_vector_store = VectorStore(
@@ -997,7 +1009,7 @@ async def upload_documents(
             )
             user_retriever = ComedyRetriever(vector_store=user_vector_store)
             ingestor.retriever = user_retriever
-            result = ingestor.ingest_file(save_path)
+            result = ingestor.ingest_file(save_path, kind=kind, style=style)
 
             # 更新状态
             doc.status = "ingested"
@@ -1008,6 +1020,10 @@ async def upload_documents(
                 DocumentUploadResponse(
                     doc_id=doc.doc_id,
                     filename=safe_name,
+                    kind=kind,
+                    style=style,
+                    chunk_strategy=chunk_strategy,
+                    topic=topic,
                     status="ingested",
                     chunks=result.get("chunks", 0),
                 )
@@ -1030,6 +1046,10 @@ async def upload_documents(
                 DocumentUploadResponse(
                     doc_id=doc.doc_id,
                     filename=safe_name,
+                    kind=kind,
+                    style=style,
+                    chunk_strategy=chunk_strategy,
+                    topic=topic,
                     status="failed",
                     chunks=0,
                 )

@@ -24,7 +24,7 @@
         header a { color: #fff; text-decoration: none; font-size: 0.875rem; opacity: 0.8; transition: opacity 0.2s; }
         header a:hover { opacity: 1; }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 2rem auto;
             padding: 0 1rem;
         }
@@ -44,6 +44,123 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .upload-area h3 { margin-bottom: 0.75rem; }
+        .upload-hint { font-size: 0.875rem; color: #666; margin-bottom: 1rem; }
+        .file-input-wrap {
+            border: 2px dashed #ccc;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            margin-bottom: 1rem;
+        }
+        .file-input-wrap:hover { border-color: #4a90d9; }
+        .file-input-wrap input { display: none; }
+
+        .config-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .config-row label {
+            font-size: 0.8125rem;
+            color: #555;
+            font-weight: 500;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        .config-row select,
+        .config-row input {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            min-width: 140px;
+        }
+
+        .pending-list {
+            margin-top: 1rem;
+        }
+        .pending-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .pending-item .fname {
+            font-size: 0.875rem;
+            font-weight: 500;
+            min-width: 180px;
+            flex: 1;
+        }
+        .pending-item select,
+        .pending-item input {
+            padding: 0.375rem 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 0.25rem;
+            font-size: 0.8125rem;
+        }
+
+        .btn-primary {
+            background: #1a1a2e;
+            color: #fff;
+            border: none;
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.5rem;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #2d2d44; }
+        .btn-primary:disabled { background: #999; cursor: not-allowed; }
+
+        .progress-area {
+            margin-top: 1rem;
+        }
+        .progress-item {
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 0.875rem 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .progress-item .p-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .progress-item .p-fname {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .progress-item .p-status {
+            font-size: 0.75rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+        .p-status.pending { background: #fff3cd; color: #856404; }
+        .p-status.uploading { background: #e3f2fd; color: #0d47a1; }
+        .p-status.parsing { background: #e3f2fd; color: #0d47a1; }
+        .p-status.chunking { background: #e8f5e9; color: #1b5e20; }
+        .p-status.embedding { background: #e8f5e9; color: #1b5e20; }
+        .p-status.done { background: #d4edda; color: #155724; }
+        .p-status.error { background: #f8d7da; color: #721c24; }
+
+        .p-steps {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: #888;
+        }
+        .p-steps span { display: flex; align-items: center; gap: 0.25rem; }
+        .p-steps .active { color: #1a1a2e; font-weight: 600; }
+        .p-steps .done { color: #28a745; }
+
         .doc-list {
             background: #fff;
             border-radius: 0.75rem;
@@ -55,11 +172,30 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0.75rem;
+            padding: 0.875rem 0.75rem;
             border-bottom: 1px solid #f0f0f0;
             font-size: 0.9375rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
         }
         .doc-item:last-child { border-bottom: none; }
+        .doc-item .info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+        .doc-item .fname { font-weight: 500; }
+        .doc-item .tag {
+            font-size: 0.6875rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        .doc-item .tag.strategy { background: #f3e5f5; color: #7b1fa2; }
+        .doc-item .tag.style { background: #e8f5e9; color: #2e7d32; }
         .doc-item .status {
             font-size: 0.75rem;
             padding: 0.125rem 0.5rem;
@@ -83,24 +219,81 @@
 </head>
 <body>
     <header>
-        <h1>🎤 Comedy Agent</h1>
+        <h1>Comedy Agent</h1>
         <div style="display:flex;align-items:center;gap:1rem;">
-            <a href="/static/index.html">💬 创作</a>
-            <a href="/static/skills.html">🛠 Skill 管理</a>
+            <a href="/static/index.html">创作</a>
+            <a href="/static/skills.html">Skill 管理</a>
             <a href="/static/me.html">我的</a>
             <button onclick="logout()" style="font-size:0.75rem;padding:0.25rem 0.75rem;background:#e94560;color:#fff;border:none;border-radius:0.375rem;cursor:pointer;">退出</button>
         </div>
     </header>
     <div class="container">
         <div class="page-title">
-            <span>📚 我的知识库</span>
-            <a href="/static/me.html" style="font-size:0.875rem;color:#666;text-decoration:none;">← 返回</a>
+            <span>我的知识库</span>
+            <a href="/static/me.html" style="font-size:0.875rem;color:#666;text-decoration:none;">返回</a>
         </div>
+
         <div class="upload-area">
             <h3>上传文档</h3>
-            <p style="font-size:0.875rem;color:#666;margin-bottom:0.75rem;">支持 PDF、Word、Markdown、纯文本等格式</p>
-            <input type="file" id="doc-upload-input" multiple onchange="uploadDocuments()" />
+            <p class="upload-hint">支持 PDF、Word、Markdown、纯文本、SRT/ASS/VTT 字幕等格式</p>
+
+            <div class="file-input-wrap" onclick="document.getElementById('doc-upload-input').click()">
+                <div style="font-size:2rem;color:#ccc;margin-bottom:0.5rem;">+</div>
+                <div style="font-size:0.875rem;color:#666;">点击选择文件（支持多选）</div>
+                <input type="file" id="doc-upload-input" multiple accept=".pdf,.docx,.doc,.txt,.md,.html,.srt,.ass,.vtt" onchange="onFilesSelected()" />
+            </div>
+
+            <div class="config-row">
+                <div>
+                    <label>默认种类</label>
+                    <select id="default-kind">
+                        <option value="">通用</option>
+                        <option value="standup">脱口秀</option>
+                        <option value="crosstalk">相声</option>
+                        <option value="sketch">小品</option>
+                        <option value="sitcom">情景喜剧</option>
+                        <option value="manzai">漫才</option>
+                        <option value="japanese_sketch">日式短剧</option>
+                    </select>
+                </div>
+                <div>
+                    <label>默认主题</label>
+                    <input type="text" id="default-topic" list="topic-options" placeholder="如：职场加班、相亲经历" />
+                    <datalist id="topic-options"></datalist>
+                </div>
+                <div>
+                    <label>默认风格</label>
+                    <input type="text" id="default-style" list="style-options" placeholder="支持自定义，如：传统 / 自嘲 / 讽刺" />
+                    <datalist id="style-options">
+                        <option value="traditional"></option>
+                        <option value="modern"></option>
+                        <option value="自嘲"></option>
+                        <option value="讽刺"></option>
+                        <option value="愤怒式"></option>
+                        <option value="荒诞式"></option>
+                        <option value="日常观察"></option>
+                    </datalist>
+                </div>
+                <div>
+                    <label>默认分块策略</label>
+                    <select id="default-strategy">
+                        <option value="paragraph">按段落（推荐）</option>
+                        <option value="scene">按场景（剧本）</option>
+                        <option value="dialogue">按对话（相声/小品）</option>
+                        <option value="subtitle">按字幕（视频字幕）</option>
+                        <option value="fixed">固定大小</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="pending-area" style="display:none;">
+                <div class="pending-list" id="pending-list"></div>
+                <button class="btn-primary" id="upload-btn" onclick="startUpload()">开始上传</button>
+            </div>
+
+            <div class="progress-area" id="progress-area" style="display:none;"></div>
         </div>
+
         <div class="doc-list">
             <h3>文档列表</h3>
             <div id="document-list">
@@ -108,11 +301,14 @@
             </div>
         </div>
     </div>
+
     <script>
         const API_BASE = window.location.origin;
         const token = localStorage.getItem('token');
         const currentUserId = localStorage.getItem('user_id');
         if (!token || !currentUserId) { window.location.href = '/static/login.html'; }
+
+        let pendingFiles = [];
 
         function authHeaders() {
             return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
@@ -123,6 +319,153 @@
             window.location.href = '/static/login.html';
         }
 
+        function onFilesSelected() {
+            const input = document.getElementById('doc-upload-input');
+            if (!input.files || input.files.length === 0) return;
+            const defaultKind = document.getElementById('default-kind').value;
+            const defaultStyle = document.getElementById('default-style').value;
+            const defaultStrategy = document.getElementById('default-strategy').value;
+
+            const defaultTopic = document.getElementById('default-topic').value;
+            for (const file of input.files) {
+                pendingFiles.push({
+                    file: file,
+                    kind: defaultKind,
+                    style: defaultStyle,
+                    chunk_strategy: defaultStrategy,
+                    topic: defaultTopic,
+                });
+            }
+            input.value = '';
+            renderPendingList();
+        }
+
+        function renderPendingList() {
+            const area = document.getElementById('pending-area');
+            const list = document.getElementById('pending-list');
+            if (pendingFiles.length === 0) {
+                area.style.display = 'none';
+                return;
+            }
+            area.style.display = 'block';
+            list.innerHTML = pendingFiles.map((item, idx) => `
+                <div class="pending-item">
+                    <span class="fname">${escapeHtml(item.file.name)}</span>
+                    <select onchange="pendingFiles[${idx}].kind=this.value">
+                        <option value="" ${item.kind===''?'selected':''}>通用</option>
+                        <option value="standup" ${item.kind==='standup'?'selected':''}>脱口秀</option>
+                        <option value="crosstalk" ${item.kind==='crosstalk'?'selected':''}>相声</option>
+                        <option value="sketch" ${item.kind==='sketch'?'selected':''}>小品</option>
+                        <option value="sitcom" ${item.kind==='sitcom'?'selected':''}>情景喜剧</option>
+                        <option value="manzai" ${item.kind==='manzai'?'selected':''}>漫才</option>
+                        <option value="japanese_sketch" ${item.kind==='japanese_sketch'?'selected':''}>日式短剧</option>
+                    </select>
+                    <input type="text" list="topic-options" placeholder="主题" value="${escapeHtml(item.topic||'')}" onchange="pendingFiles[${idx}].topic=this.value" style="width:120px;" />
+                    <input type="text" list="style-options" placeholder="风格" value="${escapeHtml(item.style||'')}" onchange="pendingFiles[${idx}].style=this.value" style="width:100px;" />
+                    <select onchange="pendingFiles[${idx}].chunk_strategy=this.value">
+                        <option value="paragraph" ${item.chunk_strategy==='paragraph'?'selected':''}>按段落</option>
+                        <option value="scene" ${item.chunk_strategy==='scene'?'selected':''}>按场景</option>
+                        <option value="dialogue" ${item.chunk_strategy==='dialogue'?'selected':''}>按对话</option>
+                        <option value="subtitle" ${item.chunk_strategy==='subtitle'?'selected':''}>按字幕</option>
+                        <option value="fixed" ${item.chunk_strategy==='fixed'?'selected':''}>固定大小</option>
+                    </select>
+                    <span class="del-btn" onclick="removePending(${idx})" style="cursor:pointer;color:#e94560;">✕</span>
+                </div>
+            `).join('');
+        }
+
+        function removePending(idx) {
+            pendingFiles.splice(idx, 1);
+            renderPendingList();
+        }
+
+        async function startUpload() {
+            if (pendingFiles.length === 0) return;
+            const btn = document.getElementById('upload-btn');
+            btn.disabled = true;
+            const progressArea = document.getElementById('progress-area');
+            progressArea.style.display = 'block';
+
+            const progresses = pendingFiles.map((item, idx) => ({
+                idx,
+                fname: item.file.name,
+                status: 'pending',
+                step: 0,
+            }));
+
+            function renderProgress() {
+                const steps = ['待上传', '上传中', '解析中', '分块中', 'Embedding入库'];
+                progressArea.innerHTML = progresses.map(p => `
+                    <div class="progress-item">
+                        <div class="p-header">
+                            <span class="p-fname">${escapeHtml(p.fname)}</span>
+                            <span class="p-status ${p.status}">${
+                                p.status==='done'?'已完成':
+                                p.status==='error'?'失败':
+                                p.status==='uploading'?'上传中':
+                                p.status==='parsing'?'解析中':
+                                p.status==='chunking'?'分块中':
+                                p.status==='embedding'?'入库中':'待上传'
+                            }</span>
+                        </div>
+                        <div class="p-steps">
+                            ${steps.map((s, i) => `<span class="${i < p.step ? 'done' : (i === p.step ? 'active' : '')}">${i < p.step ? '✓' : (i === p.step ? '●' : '○')} ${s}</span>`).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            }
+            renderProgress();
+
+            for (let i = 0; i < pendingFiles.length; i++) {
+                const item = pendingFiles[i];
+                progresses[i].status = 'uploading';
+                progresses[i].step = 1;
+                renderProgress();
+
+                const formData = new FormData();
+                formData.append('files', item.file);
+                if (item.kind) formData.append('kind', item.kind);
+                if (item.style) formData.append('style', item.style);
+                if (item.topic) formData.append('topic', item.topic);
+                formData.append('chunk_strategy', item.chunk_strategy);
+
+                try {
+                    progresses[i].status = 'parsing';
+                    progresses[i].step = 2;
+                    renderProgress();
+
+                    // 模拟解析/分块/入库的进度感（实际是一个请求完成）
+                    await new Promise(r => setTimeout(r, 300));
+                    progresses[i].status = 'chunking';
+                    progresses[i].step = 3;
+                    renderProgress();
+                    await new Promise(r => setTimeout(r, 300));
+                    progresses[i].status = 'embedding';
+                    progresses[i].step = 4;
+                    renderProgress();
+
+                    const res = await fetch(`${API_BASE}/documents/upload`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData,
+                    });
+                    if (!res.ok) throw new Error('上传失败');
+
+                    progresses[i].status = 'done';
+                    progresses[i].step = 5;
+                    renderProgress();
+                } catch (err) {
+                    progresses[i].status = 'error';
+                    renderProgress();
+                }
+            }
+
+            pendingFiles = [];
+            renderPendingList();
+            btn.disabled = false;
+            loadDocuments();
+        }
+
         async function loadDocuments() {
             const listEl = document.getElementById('document-list');
             try {
@@ -130,6 +473,7 @@
                 if (!res.ok) throw new Error('加载失败');
                 const data = await res.json();
                 const docs = data.documents || [];
+                updateTopicOptions(docs);
                 if (docs.length === 0) {
                     listEl.innerHTML = '<div class="empty">暂无文档</div>';
                     return;
@@ -141,7 +485,21 @@
                     const statusClass = d.status;
                     const statusText = d.status === 'ingested' ? '已入库' : (d.status === 'failed' ? '失败' : '处理中');
                     const errorTip = d.error_msg ? ` title="${d.error_msg.replace(/"/g, '&quot;')}"` : '';
-                    item.innerHTML = `<span>${escapeHtml(d.filename)}</span><div class="actions"><span class="status ${statusClass}"${errorTip}>${statusText}</span><span class="del-btn" onclick="deleteDocument('${d.doc_id}')">✕</span></div>`;
+                    const kindTag = d.kind ? `<span class="tag">${kindLabel(d.kind)}</span>` : '';
+                    const topicTag = d.topic ? `<span class="tag" style="background:#fff3e0;color:#e65100;">${escapeHtml(d.topic)}</span>` : '';
+                    const styleTag = d.style ? `<span class="tag style">${escapeHtml(d.style)}</span>` : '';
+                    const strategyTag = d.chunk_strategy ? `<span class="tag strategy">${strategyLabel(d.chunk_strategy)}</span>` : '';
+                    item.innerHTML = `
+                        <div class="info">
+                            <span class="fname">${escapeHtml(d.filename)}</span>
+                            ${kindTag}${topicTag}${styleTag}${strategyTag}
+                            <span style="font-size:0.75rem;color:#999;">${d.chunk_count ? d.chunk_count + ' 块' : ''}</span>
+                        </div>
+                        <div class="actions">
+                            <span class="status ${statusClass}"${errorTip}>${statusText}</span>
+                            <span class="del-btn" onclick="deleteDocument('${d.doc_id}')">✕</span>
+                        </div>
+                    `;
                     listEl.appendChild(item);
                 });
             } catch {
@@ -149,23 +507,19 @@
             }
         }
 
-        async function uploadDocuments() {
-            const input = document.getElementById('doc-upload-input');
-            if (!input.files || input.files.length === 0) return;
-            const formData = new FormData();
-            for (const file of input.files) { formData.append('files', file); }
-            try {
-                const res = await fetch(`${API_BASE}/documents/upload`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formData,
-                });
-                if (!res.ok) throw new Error('上传失败');
-                input.value = '';
-                loadDocuments();
-            } catch (err) {
-                alert('上传失败: ' + err.message);
-            }
+        function kindLabel(k) {
+            const map = {
+                standup: '脱口秀', crosstalk: '相声', sketch: '小品',
+                sitcom: '情景喜剧', manzai: '漫才', japanese_sketch: '日式短剧',
+            };
+            return map[k] || k;
+        }
+        function strategyLabel(s) {
+            const map = {
+                paragraph: '按段落', scene: '按场景', dialogue: '按对话',
+                subtitle: '按字幕', fixed: '固定大小',
+            };
+            return map[s] || s;
         }
 
         async function deleteDocument(docId) {

@@ -70,7 +70,7 @@ class ManzaiSkill(ComedySkill):
         absurd_level: str = "标准",
         user_id: str | None = None,
     ) -> str:
-        docs = self._retrieve_knowledge(topic, user_id)
+        docs = self._retrieve_knowledge(topic, user_id, kind="manzai")
         knowledge_text = self._format_knowledge(docs)
         system_prompt = self.SYSTEM_PROMPT
         if knowledge_text:

@@ -34,7 +34,12 @@ class ComedySkill(BaseTool, ABC):
     _user_vector_stores: dict[str, VectorStore] = {}
 
     def _retrieve_knowledge(
-        self, query: str, user_id: str | None = None, top_k: int = 5
+        self,
+        query: str,
+        user_id: str | None = None,
+        top_k: int = 5,
+        kind: str | None = None,
+        style: str | None = None,
     ) -> list[Any]:
         """检索默认知识库 + 用户个人知识库。
 
@@ -42,17 +47,28 @@ class ComedySkill(BaseTool, ABC):
             query: 检索查询（通常用 topic/theme）。
             user_id: 可选用户标识，用于检索个人知识库。
             top_k: 默认库召回数量。
+            kind: 喜剧种类过滤，如 "standup" / "sketch" / "manzai"。
+            style: 风格过滤，如 "traditional" / "modern" / "自嘲"。
 
         Returns:
             去重后的 Document 列表。
         """
+        # 构建 ChromaDB filter
+        filter_dict: dict[str, Any] | None = None
+        if kind or style:
+            filter_dict = {}
+            if kind:
+                filter_dict["kind"] = kind
+            if style:
+                filter_dict["style"] = style
+
         all_docs: list[Any] = []
 
         # 1. 用户个人知识库
         if user_id:
             try:
                 store = self._get_user_vector_store(user_id)
-                user_docs = store.search(query, top_k=3)
+                user_docs = store.search(query, top_k=3, filter_dict=filter_dict)
                 all_docs.extend(user_docs)
             except Exception:
                 pass
@@ -60,7 +76,7 @@ class ComedySkill(BaseTool, ABC):
         # 2. 默认知识库
         if self.retriever is not None:
             try:
-                default_docs = self.retriever.retrieve(query, top_k=top_k)
+                default_docs = self.retriever.retrieve(query, top_k=top_k, filter_dict=filter_dict)
                 all_docs.extend(default_docs)
             except Exception:
                 pass

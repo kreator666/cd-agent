@@ -125,11 +125,18 @@ class KnowledgeIngestor:
         logger.info("导入完成: %s", result)
         return result
 
-    def ingest_file(self, file_path: str | Path) -> dict[str, Any]:
+    def ingest_file(
+        self,
+        file_path: str | Path,
+        kind: str | None = None,
+        style: str | None = None,
+    ) -> dict[str, Any]:
         """导入单个文件。
 
         Args:
             file_path: 文件路径。
+            kind: 喜剧种类标识，如 "standup" / "sketch" / "manzai"。
+            style: 风格标识，如 "traditional" / "modern" / "自嘲"。
 
         Returns:
             dict: 导入统计信息。
@@ -139,7 +146,7 @@ class KnowledgeIngestor:
             raise FileNotFoundError(f"文件不存在: {path}")
 
         raw_docs = DocumentLoader.load(path)
-        chunks = self._chunk_documents(raw_docs)
+        chunks = self._chunk_documents(raw_docs, kind=kind, style=style)
         self.retriever.ingest(chunks)
 
         return {
@@ -151,13 +158,27 @@ class KnowledgeIngestor:
     # ------------------------------------------------------------------ #
     # 分块
     # ------------------------------------------------------------------ #
-    def _chunk_documents(self, documents: list[Document]) -> list[Document]:
-        """根据策略分块。"""
+    def _chunk_documents(
+        self,
+        documents: list[Document],
+        kind: str | None = None,
+        style: str | None = None,
+    ) -> list[Document]:
+        """根据策略分块，并附加 kind/style metadata。"""
         if self.chunk_strategy == "fixed":
-            return DocumentChunker.split_fixed(
+            chunks = DocumentChunker.split_fixed(
                 documents, chunk_size=self.chunk_size, overlap=self.chunk_overlap
             )
-        return DocumentChunker.auto_split(documents, strategy=self.chunk_strategy)
+        else:
+            chunks = DocumentChunker.auto_split(documents, strategy=self.chunk_strategy)
+
+        # 为每个 chunk 附加 kind/style 标识
+        for chunk in chunks:
+            if kind:
+                chunk.metadata["kind"] = kind
+            if style:
+                chunk.metadata["style"] = style
+        return chunks
 
     # ------------------------------------------------------------------ #
     # 快捷方法：导入默认知识库

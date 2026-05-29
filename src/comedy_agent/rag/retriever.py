@@ -149,6 +149,7 @@ class ComedyRetriever:
         vector_top_k: int | None = None,
         bm25_top_k: int | None = None,
         use_cache: bool = True,
+        filter_dict: dict[str, Any] | None = None,
     ) -> list[Document]:
         """执行混合检索并返回重排序后的结果。
 
@@ -158,6 +159,7 @@ class ComedyRetriever:
             vector_top_k: 向量检索召回数量，为 ``None`` 时取 ``top_k * 2``。
             bm25_top_k: BM25 检索召回数量，为 ``None`` 时取 ``top_k * 2``。
             use_cache: 是否使用缓存。
+            filter_dict: ChromaDB where 过滤条件，用于按 kind/style 等字段筛选。
 
         Returns:
             list[Document]: 按相关性排序的文档列表。
@@ -168,12 +170,12 @@ class ComedyRetriever:
         with tracer.span(
             "retriever.retrieve",
             input_data={"query": query[:200], "top_k": top_k},
-            metadata={"use_cache": use_cache},
+            metadata={"use_cache": use_cache, "filter": filter_dict},
         ) as span:
-            # 尝试读取缓存
+            # 尝试读取缓存（filter 不同则缓存键不同）
             cache_key = None
             if use_cache and self.cache is not None:
-                cache_key = self._make_cache_key(query, top_k, vector_top_k, bm25_top_k)
+                cache_key = self._make_cache_key(query, top_k, vector_top_k, bm25_top_k, filter_dict)
                 cached = self.cache.get_json(cache_key)
                 if cached is not None:
                     logger.debug("缓存命中: %s", cache_key)
@@ -186,8 +188,8 @@ class ComedyRetriever:
             vec_k = vector_top_k or top_k * 2
             bm25_k = bm25_top_k or top_k * 2
 
-            # 1. 向量检索召回
-            vec_results = self.vector_store.search(query, top_k=vec_k)
+            # 1. 向量检索召回（支持过滤）
+            vec_results = self.vector_store.search(query, top_k=vec_k, filter_dict=filter_dict)
             logger.debug("向量召回 %d 条", len(vec_results))
             metrics.record("retriever.vector_results", len(vec_results))
 
@@ -232,9 +234,10 @@ class ComedyRetriever:
             return reranked
 
     @staticmethod
-    def _make_cache_key(query: str, top_k: int, vector_top_k: int | None, bm25_top_k: int | None) -> str:
+    def _make_cache_key(query: str, top_k: int, vector_top_k: int | None, bm25_top_k: int | None, filter_dict: dict[str, Any] | None = None) -> str:
         """生成检索缓存键。"""
-        raw = f"retrieve:{query}:{top_k}:{vector_top_k}:{bm25_top_k}"
+        filter_str = str(sorted(filter_dict.items())) if filter_dict else ""
+        raw = f"retrieve:{query}:{top_k}:{vector_top_k}:{bm25_top_k}:{filter_str}"
         return "rag:" + hashlib.md5(raw.encode()).hexdigest()
 
     # ------------------------------------------------------------------ #

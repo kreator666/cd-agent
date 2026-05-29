@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from typing import Any
 
 from langchain.agents import create_agent
@@ -20,6 +22,12 @@ from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills.base import ComedySkill
 
 logger = logging.getLogger(__name__)
+
+# 技能指定指令正则：匹配 "使用 xxx 技能" / "用 xxx 技能" / "使用 xxx"
+_SKILL_DIRECTIVE_RE = re.compile(
+    r"(?:使用|用)\s*(\w+)(?:\s*技能)?\s*(?:来|去)?\s*",
+    re.IGNORECASE,
+)
 
 DEFAULT_SYSTEM_PROMPT = (
     "你是一个喜剧创作助手，擅长根据用户需求调用合适的创作工具完成脱口秀、相声、"
@@ -343,6 +351,124 @@ class AgentOrchestrator:
 
         return "\n\n".join(parts)
 
+    # ------------------------------------------------------------------ #
+    # 技能指令解析与直接调用
+    # ------------------------------------------------------------------ #
+    def _parse_skill_directive(self, user_input: str) -> tuple[str | None, str]:
+        """解析用户输入中的技能指定指令。
+
+        匹配模式：
+        - "使用 xxx 技能 来写..."
+        - "用 xxx 技能 来写..."
+        - "使用 xxx 来写..."
+
+        Returns:
+            (skill_name, actual_request)：skill_name 为 None 表示未指定技能。
+        """
+        match = _SKILL_DIRECTIVE_RE.search(user_input)
+        if not match:
+            return None, user_input
+
+        skill_name = match.group(1)
+        # 去掉匹配到的指令部分
+        actual_request = user_input[: match.start()] + user_input[match.end() :]
+        actual_request = actual_request.strip("，,。. ")
+        return skill_name, actual_request
+
+    def _find_skill(self, name: str) -> BaseTool | None:
+        """按名称查找已注册的 Skill。"""
+        for tool in self.tools:
+            if getattr(tool, "name", None) == name:
+                return tool
+        return None
+
+    def _extract_skill_args(
+        self, skill: BaseTool, user_request: str
+    ) -> dict[str, Any]:
+        """用 LLM 将用户请求解析为技能参数。
+
+        若解析失败则兜底：将用户请求作为第一个必填参数传入。
+        """
+        schema = getattr(skill, "args_schema", None)
+        if schema is None:
+            return {"input": user_request}
+
+        # 收集参数描述
+        params_info: list[str] = []
+        first_required: str | None = None
+        for field_name, field_info in schema.model_fields.items():
+            if field_name in ("user_id",):
+                continue
+            desc = field_info.description or ""
+            required = field_info.is_required()
+            default = field_info.default
+            if required and first_required is None:
+                first_required = field_name
+            req_mark = "(必填)" if required else f"(默认: {default})"
+            params_info.append(f"- {field_name}: {desc} {req_mark}")
+
+        if not params_info:
+            return {"input": user_request}
+
+        params_text = "\n".join(params_info)
+        prompt = (
+            f"将以下用户请求转换为 JSON 参数，严格按照技能参数要求输出。\n\n"
+            f"技能参数要求：\n{params_text}\n\n"
+            f"用户请求：{user_request}\n\n"
+            f"请只输出合法的 JSON 对象，不要有任何解释或 Markdown 代码块标记。"
+        )
+
+        try:
+            result = self.llm.invoke(
+                [("system", "你是一个参数提取助手，只输出 JSON。"), ("human", prompt)]
+            )
+            content = str(result.content) if hasattr(result, "content") else str(result)
+
+            # 尝试直接解析 JSON
+            try:
+                args = json.loads(content)
+            except json.JSONDecodeError:
+                # 尝试从 Markdown 代码块中提取
+                code_match = re.search(
+                    r"```(?:json)?\s*(.*?)```", content, re.DOTALL
+                )
+                if code_match:
+                    args = json.loads(code_match.group(1).strip())
+                else:
+                    raise
+
+            # 过滤掉 schema 中不存在的字段
+            valid_fields = set(schema.model_fields.keys())
+            args = {k: v for k, v in args.items() if k in valid_fields}
+            return args
+        except Exception:
+            logger.warning(
+                "LLM 参数解析失败，兜底处理：skill=%s, request=%s",
+                skill.name,
+                user_request[:100],
+            )
+            # 兜底：第一个必填参数
+            if first_required:
+                return {first_required: user_request}
+            return {"input": user_request}
+
+    def _invoke_directive_skill(
+        self,
+        skill: BaseTool,
+        user_request: str,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """直接调用用户指定的 Skill。"""
+        args = self._extract_skill_args(skill, user_request)
+        if user_id is not None and "user_id" in getattr(
+            skill, "args_schema", {}
+        ).model_fields:
+            args["user_id"] = user_id
+
+        logger.info("直接调用指定 Skill: %s, args=%s", skill.name, args)
+        output = skill.invoke(args)
+        return {"output": output, "messages": []}
+
     def run(
         self,
         user_input: str,
@@ -350,6 +476,9 @@ class AgentOrchestrator:
         user_id: str | None = None,
     ) -> dict[str, Any]:
         """接收用户输入，由 Agent 路由并执行对应 Skill。
+
+        支持技能指定指令：用户输入中包含"使用 xxx 技能"时，
+        直接调用对应 Skill，不走 Agent 自动路由。
 
         Args:
             user_input: 用户的自然语言输入。
@@ -359,6 +488,17 @@ class AgentOrchestrator:
         Returns:
             dict: 包含 ``output``（最终文本输出）和 ``messages``（完整消息链）的结果字典。
         """
+        # 1. 检查是否指定了特定技能
+        skill_name, actual_request = self._parse_skill_directive(user_input)
+        if skill_name:
+            skill = self._find_skill(skill_name)
+            if skill is not None:
+                return self._invoke_directive_skill(
+                    skill, actual_request, user_id=user_id
+                )
+            # 技能未找到，继续走 Agent 路由并给出提示
+            logger.warning("用户指定 Skill '%s' 未找到，回退到 Agent 路由", skill_name)
+
         tracer = get_tracer()
         metrics = get_metrics()
 
@@ -412,7 +552,21 @@ class AgentOrchestrator:
         chat_history: list[tuple[str, str]] | None = None,
         user_id: str | None = None,
     ) -> dict[str, Any]:
-        """``run`` 的异步版本。"""
+        """``run`` 的异步版本。
+
+        支持技能指定指令：用户输入中包含"使用 xxx 技能"时，
+        直接调用对应 Skill，不走 Agent 自动路由。
+        """
+        # 1. 检查是否指定了特定技能（同步解析即可）
+        skill_name, actual_request = self._parse_skill_directive(user_input)
+        if skill_name:
+            skill = self._find_skill(skill_name)
+            if skill is not None:
+                return self._invoke_directive_skill(
+                    skill, actual_request, user_id=user_id
+                )
+            logger.warning("用户指定 Skill '%s' 未找到，回退到 Agent 路由", skill_name)
+
         tracer = get_tracer()
         metrics = get_metrics()
 

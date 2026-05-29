@@ -257,6 +257,11 @@
                     </select>
                 </div>
                 <div>
+                    <label>默认主题</label>
+                    <input type="text" id="default-topic" list="topic-options" placeholder="如：职场加班、相亲经历" />
+                    <datalist id="topic-options"></datalist>
+                </div>
+                <div>
                     <label>默认风格</label>
                     <input type="text" id="default-style" list="style-options" placeholder="支持自定义，如：传统 / 自嘲 / 讽刺" />
                     <datalist id="style-options">
@@ -321,12 +326,14 @@
             const defaultStyle = document.getElementById('default-style').value;
             const defaultStrategy = document.getElementById('default-strategy').value;
 
+            const defaultTopic = document.getElementById('default-topic').value;
             for (const file of input.files) {
                 pendingFiles.push({
                     file: file,
                     kind: defaultKind,
                     style: defaultStyle,
                     chunk_strategy: defaultStrategy,
+                    topic: defaultTopic,
                 });
             }
             input.value = '';
@@ -353,6 +360,7 @@
                         <option value="manzai" ${item.kind==='manzai'?'selected':''}>漫才</option>
                         <option value="japanese_sketch" ${item.kind==='japanese_sketch'?'selected':''}>日式短剧</option>
                     </select>
+                    <input type="text" list="topic-options" placeholder="主题" value="${escapeHtml(item.topic||'')}" onchange="pendingFiles[${idx}].topic=this.value" style="width:120px;" />
                     <input type="text" list="style-options" placeholder="风格" value="${escapeHtml(item.style||'')}" onchange="pendingFiles[${idx}].style=this.value" style="width:100px;" />
                     <select onchange="pendingFiles[${idx}].chunk_strategy=this.value">
                         <option value="paragraph" ${item.chunk_strategy==='paragraph'?'selected':''}>按段落</option>
@@ -418,6 +426,7 @@
                 formData.append('files', item.file);
                 if (item.kind) formData.append('kind', item.kind);
                 if (item.style) formData.append('style', item.style);
+                if (item.topic) formData.append('topic', item.topic);
                 formData.append('chunk_strategy', item.chunk_strategy);
 
                 try {
@@ -464,6 +473,7 @@
                 if (!res.ok) throw new Error('加载失败');
                 const data = await res.json();
                 const docs = data.documents || [];
+                updateTopicOptions(docs);
                 if (docs.length === 0) {
                     listEl.innerHTML = '<div class="empty">暂无文档</div>';
                     return;
@@ -476,12 +486,13 @@
                     const statusText = d.status === 'ingested' ? '已入库' : (d.status === 'failed' ? '失败' : '处理中');
                     const errorTip = d.error_msg ? ` title="${d.error_msg.replace(/"/g, '&quot;')}"` : '';
                     const kindTag = d.kind ? `<span class="tag">${kindLabel(d.kind)}</span>` : '';
+                    const topicTag = d.topic ? `<span class="tag" style="background:#fff3e0;color:#e65100;">${escapeHtml(d.topic)}</span>` : '';
                     const styleTag = d.style ? `<span class="tag style">${escapeHtml(d.style)}</span>` : '';
                     const strategyTag = d.chunk_strategy ? `<span class="tag strategy">${strategyLabel(d.chunk_strategy)}</span>` : '';
                     item.innerHTML = `
                         <div class="info">
                             <span class="fname">${escapeHtml(d.filename)}</span>
-                            ${kindTag}${styleTag}${strategyTag}
+                            ${kindTag}${topicTag}${styleTag}${strategyTag}
                             <span style="font-size:0.75rem;color:#999;">${d.chunk_count ? d.chunk_count + ' 块' : ''}</span>
                         </div>
                         <div class="actions">

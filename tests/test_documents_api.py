@@ -80,7 +80,7 @@ class TestDocumentAPI:
                 res = client.post(
                     "/documents/upload",
                     files={"files": ("theory_test.txt", f, "text/plain")},
-                    data={"kind": "sketch", "style": "traditional", "chunk_strategy": "scene"},
+                    data={"kind": "sketch", "style": "traditional", "chunk_strategy": "scene", "topic": "职场加班"},
                 )
             assert res.status_code == 200, res.text
             data = res.json()
@@ -91,6 +91,7 @@ class TestDocumentAPI:
             assert data[0]["kind"] == "sketch"
             assert data[0]["style"] == "traditional"
             assert data[0]["chunk_strategy"] == "scene"
+            assert data[0]["topic"] == "职场加班"
             # 验证 ingestor 使用了正确的分块策略
             mock_ingestor_cls.assert_called_once()
             call_kwargs = mock_ingestor_cls.call_args.kwargs

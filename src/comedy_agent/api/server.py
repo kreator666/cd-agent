@@ -246,6 +246,7 @@ class DocumentUploadResponse(BaseModel):
     kind: str | None = Field(default=None, description="喜剧种类")
     style: str | None = Field(default=None, description="风格标识")
     chunk_strategy: str | None = Field(default=None, description="分块策略")
+    topic: str | None = Field(default=None, description="文档主题")
     status: str = Field(description="处理状态")
     chunks: int = Field(description="分块数量")
 
@@ -956,6 +957,7 @@ async def upload_documents(
     kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
     style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
     chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
+    topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
     user_id: str = Depends(get_current_user),
 ) -> list[DocumentUploadResponse]:
     """上传文档到个人知识库。支持多文件上传，自动解析并入库。"""
@@ -989,6 +991,7 @@ async def upload_documents(
             kind=kind,
             style=style,
             chunk_strategy=chunk_strategy,
+            topic=topic,
             status="pending",
         )
         doc = state.memory.save_document(doc)
@@ -1020,6 +1023,7 @@ async def upload_documents(
                     kind=kind,
                     style=style,
                     chunk_strategy=chunk_strategy,
+                    topic=topic,
                     status="ingested",
                     chunks=result.get("chunks", 0),
                 )
@@ -1045,6 +1049,7 @@ async def upload_documents(
                     kind=kind,
                     style=style,
                     chunk_strategy=chunk_strategy,
+                    topic=topic,
                     status="failed",
                     chunks=0,
                 )

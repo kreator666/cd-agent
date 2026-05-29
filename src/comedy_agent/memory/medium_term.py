@@ -440,6 +440,7 @@ class SQLMemoryStore(MemoryStore):
                     kind=document.kind,
                     style=document.style,
                     chunk_strategy=document.chunk_strategy,
+                    topic=document.topic,
                     status=document.status,
                     chunk_count=document.chunk_count,
                     error_msg=document.error_msg,
@@ -451,6 +452,7 @@ class SQLMemoryStore(MemoryStore):
                 existing.kind = document.kind
                 existing.style = document.style
                 existing.chunk_strategy = document.chunk_strategy
+                existing.topic = document.topic
                 existing.status = document.status
                 existing.chunk_count = document.chunk_count
                 existing.error_msg = document.error_msg
@@ -468,6 +470,7 @@ class SQLMemoryStore(MemoryStore):
                 kind=row.kind,
                 style=row.style,
                 chunk_strategy=row.chunk_strategy,
+                topic=row.topic,
                 status=row.status,
                 chunk_count=row.chunk_count,
                 error_msg=row.error_msg,
@@ -520,6 +523,7 @@ class SQLMemoryStore(MemoryStore):
                 kind=row.kind,
                 style=row.style,
                 chunk_strategy=row.chunk_strategy,
+                topic=row.topic,
                 status=row.status,
                 chunk_count=row.chunk_count,
                 error_msg=row.error_msg,

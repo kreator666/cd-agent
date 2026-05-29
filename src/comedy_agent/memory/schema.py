@@ -174,6 +174,9 @@ class UserDocument(Base):
     chunk_strategy: Mapped[str | None] = mapped_column(
         String(32), nullable=True, comment="分块策略：fixed / paragraph / scene / dialogue / subtitle"
     )
+    topic: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, comment="文档主题/话题，如：职场加班、相亲经历"
+    )
     status: Mapped[str] = mapped_column(
         String(32), default="pending", nullable=False, comment="pending / ingested / failed"
     )

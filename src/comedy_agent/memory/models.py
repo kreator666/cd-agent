@@ -71,6 +71,7 @@ class DocumentData(BaseModel):
     kind: str | None = Field(default=None, description="喜剧种类：standup / sketch / manzai / japanese_sketch / crosstalk / sitcom / general")
     style: str | None = Field(default=None, description="风格标识：traditional / modern / 自嘲 / 讽刺 / 愤怒式 / 荒诞式 / 日常观察")
     chunk_strategy: str | None = Field(default=None, description="分块策略：fixed / paragraph / scene / dialogue / subtitle")
+    topic: str | None = Field(default=None, description="文档主题/话题，如：职场加班、相亲经历")
     status: str = Field(default="pending", description="入库状态：pending / ingested / failed")
     chunk_count: int | None = Field(default=None, description="分块数量")
     error_msg: str | None = Field(default=None, description="错误信息")

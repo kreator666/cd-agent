@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     qwen_api_key: str = Field(default="", alias="DASHSCOPE_API_KEY")
     moonshot_api_key: str = Field(default="", alias="MOONSHOT_API_KEY")
+    wj_api_key: str = Field(default="", alias="WJ_API_KEY")
+    wj_base_url: str = Field(
+        default="https://maas-openapi.wanjiedata.com/api/v1", alias="WJ_BASE_URL"
+    )
 
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")

@@ -193,6 +193,56 @@ class ModelFactory:
             cls.register_llm("kimi-for-coding", lambda **kw: _kimi("kimi-for-coding", **kw))
             cls.register_llm("kimi-code", lambda **kw: _kimi("kimi-for-coding", **kw))
 
+        # 万界数据 / WJark（OpenAI 兼容中转站）
+        if _HAS_OPENAI:
+            def _wjark(model: str, **kw):
+                key = settings.wj_api_key
+                if not key:
+                    raise ModelConfigError(
+                        f"模型 '{model}' 需要万界数据 API Key。\n"
+                        f"请设置环境变量：export WJ_API_KEY=xxx\n"
+                        f"或访问 https://www.wjark.com 获取 Key"
+                    )
+                return ChatOpenAI(
+                    model=model,
+                    api_key=key,
+                    base_url=settings.wj_base_url,
+                    **kw,
+                )
+
+            # GLM
+            cls.register_llm("glm-5.1", lambda **kw: _wjark("glm-5.1", **kw))
+            cls.register_llm("glm-5", lambda **kw: _wjark("glm-5", **kw))
+
+            # Qwen
+            cls.register_llm("qwen3.5-397b", lambda **kw: _wjark("qwen3.5-397b-a17b", **kw))
+            cls.register_llm("qwen3.5-plus", lambda **kw: _wjark("qwen3.5-plus", **kw))
+            cls.register_llm("qwen3.5-flash", lambda **kw: _wjark("qwen3.5-flash", **kw))
+            cls.register_llm("qwen3-max", lambda **kw: _wjark("qwen3-max", **kw))
+            cls.register_llm("qwen3-coder", lambda **kw: _wjark("qwen3-coder", **kw))
+            cls.register_llm("qwen-plus", lambda **kw: _wjark("qwen-plus", **kw))
+            cls.register_llm("qwen-turbo", lambda **kw: _wjark("qwen-turbo", **kw))
+            cls.register_llm("qwen-long", lambda **kw: _wjark("qwen-long", **kw))
+
+            # DeepSeek
+            cls.register_llm("deepseek-v4-pro", lambda **kw: _wjark("deepseek-v4-pro", **kw))
+            cls.register_llm("deepseek-v4-flash", lambda **kw: _wjark("deepseek-v4-flash", **kw))
+            cls.register_llm("deepseek-v3.1", lambda **kw: _wjark("deepseek-v3.1", **kw))
+            cls.register_llm("deepseek-v3", lambda **kw: _wjark("deepseek-v3", **kw))
+
+            # Kimi
+            cls.register_llm("kimi-k2.6", lambda **kw: _wjark("kimi-k2.6", **kw))
+            cls.register_llm("kimi-k2.5", lambda **kw: _wjark("kimi-k2-5-260127", **kw))
+
+            # MiniMax
+            cls.register_llm("minimax-m2.7", lambda **kw: _wjark("minimax-m2.7", **kw))
+            cls.register_llm("minimax-m2.5", lambda **kw: _wjark("minimax-m2.5", **kw))
+
+            # 其他
+            cls.register_llm("gpt-oss-120b", lambda **kw: _wjark("gpt-oss-120b", **kw))
+            cls.register_llm("qwq-plus", lambda **kw: _wjark("qwq-plus", **kw))
+            cls.register_llm("mimo-v2.5-pro", lambda **kw: _wjark("mimo-v2.5-pro", **kw))
+
     @classmethod
     def _build_default_embedding_registry(cls) -> None:
         """注册内置 Embedding 构造器。"""
@@ -425,6 +475,25 @@ class ModelFactory:
             "qwen-turbo": settings.qwen_api_key,
             "kimi-for-coding": settings.moonshot_api_key,
             "kimi-code": settings.moonshot_api_key,
+            # 万界数据模型共用同一个 Key
+            "glm-5.1": settings.wj_api_key,
+            "glm-5": settings.wj_api_key,
+            "qwen3.5-397b": settings.wj_api_key,
+            "qwen3.5-plus": settings.wj_api_key,
+            "qwen3.5-flash": settings.wj_api_key,
+            "qwen3-max": settings.wj_api_key,
+            "qwen3-coder": settings.wj_api_key,
+            "deepseek-v4-pro": settings.wj_api_key,
+            "deepseek-v4-flash": settings.wj_api_key,
+            "deepseek-v3.1": settings.wj_api_key,
+            "deepseek-v3": settings.wj_api_key,
+            "kimi-k2.6": settings.wj_api_key,
+            "kimi-k2.5": settings.wj_api_key,
+            "minimax-m2.7": settings.wj_api_key,
+            "minimax-m2.5": settings.wj_api_key,
+            "gpt-oss-120b": settings.wj_api_key,
+            "qwq-plus": settings.wj_api_key,
+            "mimo-v2.5-pro": settings.wj_api_key,
         }
         for name, key in key_checks.items():
             if key and name in cls._llm_registry:

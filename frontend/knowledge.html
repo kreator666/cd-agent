@@ -470,7 +470,16 @@
             const listEl = document.getElementById('document-list');
             try {
                 const res = await fetch(`${API_BASE}/documents`, { headers: authHeaders() });
-                if (!res.ok) throw new Error('加载失败');
+                if (!res.ok) {
+                    let detail = '加载失败';
+                    try {
+                        const errData = await res.clone().json();
+                        detail = errData.detail || `HTTP ${res.status}`;
+                    } catch {
+                        detail = `HTTP ${res.status} ${res.statusText}`;
+                    }
+                    throw new Error(detail);
+                }
                 const data = await res.json();
                 const docs = data.documents || [];
                 updateTopicOptions(docs);

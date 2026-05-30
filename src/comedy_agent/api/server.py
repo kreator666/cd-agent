@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -381,6 +382,15 @@ app = FastAPI(
     description="喜剧行业垂直 Agent HTTP 接口",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+# CORS 跨域支持
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # 挂载认证路由

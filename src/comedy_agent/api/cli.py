@@ -165,7 +165,7 @@ def cmd_run(prompt: str, model_name: str | None = None, user_id: str | None = No
         sys.exit(1)
 
 
-def cmd_skill_standup(topic: str, style: str, duration: int, audience: str) -> None:
+def cmd_skill_standup(topic: str, style: str, duration: int, audience: str, debug: bool = False) -> None:
     """直接调用脱口秀创作 Skill。"""
     skill = StandupSkill()
     result = skill.invoke({
@@ -173,6 +173,7 @@ def cmd_skill_standup(topic: str, style: str, duration: int, audience: str) -> N
         "style": style,
         "duration": duration,
         "audience": audience,
+        "debug": debug,
     })
     print(result)
 
@@ -375,6 +376,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     standup_parser.add_argument("--style", default="日常观察", help="风格")
     standup_parser.add_argument("--duration", type=int, default=3, help="时长（分钟）")
     standup_parser.add_argument("--audience", default="通用", help="受众")
+    standup_parser.add_argument("--debug", action="store_true", default=False, help="Debug 模式：输出分析过程")
 
     # scripts
     scripts_parser = subparsers.add_parser("scripts", help="用户作品管理")
@@ -471,7 +473,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.command == "skills":
         cmd_skills()
     elif args.command == "skill" and args.skill_name == "standup":
-        cmd_skill_standup(args.topic, args.style, args.duration, args.audience)
+        cmd_skill_standup(args.topic, args.style, args.duration, args.audience, debug=args.debug)
     elif args.command == "ingest":
         cmd_ingest(dir_path=args.dir)
     elif args.command == "feedback-loop":

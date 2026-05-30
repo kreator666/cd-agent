@@ -17,6 +17,24 @@ from comedy_agent.core.config import settings
 _TEMPLATE_PATH = Path(settings.data_dir).parent / "data" / "write-output" / "standup-template.md"
 _STANDUP_TEMPLATE = _TEMPLATE_PATH.read_text(encoding="utf-8") if _TEMPLATE_PATH.exists() else ""
 
+# 终稿模式硬约束——覆盖模板中要求输出分析过程的指令
+_OUTPUT_CONSTRAINT = (
+    "【最终输出约束——覆盖上述所有格式要求】\n"
+    "你只允许输出段子正文，适合演员直接上台表演的内容。\n"
+    "严禁输出以下任何内容：主题、人设、核心观点、使用的喜剧机制、爆点分析。\n"
+    "严禁输出分析过程、思考步骤、meta说明、创作思路。\n"
+    "严禁使用 Markdown 标题（如 ##）来划分输出结构。\n"
+    "输出必须是连续、干净的纯文本段落，不含任何结构标签。"
+)
+
+# Debug 模式说明
+_DEBUG_NOTE = (
+    "【Debug 模式】\n"
+    "请输出完整的创作分析过程，包括：主题分析、人设设计、核心观点、\n"
+    "使用的喜剧机制、爆点分析、创作思路。\n"
+    "分析过程放在正文之前，用【分析过程】和【正文】两个标签分隔。"
+)
+
 
 class StandupArgs(BaseModel):
     """脱口秀创作参数 Schema。"""
@@ -27,6 +45,7 @@ class StandupArgs(BaseModel):
     audience: str = Field(default="通用", description="目标受众：通用/年轻人/中年人/特定行业")
     density: str = Field(default="标准", description="笑点密度：密集/标准/稀疏")
     perspective_count: int = Field(default=2, description="多视角版本数量（2-3）")
+    debug: bool = Field(default=False, description="Debug 模式：True 时输出分析过程，False 时只输出正文")
 
 
 class StandupSkill(ComedySkill):
@@ -43,14 +62,27 @@ class StandupSkill(ComedySkill):
     )
     args_schema: type[BaseModel] = StandupArgs
 
-    SYSTEM_PROMPT: str = (
-        "你是一位资深脱口秀编剧。\n\n"
-        + _STANDUP_TEMPLATE
-        + "\n\n"
-        "创作时严格按照上述模板规范执行，输出干净的脱口秀文本（不含结构标签）。"
-    )
+    SYSTEM_PROMPT: str = _STANDUP_TEMPLATE
 
-    def _build_user_prompt(self, topic: str, style: str, duration: int, audience: str, density: str, perspective_count: int) -> str:
+    def _build_user_prompt(
+        self, topic: str, style: str, duration: int, audience: str, density: str, perspective_count: int, debug: bool = False
+    ) -> str:
+        if debug:
+            return (
+                f"请创作一段关于「{topic}」的脱口秀段子。\n\n"
+                f"要求：\n"
+                f"- 风格：{style}\n"
+                f"- 时长：约{duration}分钟\n"
+                f"- 受众：{audience}观众\n"
+                f"- 笑点密度：{density}\n\n"
+                f"输出要求：\n"
+                f"1. 先输出完整的创作分析过程（主题、人设、核心观点、喜剧机制、爆点分析）\n"
+                f"2. 分析过程用【分析过程】标签开头\n"
+                f"3. 正文用【正文】标签开头，适合直接上台讲\n"
+                f"4. 根据主题和风格，选择合适的叙事视角\n"
+                f"5. 每个笑点可标注手法类型\n"
+                f"6. 结尾有自然 Call Back"
+            )
         return (
             f"请创作一段关于「{topic}」的脱口秀段子。\n\n"
             f"要求：\n"
@@ -59,10 +91,9 @@ class StandupSkill(ComedySkill):
             f"- 受众：{audience}观众\n"
             f"- 笑点密度：{density}\n\n"
             f"输出要求：\n"
-            f"1. 正文不含【结构标签】，只输出干净的脱口秀文本\n"
+            f"1. 只输出段子正文，不含任何结构标签、章节标题或分析说明\n"
             f"2. 根据主题和风格，选择合适的叙事视角（第一人称自嘲、观察式、角色扮演等）\n"
-            f"3. 每个笑点标注手法类型（预期违背/反逻辑/Call Back 等）\n"
-            f"4. 结尾有自然 Call Back"
+            f"3. 结尾有自然 Call Back"
         )
 
     def _run(
@@ -74,15 +105,20 @@ class StandupSkill(ComedySkill):
         density: str = "标准",
         perspective_count: int = 2,
         user_id: str | None = None,
+        debug: bool = False,
     ) -> str:
         docs = self._retrieve_knowledge(topic, user_id, kind="standup", style=style)
         knowledge_text = self._format_knowledge(docs)
         system_prompt = self.SYSTEM_PROMPT
+        if debug:
+            system_prompt += "\n\n" + _DEBUG_NOTE
+        else:
+            system_prompt += "\n\n" + _OUTPUT_CONSTRAINT
         if knowledge_text:
             system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", self._build_user_prompt(topic, style, duration, audience, density, perspective_count)),
+            ("human", self._build_user_prompt(topic, style, duration, audience, density, perspective_count, debug=debug)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm
@@ -100,5 +136,6 @@ class StandupSkill(ComedySkill):
         density: str = "标准",
         perspective_count: int = 2,
         user_id: str | None = None,
+        debug: bool = False,
     ) -> str:
-        return self._run(topic, style, duration, audience, density, perspective_count, user_id)
+        return self._run(topic, style, duration, audience, density, perspective_count, user_id, debug=debug)

@@ -104,6 +104,7 @@ class StandupRequest(BaseModel):
     density: str = Field(default="标准", description="笑点密度：密集/标准/稀疏")
     perspective_count: int = Field(default=2, description="多视角版本数量（2-3）")
     model: str | None = Field(default=None, description="指定模型")
+    debug: bool = Field(default=False, description="Debug 模式：True 时输出分析过程，False 时只输出正文")
 
 
 class StandupResponse(BaseModel):
@@ -638,6 +639,7 @@ async def skill_standup(
                 "density": request.density,
                 "perspective_count": request.perspective_count,
                 "user_id": user_id,
+                "debug": request.debug,
             }
         )
         return StandupResponse(content=content)

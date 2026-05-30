@@ -62,12 +62,7 @@ class StandupSkill(ComedySkill):
     )
     args_schema: type[BaseModel] = StandupArgs
 
-    SYSTEM_PROMPT: str = (
-        "你是一位资深脱口秀编剧。\n\n"
-        + _STANDUP_TEMPLATE
-        + "\n\n"
-        "创作时严格按照上述模板规范执行。"
-    )
+    SYSTEM_PROMPT: str = _STANDUP_TEMPLATE
 
     def _build_user_prompt(
         self, topic: str, style: str, duration: int, audience: str, density: str, perspective_count: int, debug: bool = False

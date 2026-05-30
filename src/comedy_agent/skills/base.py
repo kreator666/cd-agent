@@ -4,7 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 from langchain_core.tools import BaseTool
 
@@ -32,6 +32,9 @@ class ComedySkill(BaseTool, ABC):
 
     # 用户个人知识库缓存
     _user_vector_stores: dict[str, VectorStore] = {}
+
+    # 可用风格列表（创作类 Skill 子类覆盖）
+    available_styles: ClassVar[list[str]] = []
 
     def _retrieve_knowledge(
         self,

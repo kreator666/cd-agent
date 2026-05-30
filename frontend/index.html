@@ -110,6 +110,47 @@
             opacity: 0.6;
             margin-bottom: 0.25rem;
         }
+        .message .meta .model-tag {
+            display: inline-block;
+            margin-left: 0.5rem;
+            padding: 0.05rem 0.4rem;
+            background: rgba(0,0,0,0.08);
+            border-radius: 0.25rem;
+            font-size: 0.65rem;
+            opacity: 0.8;
+        }
+        .message.agent .meta .model-tag {
+            background: rgba(0,0,0,0.08);
+            color: #333;
+        }
+        .message.user .meta .model-tag {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+        .suggestion-bar {
+            margin-top: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+        .suggestion-label { color: #666; margin-right: 0.25rem; }
+        .suggestion-hint { color: #888; font-size: 0.75rem; }
+        .style-tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            background: #e3e8ee;
+            border-radius: 0.75rem;
+            font-size: 0.75rem;
+            color: #333;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .style-tag:hover { background: #d0d8e2; }
         .input-area {
             display: flex;
             gap: 0.5rem;
@@ -1101,8 +1142,27 @@
                 'qwen-max': '通义千问 Max',
                 'qwen-plus': '通义千问 Plus',
                 'qwen-turbo': '通义千问 Turbo',
+                'qwen-long': '通义千问 Long',
                 'kimi-for-coding': 'Kimi',
                 'kimi-code': 'Kimi Code',
+                'kimi-k2.6': 'Kimi K2.6',
+                'kimi-k2.5': 'Kimi K2.5',
+                'deepseek-v4-pro': 'DeepSeek V4 Pro',
+                'deepseek-v4-flash': 'DeepSeek V4 Flash',
+                'deepseek-v3.1': 'DeepSeek V3.1',
+                'deepseek-v3': 'DeepSeek V3',
+                'glm-5': 'GLM-5',
+                'glm-5.1': 'GLM-5.1',
+                'qwen3.5-397b': 'Qwen3.5 397B',
+                'qwen3.5-plus': 'Qwen3.5 Plus',
+                'qwen3.5-flash': 'Qwen3.5 Flash',
+                'qwen3-max': 'Qwen3 Max',
+                'qwen3-coder': 'Qwen3 Coder',
+                'minimax-m2.5': 'MiniMax M2.5',
+                'minimax-m2.7': 'MiniMax M2.7',
+                'gpt-oss-120b': 'GPT-OSS 120B',
+                'qwq-plus': 'QwQ Plus',
+                'mimo-v2.5-pro': 'Mimo V2.5 Pro',
                 'ollama-llama3': 'Ollama Llama3',
                 'ollama-llama3.1': 'Ollama Llama3.1',
                 'ollama-qwen2.5': 'Ollama Qwen2.5',
@@ -1116,20 +1176,62 @@
 
         let _pendingScriptContent = '';
 
-        function appendMessage(role, text) {
+        function appendMessage(role, text, model, suggestion) {
             const empty = chatArea.querySelector('.empty-state');
             if (empty) empty.remove();
 
             const div = document.createElement('div');
             div.className = `message ${role}`;
             let actionsHtml = '';
+            let metaHtml = `<div class="meta">${role === 'user' ? '你' : 'Agent'}</div>`;
             if (role === 'agent') {
-                actionsHtml = `<div class="message-actions"><button onclick="openSaveModal(this)" data-content="${escapeHtml(text).replace(/"/g, '&quot;')}">💾 保存为作品</button></div>`;
+                const modelTag = model ? `<span class="model-tag">${escapeHtml(formatModelName(model))}</span>` : '';
+                metaHtml = `<div class="meta">Agent ${modelTag}</div>`;
+                actionsHtml = `<div class="message-actions"><button onclick="copyMessage(this)" data-content="${escapeHtml(text).replace(/"/g, '&quot;')}">📋 复制</button><button onclick="openSaveModal(this)" data-content="${escapeHtml(text).replace(/"/g, '&quot;')}">💾 保存为作品</button></div>`;
+
+                if (suggestion && suggestion.available_styles && suggestion.available_styles.length > 0) {
+                    const styleTags = suggestion.available_styles.map(s =>
+                        `<span class="style-tag" onclick="sendStyleRefinement(this)"
+                              data-skill="${escapeHtml(suggestion.skill_name || '')}"
+                              data-topic="${escapeHtml(suggestion.topic || '')}"
+                              data-template="${escapeHtml(suggestion.prompt_template || '')}">${escapeHtml(s)}</span>`
+                    ).join('');
+                    actionsHtml += `<div class="suggestion-bar">
+                        <span class="suggestion-label">💡 是否更加风格化？</span>
+                        <span class="suggestion-hint">当前支持：</span>${styleTags}
+                    </div>`;
+                }
             }
-            div.innerHTML = `<div class="meta">${role === 'user' ? '你' : 'Agent'}</div>${escapeHtml(text)}${actionsHtml}`;
+            div.innerHTML = `${metaHtml}${escapeHtml(text)}${actionsHtml}`;
             chatArea.appendChild(div);
             chatArea.scrollTop = chatArea.scrollHeight;
             return div;
+        }
+
+        function sendStyleRefinement(el) {
+            const skill = el.getAttribute('data-skill');
+            const topic = el.getAttribute('data-topic');
+            const template = el.getAttribute('data-template');
+            const style = el.textContent;
+
+            const prompt = template
+                .replace('{skill_name}', skill)
+                .replace('{topic}', topic)
+                .replace('{style}', style);
+
+            input.value = prompt;
+            sendMessage();
+        }
+
+        function copyMessage(btn) {
+            const content = btn.getAttribute('data-content') || '';
+            navigator.clipboard.writeText(content).then(() => {
+                const original = btn.textContent;
+                btn.textContent = '✅ 已复制';
+                setTimeout(() => { btn.textContent = original; }, 2000);
+            }).catch(() => {
+                alert('复制失败');
+            });
         }
 
         function openSaveModal(btn) {
@@ -1215,7 +1317,7 @@
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    appendMessage('agent', data.output);
+                    appendMessage('agent', data.output, data.model, data.suggestion);
                     history.push(['human', text]);
                     history.push(['ai', data.output]);
                     if (history.length > 20) history = history.slice(-20);

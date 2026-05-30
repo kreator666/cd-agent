@@ -62,14 +62,27 @@ class ChatRequest(BaseModel):
     )
 
 
+class SuggestionResponse(BaseModel):
+    """改进建议响应。"""
+
+    skill_name: str | None = Field(default=None, description="Skill 标识名")
+    skill_type: str | None = Field(default=None, description="Skill 类型")
+    topic: str | None = Field(default=None, description="创作主题")
+    current_style: str | None = Field(default=None, description="当前风格")
+    available_styles: list[str] = Field(default_factory=list, description="可用风格列表")
+    prompt_template: str | None = Field(default=None, description="前端构造改进请求的模板")
+
+
 class ChatResponse(BaseModel):
     """聊天响应。"""
 
     output: str = Field(description="Agent 输出文本")
     session_id: str | None = Field(default=None, description="会话标识")
+    model: str | None = Field(default=None, description="使用的模型")
     messages: list[dict[str, Any]] = Field(
         default_factory=list, description="完整消息链"
     )
+    suggestion: SuggestionResponse | None = Field(default=None, description="改进建议")
 
 
 class SkillListResponse(BaseModel):
@@ -609,8 +622,37 @@ async def chat(
 
             span.output_data = {"output": result["output"][:200]}
             metrics.record("api.chat.duration_ms", span.duration_ms)
+            orch_model = getattr(state.orch, 'model_name', None) if state.orch else None
+            model_used = request.model or (orch_model if isinstance(orch_model, str) else None) or settings.default_model
+
+            # 构造改进建议（仅创作类 Skill）
+            skill_meta = result.get("skill_meta")
+            suggestion = None
+            if skill_meta and skill_meta.get("skill_type") == "creative":
+                skill_name = skill_meta.get("skill_name")
+                skill = state.orch._find_skill(skill_name) if state.orch else None
+                args = skill_meta.get("args", {})
+                topic = (
+                    args.get("topic")
+                    or args.get("theme")
+                    or args.get("scenario")
+                    or args.get("episode_theme")
+                    or ""
+                )
+                current_style = args.get("style")
+                available_styles = getattr(skill, "available_styles", []) if skill else []
+                if available_styles:
+                    suggestion = SuggestionResponse(
+                        skill_name=skill_name,
+                        skill_type="creative",
+                        topic=topic,
+                        current_style=current_style,
+                        available_styles=[s for s in available_styles if s != current_style],
+                        prompt_template="使用 {skill_name} 技能，主题是【{topic}】，风格改成【{style}】",
+                    )
+
             return ChatResponse(
-                output=result["output"], session_id=session_id, messages=messages
+                output=result["output"], session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

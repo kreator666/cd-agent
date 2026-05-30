@@ -511,8 +511,9 @@
                     `;
                     listEl.appendChild(item);
                 });
-            } catch {
-                listEl.innerHTML = '<div class="empty">加载失败</div>';
+            } catch (err) {
+                listEl.innerHTML = `<div class="empty">加载失败: ${escapeHtml(err.message)}</div>`;
+                console.error('loadDocuments error:', err);
             }
         }
 
@@ -543,6 +544,14 @@
             } catch (err) {
                 alert('删除失败: ' + err.message);
             }
+        }
+
+        function updateTopicOptions(docs) {
+            const datalist = document.getElementById('topic-options');
+            if (!datalist) return;
+            const topics = new Set();
+            docs.forEach(d => { if (d.topic) topics.add(d.topic); });
+            datalist.innerHTML = Array.from(topics).map(t => `<option value="${escapeHtml(t)}">`).join('');
         }
 
         function escapeHtml(text) {

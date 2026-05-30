@@ -1,5 +1,7 @@
 """相声创作 Skill —— 传统与新相声剧本生成。"""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -27,6 +29,7 @@ class CrosstalkSkill(ComedySkill):
 
     task_type: str = "creative"
     name: str = "crosstalk_generator"
+    available_styles: ClassVar[list[str]] = ["传统相声", "新相声"]
     description: str = (
         "创作相声剧本。输入主题、风格、篇幅、角色设定，"
         "输出包含垫话、包袱、抖包袱的完整相声对白。"

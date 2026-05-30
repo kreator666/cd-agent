@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
 from comedy_agent.core.config import settings
@@ -467,7 +467,35 @@ class AgentOrchestrator:
 
         logger.info("直接调用指定 Skill: %s, args=%s", skill.name, args)
         output = skill.invoke(args)
-        return {"output": output, "messages": []}
+        return {"output": output, "messages": [], "args": args}
+
+    def _extract_last_skill_meta(
+        self, msg_list: list[BaseMessage]
+    ) -> dict[str, Any] | None:
+        """从 Agent 消息链中提取最后一次 Tool Call 的元数据。"""
+        if not msg_list:
+            return None
+
+        for msg in reversed(msg_list):
+            if isinstance(msg, AIMessage):
+                tool_calls = getattr(msg, "tool_calls", None)
+                if not tool_calls and hasattr(msg, "additional_kwargs"):
+                    tool_calls = msg.additional_kwargs.get("tool_calls", [])
+                if tool_calls:
+                    tc = tool_calls[-1]
+                    if isinstance(tc, dict):
+                        skill_name = tc.get("name")
+                        args = tc.get("args", {})
+                    else:
+                        skill_name = getattr(tc, "name", None)
+                        args = getattr(tc, "args", {}) or getattr(tc, "arguments", {})
+                    skill = self._find_skill(skill_name) if skill_name else None
+                    return {
+                        "skill_name": skill_name,
+                        "skill_type": getattr(skill, "task_type", None) if skill else None,
+                        "args": args,
+                    }
+        return None
 
     def run(
         self,
@@ -493,9 +521,18 @@ class AgentOrchestrator:
         if skill_name:
             skill = self._find_skill(skill_name)
             if skill is not None:
-                return self._invoke_directive_skill(
+                result = self._invoke_directive_skill(
                     skill, actual_request, user_id=user_id
                 )
+                return {
+                    "output": result["output"],
+                    "messages": result.get("messages", []),
+                    "skill_meta": {
+                        "skill_name": skill.name,
+                        "skill_type": skill.task_type,
+                        "args": result.get("args", {}),
+                    },
+                }
             # 技能未找到，继续走 Agent 路由并给出提示
             logger.warning("用户指定 Skill '%s' 未找到，回退到 Agent 路由", skill_name)
 
@@ -541,9 +578,11 @@ class AgentOrchestrator:
                 tags={"model": self.model_name or "unknown"},
             )
 
+            skill_meta = self._extract_last_skill_meta(msg_list)
             return {
                 "output": output,
                 "messages": msg_list,
+                "skill_meta": skill_meta,
             }
 
     async def arun(
@@ -562,9 +601,18 @@ class AgentOrchestrator:
         if skill_name:
             skill = self._find_skill(skill_name)
             if skill is not None:
-                return self._invoke_directive_skill(
+                result = self._invoke_directive_skill(
                     skill, actual_request, user_id=user_id
                 )
+                return {
+                    "output": result["output"],
+                    "messages": result.get("messages", []),
+                    "skill_meta": {
+                        "skill_name": skill.name,
+                        "skill_type": skill.task_type,
+                        "args": result.get("args", {}),
+                    },
+                }
             logger.warning("用户指定 Skill '%s' 未找到，回退到 Agent 路由", skill_name)
 
         tracer = get_tracer()
@@ -599,7 +647,9 @@ class AgentOrchestrator:
             span.output_data = {"output": output[:200]}
             metrics.record("agent.arun.duration_ms", span.duration_ms)
 
+            skill_meta = self._extract_last_skill_meta(msg_list)
             return {
                 "output": output,
                 "messages": msg_list,
+                "skill_meta": skill_meta,
             }

@@ -1,7 +1,7 @@
 """中期记忆 SQL 实现 —— SQLMemoryStore。
 
 基于 SQLAlchemy + SQLite，实现 MemoryStore 抽象基类的全部接口。
-支持用户画像、偏好、会话、作品的完整 CRUD。
+支持用户画像、会话、作品的完整 CRUD。
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
     KnowledgeCardData,
-    PreferenceItem,
     ScriptData,
     UserContext,
     UserProfileData,
@@ -42,7 +41,7 @@ logger = logging.getLogger(__name__)
 class SQLMemoryStore(MemoryStore):
     """基于 SQLite 的记忆存储实现。
 
-    覆盖短期记忆（会话）与中期记忆（偏好、作品）的全部操作。
+    覆盖短期记忆（会话）与中期记忆（作品）的全部操作。
     """
 
     def __init__(self, db_url: str | None = None) -> None:
@@ -250,44 +249,6 @@ class SQLMemoryStore(MemoryStore):
             session.commit()
             logger.debug("Deleted conversation: %s", session_id)
             return True
-
-    # ------------------------------------------------------------------ #
-    # 中期记忆 —— 偏好
-    # ------------------------------------------------------------------ #
-    def save_preference(self, user_id: str, key: str, value: Any) -> None:
-        with self._new_session() as session:
-            pref = (
-                session.query(UserPreference)
-                .filter_by(user_id=user_id, key=key)
-                .first()
-            )
-            if pref is None:
-                pref = UserPreference(user_id=user_id, key=key, value=value)
-                session.add(pref)
-            else:
-                pref.value = value
-                pref.updated_at = self._now()
-            session.commit()
-            logger.debug("Saved preference: %s/%s", user_id, key)
-
-    def load_preference(self, user_id: str, key: str) -> Any | None:
-        with self._new_session() as session:
-            pref = (
-                session.query(UserPreference)
-                .filter_by(user_id=user_id, key=key)
-                .first()
-            )
-            return pref.value if pref else None
-
-    def list_preferences(self, user_id: str) -> list[PreferenceItem]:
-        with self._new_session() as session:
-            rows = (
-                session.query(UserPreference)
-                .filter_by(user_id=user_id)
-                .order_by(UserPreference.updated_at.desc())
-                .all()
-            )
-            return [PreferenceItem(key=r.key, value=r.value) for r in rows]
 
     # ------------------------------------------------------------------ #
     # 中期记忆 —— 作品
@@ -663,14 +624,13 @@ class SQLMemoryStore(MemoryStore):
         self, user_id: str, max_conversations: int = 3
     ) -> UserContext:
         profile = self.get_or_create_user(user_id)
-        preferences = self.list_preferences(user_id)
         recent_conversations = self.list_conversations(
             user_id, limit=max_conversations
         )
         recent_scripts = self.list_scripts(user_id)[:max_conversations]
         return UserContext(
             profile=profile,
-            preferences=preferences,
+            preferences=[],
             recent_conversations=recent_conversations,
             recent_scripts=recent_scripts,
         )

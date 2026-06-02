@@ -6,7 +6,6 @@
 
 from comedy_agent.memory.models import (
     ConversationData,
-    PreferenceItem,
     ScriptData,
     UserContext,
     UserProfileData,
@@ -14,7 +13,6 @@ from comedy_agent.memory.models import (
 from comedy_agent.memory.schema import (
     Base,
     UserConversation,
-    UserPreference,
     UserProfile,
     UserScript,
 )
@@ -26,12 +24,10 @@ __all__ = [
     # Schema
     "Base",
     "UserProfile",
-    "UserPreference",
     "UserConversation",
     "UserScript",
     # Models
     "UserProfileData",
-    "PreferenceItem",
     "ConversationData",
     "ScriptData",
     "UserContext",

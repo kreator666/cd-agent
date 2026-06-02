@@ -299,18 +299,7 @@ class AgentOrchestrator:
         """
         parts: list[str] = [self.system_prompt]
 
-        # 1. 注入用户记忆
-        if self.memory and user_id:
-            memory_text = self.memory.build_context_text(user_id)
-            if memory_text:
-                parts.append(
-                    f"【关于用户】\n"
-                    f"以下是该用户的历史偏好与创作习惯，请在回答时参考：\n\n"
-                    f"{memory_text}\n"
-                    f"【关于用户结束】"
-                )
-
-        # 2. 注入知识库检索结果（个人库优先 + 默认库）
+        # 1. 注入知识库检索结果（个人库优先 + 默认库）
         all_docs: list[Any] = []
 
         # 2.1 用户个人知识库

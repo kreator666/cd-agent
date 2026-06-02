@@ -619,21 +619,6 @@ async def chat(
                 except Exception as save_err:
                     logger.warning("保存会话记录失败: %s", save_err)
 
-                # 自动提取并保存用户偏好（失败不影响主流程）
-                try:
-                    # 仅在对话有一定深度时才触发提取
-                    total_chars = sum(len(str(m.get("content", ""))) for m in messages)
-                    if len(messages) >= 3 and total_chars > 200:
-                        from comedy_agent.memory.preference_extractor import (
-                            extract_preferences,
-                            merge_preferences,
-                        )
-
-                        new_prefs = extract_preferences(messages)
-                        merge_preferences(user_id, new_prefs, memory=state.memory)
-                except Exception as pref_err:
-                    logger.warning("偏好提取失败（已忽略）: %s", pref_err)
-
             span.output_data = {"output": result["output"][:200]}
             metrics.record("api.chat.duration_ms", span.duration_ms)
             orch_model = getattr(state.orch, 'model_name', None) if state.orch else None
@@ -1184,24 +1169,6 @@ async def delete_document(
     if not ok:
         raise HTTPException(status_code=404, detail="文档不存在")
     return SuccessResponse(success=True)
-
-
-# ------------------------------------------------------------------ #
-# 用户偏好路由
-# ------------------------------------------------------------------ #
-@app.get("/preferences", tags=["preferences"])
-async def list_preferences(
-    user_id: str = Depends(get_current_user),
-) -> dict[str, Any]:
-    """获取当前用户的创作偏好列表。"""
-    if state.memory is None:
-        raise HTTPException(status_code=503, detail="记忆系统未就绪")
-    preferences = state.memory.list_preferences(user_id)
-    return {
-        "preferences": [
-            {"key": p.key, "value": p.value} for p in preferences
-        ]
-    }
 
 
 # ------------------------------------------------------------------ #

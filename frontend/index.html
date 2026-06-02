@@ -226,26 +226,17 @@
         .new-chat-btn {
             background: #16c79a !important;
         }
-        .preference-section {
-            font-size: 0.8125rem;
-        }
-        .preference-section summary {
-            font-weight: 500;
-            color: #555;
-            cursor: pointer;
-            user-select: none;
-        }
-        .preference-item {
+        .list-item {
             display: flex;
             justify-content: space-between;
             padding: 0.25rem 0;
             border-bottom: 1px solid #f0f0f0;
             font-size: 0.75rem;
         }
-        .preference-item:last-child { border-bottom: none; }
-        .preference-item .pref-key { color: #666; }
-        .preference-item .pref-val { color: #333; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .preference-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
+        .list-item:last-child { border-bottom: none; }
+        .list-item .item-key { color: #666; }
+        .list-item .item-val { color: #333; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .list-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
         .message-actions {
             margin-top: 0.375rem;
             display: flex;
@@ -638,21 +629,21 @@
                 const data = await res.json();
                 const docs = data.documents || [];
                 if (docs.length === 0) {
-                    listEl.innerHTML = '<div class="preference-empty">暂无文档</div>';
+                    listEl.innerHTML = '<div class="list-empty">暂无文档</div>';
                     return;
                 }
                 listEl.innerHTML = '';
                 docs.forEach(d => {
                     const item = document.createElement('div');
-                    item.className = 'preference-item';
+                    item.className = 'list-item';
                     const statusColor = d.status === 'ingested' ? '#16c79a' : (d.status === 'failed' ? '#e94560' : '#999');
                     const statusText = d.status === 'ingested' ? '已入库' : (d.status === 'failed' ? '失败' : '处理中');
                     const errorTip = d.error_msg ? ` title="${d.error_msg.replace(/"/g, '&quot;')}"` : '';
-                    item.innerHTML = `<span class="pref-key" title="${d.filename}">${d.filename}</span><span style="color:${statusColor};font-size:0.7rem;"${errorTip}>${statusText}</span><span style="color:#e94560;cursor:pointer;font-size:0.75rem;" onclick="deleteDocument('${d.doc_id}')">✕</span>`;
+                    item.innerHTML = `<span class="item-key" title="${d.filename}">${d.filename}</span><span style="color:${statusColor};font-size:0.7rem;"${errorTip}>${statusText}</span><span style="color:#e94560;cursor:pointer;font-size:0.75rem;" onclick="deleteDocument('${d.doc_id}')">✕</span>`;
                     listEl.appendChild(item);
                 });
             } catch {
-                listEl.innerHTML = '<div class="preference-empty">加载失败</div>';
+                listEl.innerHTML = '<div class="list-empty">加载失败</div>';
             }
         }
 
@@ -786,13 +777,13 @@
                 const data = await res.json();
                 const cards = data.cards || [];
                 if (cards.length === 0) {
-                    listEl.innerHTML = '<div class="preference-empty">暂无卡片</div>';
+                    listEl.innerHTML = '<div class="list-empty">暂无卡片</div>';
                     return;
                 }
                 listEl.innerHTML = '';
                 cards.forEach(c => {
                     const item = document.createElement('div');
-                    item.className = 'preference-item';
+                    item.className = 'list-item';
                     item.style.flexDirection = 'column';
                     item.style.alignItems = 'flex-start';
                     item.style.gap = '0.25rem';
@@ -802,7 +793,7 @@
                     listEl.appendChild(item);
                 });
             } catch {
-                listEl.innerHTML = '<div class="preference-empty">加载失败</div>';
+                listEl.innerHTML = '<div class="list-empty">加载失败</div>';
             }
         }
         async function deleteKnowledgeCard(cardId) {
@@ -816,46 +807,6 @@
                 loadKnowledgeCards();
             } catch (err) {
                 alert('删除失败: ' + err.message);
-            }
-        }
-
-        async function loadPreferences() {
-            const listEl = document.getElementById('preference-list');
-            try {
-                const res = await fetch(`${API_BASE}/preferences`, { headers: authHeaders() });
-                if (!res.ok) throw new Error('加载失败');
-                const data = await res.json();
-                const prefs = data.preferences || [];
-                if (prefs.length === 0) {
-                    listEl.innerHTML = '<div class="preference-empty">暂无记录</div>';
-                    return;
-                }
-                const keyMap = {
-                    'preferred_style': '风格',
-                    'disliked_tropes': '讨厌',
-                    'preferred_duration': '时长',
-                    'preferred_audience': '受众',
-                    'preferred_script_type': '类型',
-                    'creative_notes': '备注'
-                };
-                listEl.innerHTML = '';
-                prefs.forEach(p => {
-                    const item = document.createElement('div');
-                    item.className = 'preference-item';
-                    const label = keyMap[p.key] || p.key;
-                    let val = '';
-                    if (Array.isArray(p.value)) {
-                        val = p.value.join(', ');
-                    } else if (typeof p.value === 'object' && p.value !== null) {
-                        val = JSON.stringify(p.value);
-                    } else {
-                        val = String(p.value);
-                    }
-                    item.innerHTML = `<span class="pref-key">${label}</span><span class="pref-val" title="${val}">${val}</span>`;
-                    listEl.appendChild(item);
-                });
-            } catch {
-                listEl.innerHTML = '<div class="preference-empty">加载失败</div>';
             }
         }
 

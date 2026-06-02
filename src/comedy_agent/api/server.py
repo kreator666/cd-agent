@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -131,6 +132,7 @@ class SketchRequest(BaseModel):
     """小品创作请求。"""
 
     theme: str = Field(description="主题")
+    style: str = Field(default="现代小品", description="风格：传统小品/现代小品/荒诞小品/温情小品")
     characters_count: int = Field(default=3, description="角色数量（2-5人）")
     setting: str = Field(default="家庭", description="场景设定")
     duration: int = Field(default=8, description="时长（分钟）")
@@ -148,6 +150,7 @@ class ManzaiRequest(BaseModel):
     """漫才创作请求。"""
 
     topic: str = Field(description="话题")
+    style: str = Field(default="传统漫才", description="风格：传统漫才/快节奏漫才/温情漫才/怪诞漫才")
     duration: int = Field(default=5, description="时长（分钟）")
     segments_count: int = Field(default=3, description="段落数量")
     absurd_level: str = Field(default="标准", description="荒谬等级：轻微/标准/极致")
@@ -164,6 +167,7 @@ class JapaneseSketchRequest(BaseModel):
     """日式短剧创作请求。"""
 
     theme: str = Field(description="主题")
+    style: str = Field(default="经典コント", description="风格：经典コント/黑色幽默/温情喜剧/荒诞喜剧")
     characters_count: int = Field(default=2, description="角色数量（2-3人）")
     setting: str = Field(default="便利店", description="场景设定")
     duration: int = Field(default=5, description="时长（分钟）")
@@ -413,6 +417,16 @@ app.include_router(auth_router, prefix="/auth")
 _frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
 if _frontend_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(_frontend_dir)), name="static")
+
+
+@app.get("/")
+async def root() -> FileResponse:
+    """返回首页。"""
+    index_path = _frontend_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    raise HTTPException(status_code=404, detail="首页不存在")
+
 
 # 注册限流中间件（Redis 优先，失败降级到内存）
 limiter = get_rate_limiter()
@@ -723,6 +737,7 @@ async def skill_sketch(
         content = skill.invoke(
             {
                 "theme": request.theme,
+                "style": request.style,
                 "characters_count": request.characters_count,
                 "setting": request.setting,
                 "duration": request.duration,
@@ -759,6 +774,7 @@ async def skill_manzai(
         content = skill.invoke(
             {
                 "topic": request.topic,
+                "style": request.style,
                 "duration": request.duration,
                 "segments_count": request.segments_count,
                 "absurd_level": request.absurd_level,
@@ -794,6 +810,7 @@ async def skill_japanese_sketch(
         content = skill.invoke(
             {
                 "theme": request.theme,
+                "style": request.style,
                 "characters_count": request.characters_count,
                 "setting": request.setting,
                 "duration": request.duration,

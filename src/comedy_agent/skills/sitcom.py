@@ -1,5 +1,7 @@
 """情景喜剧 Skill —— 单集剧本大纲与对白生成。"""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -14,6 +16,7 @@ class SitcomArgs(BaseModel):
         description="情景设定，如'合租公寓'、'创业公司'、'小餐馆'",
     )
     episode_theme: str = Field(description="本集主题，如'室友带对象回家'、'老板突然查岗'")
+    style: str = Field(default="美式情景喜剧", description="风格：美式情景喜剧/英式幽默/家庭温情/职场喜剧")
     characters: str = Field(
         default="",
         description="常驻角色列表及性格，如'张伟(抠门)、李梅(洁癖)、王强(宅男)'",
@@ -29,8 +32,9 @@ class SitcomSkill(ComedySkill):
 
     task_type: str = "creative"
     name: str = "sitcom_generator"
+    available_styles: ClassVar[list[str]] = ["美式情景喜剧", "英式幽默", "家庭温情", "职场喜剧"]
     description: str = (
-        "创作情景喜剧单集剧本。输入情景设定、本集主题、角色、场景数，"
+        "创作情景喜剧单集剧本。输入情景设定、本集主题、风格、角色、场景数，"
         "输出包含大纲和关键对白的完整单集剧本。"
     )
     args_schema: type[BaseModel] = SitcomArgs
@@ -46,13 +50,14 @@ class SitcomSkill(ComedySkill):
     )
 
     def _build_prompt(
-        self, scenario: str, episode_theme: str, characters: str, scenes: int
+        self, scenario: str, episode_theme: str, style: str, characters: str, scenes: int
     ) -> str:
         char_info = f"\n常驻角色：{characters}\n" if characters else ""
         return (
             f"请创作一集情景喜剧剧本。\n\n"
             f"情景设定：{scenario}{char_info}"
             f"本集主题：{episode_theme}\n"
+            f"风格：{style}\n"
             f"场景数量：{scenes}个\n\n"
             f"结构要求：\n"
             f"1. 冷开场（可选）：30秒内建立本集基调\n"
@@ -70,6 +75,7 @@ class SitcomSkill(ComedySkill):
         self,
         scenario: str,
         episode_theme: str,
+        style: str = "美式情景喜剧",
         characters: str = "",
         scenes: int = 3,
         user_id: str | None = None,
@@ -82,7 +88,7 @@ class SitcomSkill(ComedySkill):
             system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", self._build_prompt(scenario, episode_theme, characters, scenes)),
+            ("human", self._build_prompt(scenario, episode_theme, style, characters, scenes)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm
@@ -93,8 +99,9 @@ class SitcomSkill(ComedySkill):
         self,
         scenario: str,
         episode_theme: str,
+        style: str = "美式情景喜剧",
         characters: str = "",
         scenes: int = 3,
         user_id: str | None = None,
     ) -> str:
-        return self._run(scenario, episode_theme, characters, scenes, user_id)
+        return self._run(scenario, episode_theme, style, characters, scenes, user_id)

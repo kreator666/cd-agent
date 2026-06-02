@@ -52,20 +52,24 @@ class RedisRateLimiter(RateLimiter):
     def __init__(self, redis_url: str | None = None) -> None:
         self.available = False
         self._client: Any | None = None
+        url = redis_url or settings.redis_url
+        if not url:
+            logger.info("Redis 未配置，跳过 RedisRateLimiter")
+            return
         try:
             from redis import Redis
 
             self._client = Redis.from_url(
-                redis_url or settings.redis_url,
+                url,
                 decode_responses=True,
-                socket_connect_timeout=2,
-                socket_timeout=2,
+                socket_connect_timeout=0.5,
+                socket_timeout=0.5,
             )
             self._client.ping()
             self.available = True
             logger.info("RedisRateLimiter 已连接")
         except Exception as e:
-            logger.warning("RedisRateLimiter 初始化失败: %s", e)
+            logger.info("RedisRateLimiter 不可用，降级到内存限流: %s", e)
 
     def is_allowed(
         self, key: str, max_requests: int, window_seconds: int

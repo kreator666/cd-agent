@@ -4,6 +4,7 @@
 """
 
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
@@ -21,6 +22,7 @@ class ManzaiArgs(BaseModel):
     """漫才创作参数 Schema。"""
 
     topic: str = Field(description="漫才话题，如'职场加班'、'相亲经历'")
+    style: str = Field(default="传统漫才", description="风格：传统漫才/快节奏漫才/温情漫才/怪诞漫才")
     duration: int = Field(default=5, description="预计时长（分钟），决定篇幅")
     segments_count: int = Field(default=3, description="段落数量（话题切换次数）")
     absurd_level: str = Field(default="标准", description="荒谬等级：轻微/标准/极致")
@@ -34,8 +36,9 @@ class ManzaiSkill(ComedySkill):
 
     task_type: str = "creative"
     name: str = "manzai_generator"
+    available_styles: ClassVar[list[str]] = ["传统漫才", "快节奏漫才", "温情漫才", "怪诞漫才"]
     description: str = (
-        "创作漫才剧本。输入话题和时长，"
+        "创作漫才剧本。输入话题、风格和时长，"
         "输出基于漫才输出模板的完整对白，包含连续否定、节奏设计、反差收尾。"
     )
     args_schema: type[BaseModel] = ManzaiArgs
@@ -47,10 +50,11 @@ class ManzaiSkill(ComedySkill):
         "创作时严格按照上述模板规范执行，输出干净的漫才对白（不含结构标签）。"
     )
 
-    def _build_prompt(self, topic: str, duration: int, segments_count: int, absurd_level: str) -> str:
+    def _build_prompt(self, topic: str, style: str, duration: int, segments_count: int, absurd_level: str) -> str:
         return (
             f"请创作一段关于「{topic}」的漫才剧本。\n\n"
             f"要求：\n"
+            f"- 风格：{style}\n"
             f"- 时长：约{duration}分钟\n"
             f"- 段落数量：{segments_count}段（话题切换次数）\n"
             f"- 荒谬等级：{absurd_level}\n\n"
@@ -65,6 +69,7 @@ class ManzaiSkill(ComedySkill):
     def _run(
         self,
         topic: str,
+        style: str = "传统漫才",
         duration: int = 5,
         segments_count: int = 3,
         absurd_level: str = "标准",
@@ -77,7 +82,7 @@ class ManzaiSkill(ComedySkill):
             system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", self._build_prompt(topic, duration, segments_count, absurd_level)),
+            ("human", self._build_prompt(topic, style, duration, segments_count, absurd_level)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm
@@ -87,9 +92,10 @@ class ManzaiSkill(ComedySkill):
     async def _arun(
         self,
         topic: str,
+        style: str = "传统漫才",
         duration: int = 5,
         segments_count: int = 3,
         absurd_level: str = "标准",
         user_id: str | None = None,
     ) -> str:
-        return self._run(topic, duration, segments_count, absurd_level, user_id)
+        return self._run(topic, style, duration, segments_count, absurd_level, user_id)

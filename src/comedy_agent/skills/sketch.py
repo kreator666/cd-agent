@@ -4,6 +4,7 @@
 """
 
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
@@ -21,6 +22,7 @@ class SketchArgs(BaseModel):
     """小品创作参数 Schema。"""
 
     theme: str = Field(description="小品主题，如'家庭聚餐'、'面试遭遇'")
+    style: str = Field(default="现代小品", description="风格：传统小品/现代小品/荒诞小品/温情小品")
     characters_count: int = Field(default=3, description="角色数量（2-5人）")
     setting: str = Field(default="家庭", description="场景设定：家庭/职场/校园/医院/公共场合")
     duration: int = Field(default=8, description="预计时长（分钟），决定篇幅")
@@ -35,8 +37,9 @@ class SketchSkill(ComedySkill):
 
     task_type: str = "creative"
     name: str = "sketch_generator"
+    available_styles: ClassVar[list[str]] = ["传统小品", "现代小品", "荒诞小品", "温情小品"]
     description: str = (
-        "创作小品剧本。输入主题、角色数、场景、时长，"
+        "创作小品剧本。输入主题、风格、角色数、场景、时长，"
         "输出基于小品输出模板的完整剧本，包含角色执念、冲突升级、肢体喜剧。"
     )
     args_schema: type[BaseModel] = SketchArgs
@@ -49,11 +52,12 @@ class SketchSkill(ComedySkill):
     )
 
     def _build_prompt(
-        self, theme: str, characters_count: int, setting: str, duration: int, conflict_type: str
+        self, theme: str, style: str, characters_count: int, setting: str, duration: int, conflict_type: str
     ) -> str:
         return (
             f"请创作一段关于「{theme}」的小品剧本。\n\n"
             f"要求：\n"
+            f"- 风格：{style}\n"
             f"- 角色数量：{characters_count}人\n"
             f"- 场景设定：{setting}\n"
             f"- 时长：约{duration}分钟\n"
@@ -69,6 +73,7 @@ class SketchSkill(ComedySkill):
     def _run(
         self,
         theme: str,
+        style: str = "现代小品",
         characters_count: int = 3,
         setting: str = "家庭",
         duration: int = 8,
@@ -82,7 +87,7 @@ class SketchSkill(ComedySkill):
             system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", self._build_prompt(theme, characters_count, setting, duration, conflict_type)),
+            ("human", self._build_prompt(theme, style, characters_count, setting, duration, conflict_type)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm
@@ -92,10 +97,11 @@ class SketchSkill(ComedySkill):
     async def _arun(
         self,
         theme: str,
+        style: str = "现代小品",
         characters_count: int = 3,
         setting: str = "家庭",
         duration: int = 8,
         conflict_type: str = "执念vs现实",
         user_id: str | None = None,
     ) -> str:
-        return self._run(theme, characters_count, setting, duration, conflict_type, user_id)
+        return self._run(theme, style, characters_count, setting, duration, conflict_type, user_id)

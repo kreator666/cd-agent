@@ -58,7 +58,7 @@ class StandupSkill(ComedySkill):
 
     task_type: str = "creative"
     name: str = "standup_generator"
-    available_styles: ClassVar[list[str]] = ["日常观察", "自嘲", "社会讽刺", "职场", "黑色幽默", "吐槽"]
+    available_styles: ClassVar[list[str]] = ["日常观察", "自嘲", "社会讽刺", "职场", "黑色幽默", "吐槽", "意辰"]
     description: str = (
         "创作脱口秀段子。输入主题、风格、时长、受众，"
         "输出基于脱口秀输出模板 v2 的段子，包含预期违背、反逻辑、角色视角。"

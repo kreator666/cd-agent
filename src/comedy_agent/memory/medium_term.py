@@ -251,6 +251,18 @@ class SQLMemoryStore(MemoryStore):
             return True
 
     # ------------------------------------------------------------------ #
+    # 中期记忆 —— 偏好（已弃用，保留空实现以兼容抽象基类）
+    # ------------------------------------------------------------------ #
+    def save_preference(self, user_id: str, key: str, value: Any) -> None:
+        pass
+
+    def load_preference(self, user_id: str, key: str) -> Any | None:
+        return None
+
+    def list_preferences(self, user_id: str) -> list[Any]:
+        return []
+
+    # ------------------------------------------------------------------ #
     # 中期记忆 —— 作品
     # ------------------------------------------------------------------ #
     def save_script(self, user_id: str, script: ScriptData) -> ScriptData:

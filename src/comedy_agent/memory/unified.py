@@ -87,6 +87,15 @@ class UnifiedMemory(MemoryStore):
     def delete_conversation(self, user_id: str, session_id: str) -> bool:
         return self._store.delete_conversation(user_id, session_id)
 
+    def save_preference(self, user_id: str, key: str, value: Any) -> None:
+        pass
+
+    def load_preference(self, user_id: str, key: str) -> Any | None:
+        return None
+
+    def list_preferences(self, user_id: str) -> list[Any]:
+        return []
+
     def save_script(self, user_id: str, script: ScriptData) -> ScriptData:
         return self._store.save_script(user_id, script)
 

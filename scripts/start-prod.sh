@@ -12,6 +12,9 @@ if [ -f "$PROJECT_DIR/.env" ]; then
     export $(grep -v '^#' "$PROJECT_DIR/.env" | xargs)
 fi
 
+# 确保 Python 能找到 src 下的模块（editable 未安装时的兜底）
+export PYTHONPATH="${PROJECT_DIR}/src:${PYTHONPATH:-}"
+
 # 优先使用虚拟环境的 uvicorn
 if [ -f "$PROJECT_DIR/.venv/bin/uvicorn" ]; then
     UVICORN="$PROJECT_DIR/.venv/bin/uvicorn"
@@ -22,6 +25,14 @@ elif command -v uvicorn &>/dev/null; then
 else
     echo "[ERR] 未找到 uvicorn，请先安装依赖: pip install -e \".[dev]\""
     exit 1
+fi
+
+# 检查 comedy_agent 模块是否可导入
+if ! python3 -c "import comedy_agent" 2>/dev/null; then
+    echo "[WARN] comedy_agent 模块未找到，尝试 editable 安装..."
+    if command -v pip &>/dev/null; then
+        pip install -e "$PROJECT_DIR" 2>/dev/null || true
+    fi
 fi
 
 echo "[INFO] 使用 uvicorn: $UVICORN"

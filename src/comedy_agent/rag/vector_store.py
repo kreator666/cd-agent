@@ -77,8 +77,16 @@ class VectorStore:
             name=self.collection_name
         )
 
-        # 初始化 Embedding 模型
-        self._embedding = ModelFactory.get_embedding_model(embedding_model_name)
+        # 初始化 Embedding 模型（容错：连接失败时记录错误，不阻塞启动）
+        self._embedding = None
+        try:
+            self._embedding = ModelFactory.get_embedding_model(embedding_model_name)
+        except Exception as e:
+            logger.error(
+                "Embedding 模型 '%s' 初始化失败: %s。向量检索与入库功能将不可用。",
+                embedding_model_name or settings.default_embedding_model,
+                e,
+            )
 
     # ------------------------------------------------------------------ #
     # 文档入库
@@ -103,6 +111,9 @@ class VectorStore:
         doc_ids = ids or [str(uuid.uuid4()) for _ in documents]
         texts = [doc.page_content for doc in documents]
         metadatas = [_sanitize_metadata(doc.metadata) for doc in documents]
+
+        if self._embedding is None:
+            raise RuntimeError("Embedding 模型未成功初始化，无法执行文档入库。请检查模型配置或网络连接。")
 
         logger.info("正在生成 %d 条文档的 Embedding...", len(documents))
         embeddings = self._embedding.embed_documents(texts)
@@ -135,6 +146,9 @@ class VectorStore:
         Returns:
             list[Document]: 按相似度排序的文档列表。
         """
+        if self._embedding is None:
+            raise RuntimeError("Embedding 模型未成功初始化，无法执行向量检索。请检查模型配置或网络连接。")
+
         query_embedding = self._embedding.embed_query(query)
         results = self.collection.query(
             query_embeddings=[query_embedding],

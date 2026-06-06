@@ -70,33 +70,13 @@ class StandupSkill(ComedySkill):
     def _build_user_prompt(
         self, topic: str, style: str, duration: int, audience: str, density: str, perspective_count: int, debug: bool = False
     ) -> str:
-        if debug:
-            return (
-                f"请创作一段关于「{topic}」的脱口秀段子。\n\n"
-                f"要求：\n"
-                f"- 风格：{style}\n"
-                f"- 时长：约{duration}分钟\n"
-                f"- 受众：{audience}观众\n"
-                f"- 笑点密度：{density}\n\n"
-                f"输出要求：\n"
-                f"1. 先输出完整的创作分析过程（主题、人设、核心观点、喜剧机制、爆点分析）\n"
-                f"2. 分析过程用【分析过程】标签开头\n"
-                f"3. 正文用【正文】标签开头，适合直接上台讲\n"
-                f"4. 根据主题和风格，选择合适的叙事视角\n"
-                f"5. 每个笑点可标注手法类型\n"
-                f"6. 结尾有自然 Call Back"
-            )
         return (
             f"请创作一段关于「{topic}」的脱口秀段子。\n\n"
             f"要求：\n"
             f"- 风格：{style}\n"
             f"- 时长：约{duration}分钟\n"
             f"- 受众：{audience}观众\n"
-            f"- 笑点密度：{density}\n\n"
-            f"输出要求：\n"
-            f"1. 只输出段子正文，不含任何结构标签、章节标题或分析说明\n"
-            f"2. 根据主题和风格，选择合适的叙事视角（第一人称自嘲、观察式、角色扮演等）\n"
-            f"3. 结尾有自然 Call Back"
+            f"- 笑点密度：{density}"
         )
 
     def _run(

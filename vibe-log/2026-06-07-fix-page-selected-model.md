@@ -15,11 +15,18 @@
 - `SaltRequest` 新增可选 `model: str | None` 字段
 - `/salt` 端点在 `state.orch.run()` 前调用 `state.orch.set_model(request.model)`（与 `/chat` 保持一致）
 - `frontend/index.html` 的 `sendSalt()` 和 `sendActorMessage()` 均读取 `#model` 下拉框并传递给后端
-- Salt 相关测试通过（`tests/test_api_new_routers.py::TestSalt`）
+- 新增内置 `add_salt` Skill，让 `/salt` 通过 "使用 add_salt 技能" 指令走 orchestrator/agent 路由
+- `/salt` 端点构造 skill 指令调用 `state.orch.run()`，避免直接 LLM 调用被 skill 指令解析误识别
+- Salt 相关测试通过（`tests/test_api_new_routers.py::TestSalt`），并新增断言验证 prompt 中包含 `add_salt`
 
 ## Commit 记录
 - **Commit ID**: `a124d46b527633cb17609382cd3320162ab4ee77`
 - **Commit Message**: `fix: use page-selected model for salt and actor chat`
+- **Branch**: `refactor`
+- **Remote**: `origin/refactor`
+
+- **Commit ID**: `a2cac6633a85c023d97056b75ab1ae2ed24ca899`
+- **Commit Message**: `feat: add add_salt skill and route salt via orchestrator`
 - **Branch**: `refactor`
 - **Remote**: `origin/refactor`
 

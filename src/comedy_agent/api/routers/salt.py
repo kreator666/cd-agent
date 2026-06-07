@@ -20,6 +20,7 @@ class SaltRequest(BaseModel):
     text: str = Field(description="原始文本")
     salt_level: str = Field(default="medium", description="盐度：light / medium / heavy")
     project_id: str | None = Field(default=None, description="关联项目 ID")
+    model: str | None = Field(default=None, description="使用的模型名称")
 
 
 class SaltResponse(BaseModel):
@@ -56,6 +57,8 @@ async def salt(request: SaltRequest, user_id: str = Depends(get_current_user)) -
         f"请对以下文本进行幽默润色，不改变原意，幽默程度{level_desc}：\n\n{request.text}"
     )
 
+    if request.model:
+        state.orch.set_model(request.model)
     result = state.orch.run(prompt, user_id=user_id)
     polished = result.get("output", "")
 

@@ -57,8 +57,8 @@ class AgentOrchestrator:
             memory: 可选的统一记忆接口，用于注入用户上下文。
             retriever: 可选的知识库混合检索器，用于根据用户查询注入相关知识。
         """
-        self.model_name = model_name or settings.default_model
-        self.llm = ModelFactory.get_model(self.model_name)
+        self.model_name = model_name
+        self.llm = ModelFactory.get_model(model_name)
         self.tools: list[BaseTool] = []
         self.system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
         self.memory = memory

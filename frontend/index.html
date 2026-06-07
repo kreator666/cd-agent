@@ -1608,9 +1608,10 @@
             resultEl.style.display = 'block';
             resultEl.textContent = '润色中...';
             try {
+                const model = document.getElementById('model').value || null;
                 const res = await apiFetch('/salt', {
                     method: 'POST',
-                    body: JSON.stringify({ text, salt_level: level }),
+                    body: JSON.stringify({ text, salt_level: level, model }),
                 });
                 const data = await res.json();
                 _lastSaltResult = data;
@@ -1650,9 +1651,10 @@
             }
 
             try {
+                const model = document.getElementById('model').value || null;
                 const res = await apiFetch('/chat', {
                     method: 'POST',
-                    body: JSON.stringify({ prompt }),
+                    body: JSON.stringify({ prompt, model }),
                 });
                 const data = await res.json();
                 const agentDiv = document.createElement('div');

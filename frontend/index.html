@@ -124,36 +124,98 @@
             gap: 1rem;
             overflow-y: auto;
         }
-        .creation-card {
+        .tabbed-container {
+            flex: 1;
             background: #fff;
             border-radius: 0.75rem;
             border: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .tab-bar {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f8f8f8;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 0.875rem;
+            color: #666;
+            transition: all 0.15s;
+        }
+        .tab-btn:hover { background: #eee; }
+        .tab-btn.active {
+            background: #fff;
+            color: #1a1a2e;
+            font-weight: 600;
+            box-shadow: inset 0 -2px 0 #1a1a2e;
+        }
+        .tab-panel {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .tab-panel.active { display: flex; }
+        .panel-content {
+            flex: 1;
             padding: 1rem;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
+            min-height: 200px;
         }
-        .creation-card h3 {
-            font-size: 1rem;
-            margin: 0;
+        .panel-input {
             display: flex;
-            align-items: center;
-            gap: 0.375rem;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            border-top: 1px solid #e0e0e0;
+            background: #fafafa;
         }
-        .creation-card.collapsed .card-body { display: none; }
-        .creation-card.collapsed h3::after {
-            content: '▸';
-            margin-left: auto;
-            font-size: 0.75rem;
-            color: #888;
+        .panel-input textarea, .panel-input input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 0.75rem;
+            font-size: 0.9375rem;
+            font-family: inherit;
+        }
+        .panel-input textarea { resize: none; height: 3rem; }
+        .panel-input input { height: 3rem; }
+        .panel-input button {
+            padding: 0 1.5rem;
+            background: #1a1a2e;
+            color: #fff;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
             cursor: pointer;
         }
-        .creation-card:not(.collapsed) h3::after {
-            content: '▾';
-            margin-left: auto;
-            font-size: 0.75rem;
-            color: #888;
-            cursor: pointer;
+        .actor-select-row { margin-bottom: 0.5rem; }
+        .actor-select-row select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .actor-message-list {
+            flex: 1;
+            background: #f8f8f8;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            overflow-y: auto;
+            font-size: 0.875rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            min-height: 150px;
         }
         .salt-levels {
             display: flex;
@@ -175,18 +237,7 @@
             background: #1a1a2e;
             color: #fff;
         }
-        .skill-row {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-        .skill-row select, .skill-row input {
-            flex: 1;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-        }
+
         .result-preview {
             background: #f8f8f8;
             border-radius: 0.5rem;
@@ -198,32 +249,17 @@
             overflow-y: auto;
             border: 1px solid #e0e0e0;
         }
-        .result-actions {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-        .result-actions button {
-            font-size: 0.8125rem;
-            padding: 0.375rem 0.75rem;
-            border: none;
-            border-radius: 0.375rem;
-            cursor: pointer;
-        }
-        .result-actions .btn-save { background: #16c79a; color: #fff; }
-        .result-actions .btn-submit { background: #f5a623; color: #fff; }
-        .result-actions .btn-export { background: #1a1a2e; color: #fff; }
         .chat-area {
             flex: 1;
-            background: #fff;
-            border-radius: 0.75rem;
-            border: 1px solid #e0e0e0;
-            padding: 1rem;
+            padding: 0;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
             min-height: 200px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
         }
         .message {
             max-width: 80%;
@@ -290,32 +326,7 @@
             transition: background 0.2s;
         }
         .style-tag:hover { background: #d0d8e2; }
-        .input-area {
-            display: flex;
-            gap: 0.5rem;
-        }
-        .input-area textarea {
-            flex: 1;
-            padding: 0.75rem 1rem;
-            border: 1px solid #ddd;
-            border-radius: 0.75rem;
-            font-size: 0.9375rem;
-            resize: none;
-            height: 3.5rem;
-            font-family: inherit;
-        }
-        .input-area button {
-            padding: 0 1.5rem;
-            background: #1a1a2e;
-            color: #fff;
-            border: none;
-            border-radius: 0.75rem;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        .input-area button:hover { opacity: 0.9; }
-        .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+
         .empty-state {
             text-align: center;
             color: #999;
@@ -611,9 +622,10 @@
         @media (max-width: 768px) {
             .sidebar { display: none; }
             .container { padding: 0; }
-            .creation-card { padding: 0.75rem; }
-            .skill-row { flex-direction: column; }
-            .skill-row select, .skill-row input { width: 100%; }
+            .tab-btn { padding: 0.625rem 0.25rem; font-size: 0.75rem; }
+            .panel-content { padding: 0.75rem; }
+            .panel-input { padding: 0.5rem 0.75rem; }
+            .panel-input textarea, .panel-input input { padding: 0.5rem 0.75rem; height: 2.75rem; }
             .salt-levels { flex-direction: column; }
             .salt-levels label { width: 100%; }
             .main { padding: 0.5rem; gap: 0.5rem; }
@@ -680,77 +692,61 @@
 
         </aside>
         <main class="main">
-            <!-- 🧂 加点盐 -->
-            <div class="creation-card collapsed" id="salt-card">
-                <h3 onclick="toggleCard('salt-card')">🧂 加点盐</h3>
-                <div class="card-body">
-                    <div class="salt-levels">
-                        <input type="radio" name="salt-level" id="salt-light" value="light" checked>
-                        <label for="salt-light">微盐 🧂</label>
-                        <input type="radio" name="salt-level" id="salt-medium" value="medium">
-                        <label for="salt-medium">中盐 🧂🧂</label>
-                        <input type="radio" name="salt-level" id="salt-heavy" value="heavy">
-                        <label for="salt-heavy">重盐 🧂🧂🧂</label>
-                    </div>
-                    <textarea id="salt-input" placeholder="输入需要润色的文本..." style="height:4rem;resize:vertical;padding:0.5rem;border:1px solid #ddd;border-radius:0.5rem;font-family:inherit;font-size:0.875rem;"></textarea>
-                    <button onclick="sendSalt()" style="padding:0.5rem 1rem;background:#1a1a2e;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:0.875rem;">立即润色</button>
-                    <div id="salt-result" class="result-preview" style="display:none;"></div>
+            <div class="tabbed-container">
+                <div class="tab-bar">
+                    <button class="tab-btn" data-tab="salt" onclick="switchTab('salt')">🧂 加点盐</button>
+                    <button class="tab-btn" data-tab="actor" onclick="switchTab('actor')">🤖 虚拟演员</button>
+                    <button class="tab-btn active" data-tab="chat" onclick="switchTab('chat')">💬 Comedy Agent</button>
                 </div>
-            </div>
 
-            <!-- 🎤 喜剧创作 -->
-            <div class="creation-card collapsed" id="skill-card">
-                <h3 onclick="toggleCard('skill-card')">🎤 喜剧创作</h3>
-                <div class="card-body">
-                    <div class="skill-row">
-                        <select id="skill-select">
-                            <option value="">选择 Skill...</option>
-                        </select>
-                        <select id="ip-style-select">
-                            <option value="">IP 风格（可选）</option>
-                        </select>
+                <!-- 加点盐面板 -->
+                <div class="tab-panel" id="panel-salt">
+                    <div class="panel-content">
+                        <div class="salt-levels">
+                            <input type="radio" name="salt-level" id="salt-light" value="light" checked>
+                            <label for="salt-light">微盐 🧂</label>
+                            <input type="radio" name="salt-level" id="salt-medium" value="medium">
+                            <label for="salt-medium">中盐 🧂🧂</label>
+                            <input type="radio" name="salt-level" id="salt-heavy" value="heavy">
+                            <label for="salt-heavy">重盐 🧂🧂🧂</label>
+                        </div>
+                        <div id="salt-result" class="result-preview" style="display:none;"></div>
                     </div>
-                    <textarea id="skill-topic" placeholder="输入创作主题，例如：职场加班、相亲趣事..." style="height:3rem;resize:vertical;padding:0.5rem;border:1px solid #ddd;border-radius:0.5rem;font-family:inherit;font-size:0.875rem;"></textarea>
-                    <button onclick="sendSkill()" style="padding:0.5rem 1rem;background:#1a1a2e;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:0.875rem;">立即生成</button>
-                    <div id="skill-result-box" style="display:none;">
-                        <div id="skill-result" class="result-preview"></div>
-                        <div class="result-actions">
-                            <button class="btn-save" onclick="saveSkillResult()">💾 保存为作品</button>
-                            <button class="btn-submit" onclick="submitSkillResult()">📤 投稿给演员</button>
-                            <button class="btn-export" onclick="exportSkillResult()">📥 导出</button>
+                    <div class="panel-input">
+                        <textarea id="salt-input" placeholder="输入需要润色的文本..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSalt();}"></textarea>
+                        <button onclick="sendSalt()">立即润色</button>
+                    </div>
+                </div>
+
+                <!-- 虚拟演员面板 -->
+                <div class="tab-panel" id="panel-actor">
+                    <div class="panel-content">
+                        <div class="actor-select-row">
+                            <select id="actor-select">
+                                <option value="">选择演员...</option>
+                            </select>
+                        </div>
+                        <div id="actor-messages" class="actor-message-list"></div>
+                    </div>
+                    <div class="panel-input">
+                        <input id="actor-input" placeholder="和演员聊聊你的稿子..." onkeydown="if(event.key==='Enter')sendActorMessage();">
+                        <button onclick="sendActorMessage()">发送</button>
+                    </div>
+                </div>
+
+                <!-- Comedy Agent 面板 -->
+                <div class="tab-panel active" id="panel-chat">
+                    <div class="panel-content chat-area" id="chat-area">
+                        <div class="empty-state">
+                            <h2>Comedy Agent</h2>
+                            <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- 🤖 虚拟演员 Agent -->
-            <div class="creation-card collapsed" id="actor-card">
-                <h3 onclick="toggleCard('actor-card')">🤖 虚拟演员 Agent</h3>
-                <div class="card-body">
-                    <div class="skill-row">
-                        <select id="actor-select">
-                            <option value="">选择演员...</option>
-                        </select>
-                    </div>
-                    <div id="actor-chat" style="display:flex;flex-direction:column;gap:0.5rem;">
-                        <div id="actor-messages" style="background:#f8f8f8;border-radius:0.5rem;padding:0.75rem;height:150px;overflow-y:auto;font-size:0.875rem;display:flex;flex-direction:column;gap:0.5rem;"></div>
-                        <div style="display:flex;gap:0.5rem;">
-                            <input id="actor-input" placeholder="和演员聊聊你的稿子..." style="flex:1;padding:0.5rem;border:1px solid #ddd;border-radius:0.5rem;font-size:0.875rem;" onkeydown="if(event.key==='Enter')sendActorMessage();">
-                            <button onclick="sendActorMessage()" style="padding:0 1rem;background:#1a1a2e;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:0.875rem;">发送</button>
-                        </div>
+                    <div class="panel-input">
+                        <textarea id="input" placeholder="输入你的需求，按 Enter 发送..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                        <button id="send-btn" onclick="sendMessage()">发送</button>
                     </div>
                 </div>
-            </div>
-
-            <div class="chat-area" id="chat-area">
-                <div class="empty-state">
-                    <h2>Comedy Agent</h2>
-                    <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
-                </div>
-            </div>
-            <div class="input-area">
-                <textarea id="input" placeholder="输入你的需求，按 Enter 发送..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
-                <button id="send-btn" onclick="sendMessage()">发送</button>
             </div>
         </main>
         <aside class="right-panel">
@@ -1178,15 +1174,12 @@
 
         function renderSkillList() {
             const listEl = document.getElementById('skill-list');
-            const selectEl = document.getElementById('skill-select');
             const skills = window._skills || [];
             if (skills.length === 0) {
                 listEl.innerHTML = '<div class="skill-empty">暂无 Skill</div>';
-                if (selectEl) selectEl.innerHTML = '<option value="">暂无 Skill</option>';
                 return;
             }
             listEl.innerHTML = '';
-            let selectHtml = '<option value="">选择 Skill...</option>';
             skills.forEach(s => {
                 const item = document.createElement('div');
                 item.className = 'skill-item';
@@ -1204,9 +1197,7 @@
                     </span>
                 `;
                 listEl.appendChild(item);
-                selectHtml += `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`;
             });
-            if (selectEl) selectEl.innerHTML = selectHtml;
         }
 
         function openInstallSkillModal() {
@@ -1609,10 +1600,12 @@
             sendMessage();
         }
 
-        // 创作卡片折叠
-        function toggleCard(id) {
-            const card = document.getElementById(id);
-            if (card) card.classList.toggle('collapsed');
+        // Tab 切换
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+            document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
+            document.getElementById('panel-' + name)?.classList.add('active');
         }
 
         // 加点盐
@@ -1637,72 +1630,6 @@
             } catch (err) {
                 resultEl.textContent = '错误: ' + err.message;
             }
-        }
-
-        // Skill 名称 → API 端点映射
-        const SKILL_API_MAP = {
-            'standup_generator': 'standup',
-            'crosstalk_generator': 'crosstalk',
-            'sketch_generator': 'sketch',
-            'sitcom_generator': 'sitcom',
-            'manzai_generator': 'manzai',
-            'japanese_sketch_generator': 'japanese-sketch',
-        };
-
-        // Skill 直调
-        let _lastSkillResult = null;
-        async function sendSkill() {
-            const skillName = document.getElementById('skill-select').value;
-            const topic = document.getElementById('skill-topic').value.trim();
-            if (!skillName) { alert('请选择 Skill'); return; }
-            if (!topic) { alert('请输入创作主题'); return; }
-            const apiPath = SKILL_API_MAP[skillName] || skillName;
-            const resultBox = document.getElementById('skill-result-box');
-            const resultEl = document.getElementById('skill-result');
-            resultBox.style.display = 'block';
-            resultEl.textContent = '生成中...';
-            try {
-                const res = await apiFetch(`/skills/${encodeURIComponent(apiPath)}`, {
-                    method: 'POST',
-                    body: JSON.stringify({ topic, style: '', scene: '' }),
-                });
-                const data = await res.json();
-                _lastSkillResult = data;
-                resultEl.textContent = data.content || data.output || '（无内容）';
-                loadWallet();
-            } catch (err) {
-                resultEl.textContent = '错误: ' + err.message;
-            }
-        }
-
-        function saveSkillResult() {
-            const content = _lastSkillResult ? (_lastSkillResult.content || _lastSkillResult.output || '') : '';
-            if (!content) { alert('没有可保存的内容'); return; }
-            _pendingScriptContent = content;
-            document.getElementById('script-title').value = '';
-            document.getElementById('script-type').value = '';
-            document.getElementById('save-script-modal').classList.add('active');
-        }
-
-        function submitSkillResult() {
-            const content = _lastSkillResult ? (_lastSkillResult.content || _lastSkillResult.output || '') : '';
-            if (!content) { alert('没有可投稿的内容'); return; }
-            const actor = prompt('请输入投稿演员名称：');
-            if (!actor) return;
-            alert(`投稿功能即将上线（演员：${actor}）`);
-        }
-
-        async function exportSkillResult() {
-            const content = _lastSkillResult ? (_lastSkillResult.content || _lastSkillResult.output || '') : '';
-            if (!content) { alert('没有可导出的内容'); return; }
-            const format = confirm('导出为 Markdown？（取消则导出为纯文本）') ? 'md' : 'txt';
-            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `作品.${format}`;
-            a.click();
-            URL.revokeObjectURL(url);
         }
 
         // 虚拟演员
@@ -1864,7 +1791,6 @@
         // 热门 IP 风格
         async function loadIPStyles() {
             const listEl = document.getElementById('ip-style-list');
-            const selectEl = document.getElementById('ip-style-select');
             try {
                 const res = await apiFetch('/ip-styles');
                 const data = await res.json();
@@ -1882,14 +1808,6 @@
                         card.onclick = () => { alert(`IP 风格「${s.actor_name || s.name}」详情功能即将上线`); };
                         listEl.appendChild(card);
                     });
-                }
-                // 填充创作区下拉框
-                if (selectEl) {
-                    let html = '<option value="">IP 风格（可选）</option>';
-                    styles.forEach(s => {
-                        html += `<option value="${escapeHtml(s.style_id || s.id || '')}">${escapeHtml(s.actor_name || s.name || '未命名')}</option>`;
-                    });
-                    selectEl.innerHTML = html;
                 }
                 // 填充虚拟演员下拉框
                 const actorSelect = document.getElementById('actor-select');

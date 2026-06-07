@@ -122,7 +122,97 @@
             flex-direction: column;
             padding: 1rem;
             gap: 1rem;
+            overflow-y: auto;
         }
+        .creation-card {
+            background: #fff;
+            border-radius: 0.75rem;
+            border: 1px solid #e0e0e0;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .creation-card h3 {
+            font-size: 1rem;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        .creation-card.collapsed .card-body { display: none; }
+        .creation-card.collapsed h3::after {
+            content: '▸';
+            margin-left: auto;
+            font-size: 0.75rem;
+            color: #888;
+            cursor: pointer;
+        }
+        .creation-card:not(.collapsed) h3::after {
+            content: '▾';
+            margin-left: auto;
+            font-size: 0.75rem;
+            color: #888;
+            cursor: pointer;
+        }
+        .salt-levels {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .salt-levels label {
+            flex: 1;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            border: 2px solid #e0e0e0;
+            text-align: center;
+            font-size: 0.8125rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .salt-levels input[type="radio"] { display: none; }
+        .salt-levels input[type="radio"]:checked + label {
+            border-color: #1a1a2e;
+            background: #1a1a2e;
+            color: #fff;
+        }
+        .skill-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .skill-row select, .skill-row input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .result-preview {
+            background: #f8f8f8;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-size: 0.9375rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+        }
+        .result-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .result-actions button {
+            font-size: 0.8125rem;
+            padding: 0.375rem 0.75rem;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+        }
+        .result-actions .btn-save { background: #16c79a; color: #fff; }
+        .result-actions .btn-submit { background: #f5a623; color: #fff; }
+        .result-actions .btn-export { background: #1a1a2e; color: #fff; }
         .chat-area {
             flex: 1;
             background: #fff;
@@ -133,6 +223,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
+            min-height: 200px;
         }
         .message {
             max-width: 80%;
@@ -583,6 +674,49 @@
 
         </aside>
         <main class="main">
+            <!-- 🧂 加点盐 -->
+            <div class="creation-card collapsed" id="salt-card">
+                <h3 onclick="toggleCard('salt-card')">🧂 加点盐</h3>
+                <div class="card-body">
+                    <div class="salt-levels">
+                        <input type="radio" name="salt-level" id="salt-light" value="light" checked>
+                        <label for="salt-light">微盐 🧂</label>
+                        <input type="radio" name="salt-level" id="salt-medium" value="medium">
+                        <label for="salt-medium">中盐 🧂🧂</label>
+                        <input type="radio" name="salt-level" id="salt-heavy" value="heavy">
+                        <label for="salt-heavy">重盐 🧂🧂🧂</label>
+                    </div>
+                    <textarea id="salt-input" placeholder="输入需要润色的文本..." style="height:4rem;resize:vertical;padding:0.5rem;border:1px solid #ddd;border-radius:0.5rem;font-family:inherit;font-size:0.875rem;"></textarea>
+                    <button onclick="sendSalt()" style="padding:0.5rem 1rem;background:#1a1a2e;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:0.875rem;">立即润色</button>
+                    <div id="salt-result" class="result-preview" style="display:none;"></div>
+                </div>
+            </div>
+
+            <!-- 🎤 喜剧创作 -->
+            <div class="creation-card collapsed" id="skill-card">
+                <h3 onclick="toggleCard('skill-card')">🎤 喜剧创作</h3>
+                <div class="card-body">
+                    <div class="skill-row">
+                        <select id="skill-select">
+                            <option value="">选择 Skill...</option>
+                        </select>
+                        <select id="ip-style-select">
+                            <option value="">IP 风格（可选）</option>
+                        </select>
+                    </div>
+                    <textarea id="skill-topic" placeholder="输入创作主题，例如：职场加班、相亲趣事..." style="height:3rem;resize:vertical;padding:0.5rem;border:1px solid #ddd;border-radius:0.5rem;font-family:inherit;font-size:0.875rem;"></textarea>
+                    <button onclick="sendSkill()" style="padding:0.5rem 1rem;background:#1a1a2e;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:0.875rem;">立即生成</button>
+                    <div id="skill-result-box" style="display:none;">
+                        <div id="skill-result" class="result-preview"></div>
+                        <div class="result-actions">
+                            <button class="btn-save" onclick="saveSkillResult()">💾 保存为作品</button>
+                            <button class="btn-submit" onclick="submitSkillResult()">📤 投稿给演员</button>
+                            <button class="btn-export" onclick="exportSkillResult()">📥 导出</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="chat-area" id="chat-area">
                 <div class="empty-state">
                     <h2>Comedy Agent</h2>
@@ -997,12 +1131,15 @@
 
         function renderSkillList() {
             const listEl = document.getElementById('skill-list');
+            const selectEl = document.getElementById('skill-select');
             const skills = window._skills || [];
             if (skills.length === 0) {
                 listEl.innerHTML = '<div class="skill-empty">暂无 Skill</div>';
+                if (selectEl) selectEl.innerHTML = '<option value="">暂无 Skill</option>';
                 return;
             }
             listEl.innerHTML = '';
+            let selectHtml = '<option value="">选择 Skill...</option>';
             skills.forEach(s => {
                 const item = document.createElement('div');
                 item.className = 'skill-item';
@@ -1020,7 +1157,9 @@
                     </span>
                 `;
                 listEl.appendChild(item);
+                selectHtml += `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`;
             });
+            if (selectEl) selectEl.innerHTML = selectHtml;
         }
 
         function openInstallSkillModal() {
@@ -1423,6 +1562,91 @@
             sendMessage();
         }
 
+        // 创作卡片折叠
+        function toggleCard(id) {
+            const card = document.getElementById(id);
+            if (card) card.classList.toggle('collapsed');
+        }
+
+        // 加点盐
+        let _lastSaltResult = null;
+        async function sendSalt() {
+            const text = document.getElementById('salt-input').value.trim();
+            if (!text) { alert('请输入需要润色的文本'); return; }
+            const level = document.querySelector('input[name="salt-level"]:checked')?.value || 'medium';
+            const resultEl = document.getElementById('salt-result');
+            resultEl.style.display = 'block';
+            resultEl.textContent = '润色中...';
+            try {
+                const res = await apiFetch('/salt', {
+                    method: 'POST',
+                    body: JSON.stringify({ text, salt_level: level }),
+                });
+                const data = await res.json();
+                _lastSaltResult = data;
+                resultEl.textContent = data.polished;
+                loadWallet();
+                loadSaltHistory();
+            } catch (err) {
+                resultEl.textContent = '错误: ' + err.message;
+            }
+        }
+
+        // Skill 直调
+        let _lastSkillResult = null;
+        async function sendSkill() {
+            const skillName = document.getElementById('skill-select').value;
+            const topic = document.getElementById('skill-topic').value.trim();
+            if (!skillName) { alert('请选择 Skill'); return; }
+            if (!topic) { alert('请输入创作主题'); return; }
+            const resultBox = document.getElementById('skill-result-box');
+            const resultEl = document.getElementById('skill-result');
+            resultBox.style.display = 'block';
+            resultEl.textContent = '生成中...';
+            try {
+                const res = await apiFetch(`/skills/${encodeURIComponent(skillName)}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ topic, style: '', scene: '' }),
+                });
+                const data = await res.json();
+                _lastSkillResult = data;
+                resultEl.textContent = data.content || data.output || '（无内容）';
+                loadWallet();
+            } catch (err) {
+                resultEl.textContent = '错误: ' + err.message;
+            }
+        }
+
+        function saveSkillResult() {
+            const content = _lastSkillResult ? (_lastSkillResult.content || _lastSkillResult.output || '') : '';
+            if (!content) { alert('没有可保存的内容'); return; }
+            _pendingScriptContent = content;
+            document.getElementById('script-title').value = '';
+            document.getElementById('script-type').value = '';
+            document.getElementById('save-script-modal').classList.add('active');
+        }
+
+        function submitSkillResult() {
+            const content = _lastSkillResult ? (_lastSkillResult.content || _lastSkillResult.output || '') : '';
+            if (!content) { alert('没有可投稿的内容'); return; }
+            const actor = prompt('请输入投稿演员名称：');
+            if (!actor) return;
+            alert(`投稿功能即将上线（演员：${actor}）`);
+        }
+
+        async function exportSkillResult() {
+            const content = _lastSkillResult ? (_lastSkillResult.content || _lastSkillResult.output || '') : '';
+            if (!content) { alert('没有可导出的内容'); return; }
+            const format = confirm('导出为 Markdown？（取消则导出为纯文本）') ? 'md' : 'txt';
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `作品.${format}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
         // Token 钱包
         async function loadProjects() {
             const listEl = document.getElementById('project-list');
@@ -1526,24 +1750,35 @@
         // 热门 IP 风格
         async function loadIPStyles() {
             const listEl = document.getElementById('ip-style-list');
+            const selectEl = document.getElementById('ip-style-select');
             try {
                 const res = await apiFetch('/ip-styles');
                 const data = await res.json();
                 const styles = Array.isArray(data) ? data : (data.styles || []);
+                window._ipStyles = styles;
+                // 填充右侧面板
                 if (styles.length === 0) {
                     listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">暂无 IP 风格</div>';
-                    return;
+                } else {
+                    listEl.innerHTML = '';
+                    styles.forEach(s => {
+                        const card = document.createElement('div');
+                        card.className = 'ip-style-card';
+                        card.innerHTML = `<div class="ip-name">${escapeHtml(s.actor_name || s.name || '未命名')}</div><div class="ip-desc">${escapeHtml(s.description || '')}</div>`;
+                        card.onclick = () => { alert(`IP 风格「${s.actor_name || s.name}」详情功能即将上线`); };
+                        listEl.appendChild(card);
+                    });
                 }
-                listEl.innerHTML = '';
-                styles.forEach(s => {
-                    const card = document.createElement('div');
-                    card.className = 'ip-style-card';
-                    card.innerHTML = `<div class="ip-name">${escapeHtml(s.actor_name || s.name || '未命名')}</div><div class="ip-desc">${escapeHtml(s.description || '')}</div>`;
-                    card.onclick = () => { alert(`IP 风格「${s.actor_name || s.name}」详情功能即将上线`); };
-                    listEl.appendChild(card);
-                });
+                // 填充创作区下拉框
+                if (selectEl) {
+                    let html = '<option value="">IP 风格（可选）</option>';
+                    styles.forEach(s => {
+                        html += `<option value="${escapeHtml(s.style_id || s.id || '')}">${escapeHtml(s.actor_name || s.name || '未命名')}</option>`;
+                    });
+                    selectEl.innerHTML = html;
+                }
             } catch (err) {
-                listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载失败</div>';
+                if (listEl) listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载失败</div>';
                 console.error('加载 IP 风格失败:', err);
             }
         }

@@ -11,10 +11,17 @@ from typing import Any
 
 from comedy_agent.memory.medium_term import SQLMemoryStore
 from comedy_agent.memory.models import (
+    BannedWordData,
     ConversationData,
     DocumentData,
+    EarningRecordData,
+    IPStyleData,
     KnowledgeCardData,
+    ProjectData,
+    SaltHistoryData,
     ScriptData,
+    SubmissionData,
+    TokenAccountData,
     UserContext,
     UserProfileData,
 )
@@ -154,6 +161,95 @@ class UnifiedMemory(MemoryStore):
 
     def delete_knowledge_card(self, user_id: str, card_id: str) -> bool:
         return self._store.delete_knowledge_card(user_id, card_id)
+
+    # ------------------------------------------------------------------ #
+    # Token 账户
+    # ------------------------------------------------------------------ #
+    def get_token_account(self, user_id: str) -> TokenAccountData | None:
+        return self._store.get_token_account(user_id)
+
+    def deduct_tokens(self, user_id: str, amount: int) -> bool:
+        return self._store.deduct_tokens(user_id, amount)
+
+    def recharge_tokens(self, user_id: str, amount: int) -> TokenAccountData:
+        return self._store.recharge_tokens(user_id, amount)
+
+    # ------------------------------------------------------------------ #
+    # 项目
+    # ------------------------------------------------------------------ #
+    def save_project(self, user_id: str, project: ProjectData) -> ProjectData:
+        return self._store.save_project(user_id, project)
+
+    def load_project(self, user_id: str, project_id: str) -> ProjectData | None:
+        return self._store.load_project(user_id, project_id)
+
+    def list_projects(self, user_id: str) -> list[ProjectData]:
+        return self._store.list_projects(user_id)
+
+    def delete_project(self, user_id: str, project_id: str) -> bool:
+        return self._store.delete_project(user_id, project_id)
+
+    # ------------------------------------------------------------------ #
+    # 加点盐历史
+    # ------------------------------------------------------------------ #
+    def save_salt_history(self, history: SaltHistoryData) -> SaltHistoryData:
+        return self._store.save_salt_history(history)
+
+    def list_salt_history(self, user_id: str, project_id: str | None = None) -> list[SaltHistoryData]:
+        return self._store.list_salt_history(user_id, project_id)
+
+    # ------------------------------------------------------------------ #
+    # IP 风格模型
+    # ------------------------------------------------------------------ #
+    def save_ip_style(self, style: IPStyleData) -> IPStyleData:
+        return self._store.save_ip_style(style)
+
+    def load_ip_style(self, style_id: str) -> IPStyleData | None:
+        return self._store.load_ip_style(style_id)
+
+    def list_ip_styles(self, status: str | None = None) -> list[IPStyleData]:
+        return self._store.list_ip_styles(status)
+
+    def delete_ip_style(self, style_id: str) -> bool:
+        return self._store.delete_ip_style(style_id)
+
+    # ------------------------------------------------------------------ #
+    # 投稿
+    # ------------------------------------------------------------------ #
+    def save_submission(self, submission: SubmissionData) -> SubmissionData:
+        return self._store.save_submission(submission)
+
+    def load_submission(self, submission_id: str) -> SubmissionData | None:
+        return self._store.load_submission(submission_id)
+
+    def list_submissions(
+        self, user_id: str | None = None, target_actor: str | None = None, status: str | None = None
+    ) -> list[SubmissionData]:
+        return self._store.list_submissions(user_id, target_actor, status)
+
+    def review_submission(self, submission_id: str, status: str, comment: str | None = None) -> bool:
+        return self._store.review_submission(submission_id, status, comment)
+
+    # ------------------------------------------------------------------ #
+    # 收益记录
+    # ------------------------------------------------------------------ #
+    def save_earning(self, record: EarningRecordData) -> EarningRecordData:
+        return self._store.save_earning(record)
+
+    def list_earnings(self, user_id: str | None = None, actor_name: str | None = None) -> list[EarningRecordData]:
+        return self._store.list_earnings(user_id, actor_name)
+
+    # ------------------------------------------------------------------ #
+    # 敏感词
+    # ------------------------------------------------------------------ #
+    def save_banned_word(self, word: BannedWordData) -> BannedWordData:
+        return self._store.save_banned_word(word)
+
+    def list_banned_words(self, category: str | None = None) -> list[BannedWordData]:
+        return self._store.list_banned_words(category)
+
+    def delete_banned_word(self, word_id: int) -> bool:
+        return self._store.delete_banned_word(word_id)
 
     # ------------------------------------------------------------------ #
     # 高级接口：Token 预算控制的上下文文本

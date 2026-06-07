@@ -54,6 +54,21 @@ class UserProfile(Base):
     knowledge_cards: Mapped[list["KnowledgeCard"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
+    token_account: Mapped["UserTokenAccount"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    projects: Mapped[list["UserProject"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    salt_history: Mapped[list["SaltHistory"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    submissions: Mapped[list["ScriptSubmission"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    earnings: Mapped[list["EarningRecord"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -225,3 +240,198 @@ class KnowledgeCard(Base):
 
     # Relationship
     user: Mapped["UserProfile"] = relationship(back_populates="knowledge_cards")
+
+
+# ------------------------------------------------------------------ #
+# UserTokenAccount —— 用户 Token 账户
+# ------------------------------------------------------------------ #
+class UserTokenAccount(Base):
+    """用户 Token 账户表。"""
+
+    __tablename__ = "user_token_accounts"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    balance: Mapped[int] = mapped_column(Integer, default=5000, nullable=False)
+    total_consumed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_recharged: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="token_account")
+
+
+# ------------------------------------------------------------------ #
+# UserProject —— 用户项目
+# ------------------------------------------------------------------ #
+class UserProject(Base):
+    """用户项目表。"""
+
+    __tablename__ = "user_projects"
+
+    project_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    project_type: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="standup / sketch / salt / mixed"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="projects")
+
+
+# ------------------------------------------------------------------ #
+# SaltHistory —— 加点盐历史
+# ------------------------------------------------------------------ #
+class SaltHistory(Base):
+    """加点盐历史表。"""
+
+    __tablename__ = "salt_history"
+
+    salt_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_projects.project_id"), nullable=True
+    )
+    original_text: Mapped[str] = mapped_column(Text, nullable=False)
+    polished_text: Mapped[str] = mapped_column(Text, nullable=False)
+    salt_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    token_cost: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="salt_history")
+
+
+# ------------------------------------------------------------------ #
+# IPStyle —— IP 风格模型
+# ------------------------------------------------------------------ #
+class IPStyle(Base):
+    """IP 风格模型表。"""
+
+    __tablename__ = "ip_styles"
+
+    style_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    actor_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(32), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_snippet: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default="active", nullable=False, comment="active / testing / offline"
+    )
+    split_ratio: Mapped[int] = mapped_column(Integer, default=70, nullable=False)
+    usage_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+# ------------------------------------------------------------------ #
+# ScriptSubmission —— 用户投稿
+# ------------------------------------------------------------------ #
+class ScriptSubmission(Base):
+    """用户投稿表。"""
+
+    __tablename__ = "script_submissions"
+
+    submission_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    script_id: Mapped[str] = mapped_column(
+        ForeignKey("user_scripts.script_id"), nullable=False
+    )
+    target_actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / adopted / rejected"
+    )
+    actor_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="submissions")
+
+
+# ------------------------------------------------------------------ #
+# EarningRecord —— 收益记录
+# ------------------------------------------------------------------ #
+class EarningRecord(Base):
+    """收益记录表。"""
+
+    __tablename__ = "earning_records"
+
+    record_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    actor_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    record_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="earnings")
+
+
+# ------------------------------------------------------------------ #
+# BannedWord —— 敏感词
+# ------------------------------------------------------------------ #
+class BannedWord(Base):
+    """敏感词配置表。"""
+
+    __tablename__ = "banned_words"
+
+    word_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    word: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    category: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="political / competitor / vulgar"
+    )
+    added_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )

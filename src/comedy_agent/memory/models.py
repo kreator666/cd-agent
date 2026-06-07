@@ -100,3 +100,108 @@ class UserContext(BaseModel):
     preferences: list[PreferenceItem] = Field(default_factory=list)
     recent_conversations: list[ConversationData] = Field(default_factory=list)
     recent_scripts: list[ScriptData] = Field(default_factory=list)
+
+
+# ------------------------------------------------------------------ #
+# Token 账户
+# ------------------------------------------------------------------ #
+class TokenAccountData(BaseModel):
+    """用户 Token 账户数据。"""
+
+    user_id: str = Field(description="用户唯一标识")
+    balance: int = Field(default=5000, description="Token 余额")
+    total_consumed: int = Field(default=0, description="累计消费")
+    total_recharged: int = Field(default=0, description="累计充值")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 项目
+# ------------------------------------------------------------------ #
+class ProjectData(BaseModel):
+    """项目数据。"""
+
+    project_id: str | None = Field(default=None, description="项目唯一标识，留空则自动生成")
+    user_id: str = Field(description="所属用户")
+    name: str = Field(description="项目名称")
+    project_type: str | None = Field(default=None, description="项目类型：standup / sketch / salt / mixed")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 加点盐历史
+# ------------------------------------------------------------------ #
+class SaltHistoryData(BaseModel):
+    """加点盐历史数据。"""
+
+    salt_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str = Field(description="所属用户")
+    project_id: str | None = Field(default=None, description="关联项目 ID")
+    original_text: str = Field(description="原始文本")
+    polished_text: str = Field(description="润色后文本")
+    salt_level: str = Field(description="盐度等级：light / medium / heavy")
+    token_cost: int = Field(default=0, description="消耗 Token 数")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
+# IP 风格模型
+# ------------------------------------------------------------------ #
+class IPStyleData(BaseModel):
+    """IP 风格模型数据。"""
+
+    style_id: str | None = Field(default=None, description="风格唯一标识，留空则自动生成")
+    actor_name: str = Field(description="演员名称")
+    version: str = Field(description="模型版本")
+    description: str = Field(description="风格描述")
+    prompt_snippet: str = Field(description="注入 Prompt 的片段")
+    status: str = Field(default="active", description="状态：active / testing / offline")
+    split_ratio: int = Field(default=70, description="演员分成比例")
+    usage_count: int = Field(default=0, description="累计调用次数")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 投稿
+# ------------------------------------------------------------------ #
+class SubmissionData(BaseModel):
+    """投稿数据。"""
+
+    submission_id: str | None = Field(default=None, description="投稿唯一标识，留空则自动生成")
+    user_id: str = Field(description="投稿用户")
+    script_id: str = Field(description="关联作品 ID")
+    target_actor: str = Field(description="目标演员")
+    status: str = Field(default="pending", description="状态：pending / adopted / rejected")
+    actor_comment: str | None = Field(default=None, description="演员审核意见")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 收益记录
+# ------------------------------------------------------------------ #
+class EarningRecordData(BaseModel):
+    """收益记录数据。"""
+
+    record_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str | None = Field(default=None, description="关联用户（平台收益时为空）")
+    actor_name: str | None = Field(default=None, description="演员名称")
+    record_type: str = Field(description="记录类型：platform_fee / actor_split / withdrawal")
+    amount: int = Field(description="金额（单位：分）")
+    description: str | None = Field(default=None, description="说明")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
+# 敏感词
+# ------------------------------------------------------------------ #
+class BannedWordData(BaseModel):
+    """敏感词数据。"""
+
+    word_id: int | None = Field(default=None, description="敏感词 ID")
+    word: str = Field(description="敏感词内容")
+    category: str | None = Field(default=None, description="分类：political / competitor / vulgar")
+    added_by: str | None = Field(default=None, description="添加者用户 ID")
+    created_at: datetime | None = Field(default=None, description="创建时间")

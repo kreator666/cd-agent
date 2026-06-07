@@ -17,21 +17,35 @@ from sqlalchemy.orm import sessionmaker
 
 from comedy_agent.core.config import settings
 from comedy_agent.memory.models import (
+    BannedWordData,
     ConversationData,
     DocumentData,
+    EarningRecordData,
+    IPStyleData,
     KnowledgeCardData,
+    ProjectData,
+    SaltHistoryData,
     ScriptData,
+    SubmissionData,
+    TokenAccountData,
     UserContext,
     UserProfileData,
 )
 from comedy_agent.memory.schema import (
     Base,
+    BannedWord,
+    EarningRecord,
+    IPStyle,
     KnowledgeCard,
+    SaltHistory,
+    ScriptSubmission,
     UserConversation,
     UserDocument,
     UserPreference,
     UserProfile,
+    UserProject,
     UserScript,
+    UserTokenAccount,
 )
 from comedy_agent.memory.store import MemoryStore
 
@@ -646,3 +660,467 @@ class SQLMemoryStore(MemoryStore):
             recent_conversations=recent_conversations,
             recent_scripts=recent_scripts,
         )
+
+    # ------------------------------------------------------------------ #
+    # Token 账户
+    # ------------------------------------------------------------------ #
+    def get_token_account(self, user_id: str) -> TokenAccountData | None:
+        """获取用户 Token 账户，不存在则自动创建（赠 5000）。"""
+        with self._new_session() as session:
+            row = session.query(UserTokenAccount).filter_by(user_id=user_id).first()
+            if row is None:
+                row = UserTokenAccount(user_id=user_id, balance=5000, total_consumed=0, total_recharged=0)
+                session.add(row)
+                session.commit()
+                logger.info("Created token account for user: %s", user_id)
+            return TokenAccountData(
+                user_id=row.user_id,
+                balance=row.balance,
+                total_consumed=row.total_consumed,
+                total_recharged=row.total_recharged,
+                updated_at=row.updated_at,
+            )
+
+    def deduct_tokens(self, user_id: str, amount: int) -> bool:
+        """扣减用户 Token 余额。"""
+        with self._new_session() as session:
+            row = session.query(UserTokenAccount).filter_by(user_id=user_id).first()
+            if row is None:
+                row = UserTokenAccount(user_id=user_id, balance=5000, total_consumed=0, total_recharged=0)
+                session.add(row)
+            if row.balance < amount:
+                return False
+            row.balance -= amount
+            row.total_consumed += amount
+            row.updated_at = self._now()
+            session.commit()
+            logger.debug("Deducted %d tokens from %s, balance=%d", amount, user_id, row.balance)
+            return True
+
+    def recharge_tokens(self, user_id: str, amount: int) -> TokenAccountData:
+        """充值用户 Token 余额。"""
+        with self._new_session() as session:
+            row = session.query(UserTokenAccount).filter_by(user_id=user_id).first()
+            if row is None:
+                row = UserTokenAccount(user_id=user_id, balance=5000, total_consumed=0, total_recharged=0)
+                session.add(row)
+            row.balance += amount
+            row.total_recharged += amount
+            row.updated_at = self._now()
+            session.commit()
+            logger.info("Recharged %d tokens for %s, balance=%d", amount, user_id, row.balance)
+            return TokenAccountData(
+                user_id=row.user_id,
+                balance=row.balance,
+                total_consumed=row.total_consumed,
+                total_recharged=row.total_recharged,
+                updated_at=row.updated_at,
+            )
+
+    # ------------------------------------------------------------------ #
+    # 项目
+    # ------------------------------------------------------------------ #
+    def save_project(self, user_id: str, project: ProjectData) -> ProjectData:
+        project_id = project.project_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = session.query(UserProject).filter_by(project_id=project_id, user_id=user_id).first()
+            if row is None:
+                row = UserProject(
+                    project_id=project_id,
+                    user_id=user_id,
+                    name=project.name,
+                    project_type=project.project_type,
+                )
+                session.add(row)
+            else:
+                row.name = project.name
+                row.project_type = project.project_type
+                row.updated_at = self._now()
+            session.commit()
+            logger.debug("Saved project: %s", project_id)
+            return ProjectData(
+                project_id=row.project_id,
+                user_id=row.user_id,
+                name=row.name,
+                project_type=row.project_type,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def load_project(self, user_id: str, project_id: str) -> ProjectData | None:
+        with self._new_session() as session:
+            row = session.query(UserProject).filter_by(project_id=project_id, user_id=user_id).first()
+            if row is None:
+                return None
+            return ProjectData(
+                project_id=row.project_id,
+                user_id=row.user_id,
+                name=row.name,
+                project_type=row.project_type,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def list_projects(self, user_id: str) -> list[ProjectData]:
+        with self._new_session() as session:
+            rows = (
+                session.query(UserProject)
+                .filter_by(user_id=user_id)
+                .order_by(UserProject.updated_at.desc())
+                .all()
+            )
+            return [
+                ProjectData(
+                    project_id=r.project_id,
+                    user_id=r.user_id,
+                    name=r.name,
+                    project_type=r.project_type,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def delete_project(self, user_id: str, project_id: str) -> bool:
+        with self._new_session() as session:
+            row = session.query(UserProject).filter_by(project_id=project_id, user_id=user_id).first()
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted project: %s", project_id)
+            return True
+
+    # ------------------------------------------------------------------ #
+    # 加点盐历史
+    # ------------------------------------------------------------------ #
+    def save_salt_history(self, history: SaltHistoryData) -> SaltHistoryData:
+        salt_id = history.salt_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = SaltHistory(
+                salt_id=salt_id,
+                user_id=history.user_id,
+                project_id=history.project_id,
+                original_text=history.original_text,
+                polished_text=history.polished_text,
+                salt_level=history.salt_level,
+                token_cost=history.token_cost,
+            )
+            session.add(row)
+            session.commit()
+            logger.debug("Saved salt history: %s", salt_id)
+            return SaltHistoryData(
+                salt_id=row.salt_id,
+                user_id=row.user_id,
+                project_id=row.project_id,
+                original_text=row.original_text,
+                polished_text=row.polished_text,
+                salt_level=row.salt_level,
+                token_cost=row.token_cost,
+                created_at=row.created_at,
+            )
+
+    def list_salt_history(self, user_id: str, project_id: str | None = None) -> list[SaltHistoryData]:
+        with self._new_session() as session:
+            query = session.query(SaltHistory).filter_by(user_id=user_id)
+            if project_id is not None:
+                query = query.filter_by(project_id=project_id)
+            rows = query.order_by(SaltHistory.created_at.desc()).all()
+            return [
+                SaltHistoryData(
+                    salt_id=r.salt_id,
+                    user_id=r.user_id,
+                    project_id=r.project_id,
+                    original_text=r.original_text,
+                    polished_text=r.polished_text,
+                    salt_level=r.salt_level,
+                    token_cost=r.token_cost,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    # ------------------------------------------------------------------ #
+    # IP 风格模型
+    # ------------------------------------------------------------------ #
+    def save_ip_style(self, style: IPStyleData) -> IPStyleData:
+        style_id = style.style_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = session.query(IPStyle).filter_by(style_id=style_id).first()
+            if row is None:
+                row = IPStyle(
+                    style_id=style_id,
+                    actor_name=style.actor_name,
+                    version=style.version,
+                    description=style.description,
+                    prompt_snippet=style.prompt_snippet,
+                    status=style.status,
+                    split_ratio=style.split_ratio,
+                    usage_count=style.usage_count,
+                )
+                session.add(row)
+            else:
+                row.actor_name = style.actor_name
+                row.version = style.version
+                row.description = style.description
+                row.prompt_snippet = style.prompt_snippet
+                row.status = style.status
+                row.split_ratio = style.split_ratio
+                row.usage_count = style.usage_count
+                row.updated_at = self._now()
+            session.commit()
+            logger.debug("Saved IP style: %s", style_id)
+            return IPStyleData(
+                style_id=row.style_id,
+                actor_name=row.actor_name,
+                version=row.version,
+                description=row.description,
+                prompt_snippet=row.prompt_snippet,
+                status=row.status,
+                split_ratio=row.split_ratio,
+                usage_count=row.usage_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def load_ip_style(self, style_id: str) -> IPStyleData | None:
+        with self._new_session() as session:
+            row = session.query(IPStyle).filter_by(style_id=style_id).first()
+            if row is None:
+                return None
+            return IPStyleData(
+                style_id=row.style_id,
+                actor_name=row.actor_name,
+                version=row.version,
+                description=row.description,
+                prompt_snippet=row.prompt_snippet,
+                status=row.status,
+                split_ratio=row.split_ratio,
+                usage_count=row.usage_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def list_ip_styles(self, status: str | None = None) -> list[IPStyleData]:
+        with self._new_session() as session:
+            query = session.query(IPStyle)
+            if status is not None:
+                query = query.filter_by(status=status)
+            rows = query.order_by(IPStyle.usage_count.desc()).all()
+            return [
+                IPStyleData(
+                    style_id=r.style_id,
+                    actor_name=r.actor_name,
+                    version=r.version,
+                    description=r.description,
+                    prompt_snippet=r.prompt_snippet,
+                    status=r.status,
+                    split_ratio=r.split_ratio,
+                    usage_count=r.usage_count,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def delete_ip_style(self, style_id: str) -> bool:
+        with self._new_session() as session:
+            row = session.query(IPStyle).filter_by(style_id=style_id).first()
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted IP style: %s", style_id)
+            return True
+
+    # ------------------------------------------------------------------ #
+    # 投稿
+    # ------------------------------------------------------------------ #
+    def save_submission(self, submission: SubmissionData) -> SubmissionData:
+        submission_id = submission.submission_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = session.query(ScriptSubmission).filter_by(submission_id=submission_id).first()
+            if row is None:
+                row = ScriptSubmission(
+                    submission_id=submission_id,
+                    user_id=submission.user_id,
+                    script_id=submission.script_id,
+                    target_actor=submission.target_actor,
+                    status=submission.status,
+                    actor_comment=submission.actor_comment,
+                )
+                session.add(row)
+            else:
+                row.target_actor = submission.target_actor
+                row.status = submission.status
+                row.actor_comment = submission.actor_comment
+                row.updated_at = self._now()
+            session.commit()
+            logger.debug("Saved submission: %s", submission_id)
+            return SubmissionData(
+                submission_id=row.submission_id,
+                user_id=row.user_id,
+                script_id=row.script_id,
+                target_actor=row.target_actor,
+                status=row.status,
+                actor_comment=row.actor_comment,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def load_submission(self, submission_id: str) -> SubmissionData | None:
+        with self._new_session() as session:
+            row = session.query(ScriptSubmission).filter_by(submission_id=submission_id).first()
+            if row is None:
+                return None
+            return SubmissionData(
+                submission_id=row.submission_id,
+                user_id=row.user_id,
+                script_id=row.script_id,
+                target_actor=row.target_actor,
+                status=row.status,
+                actor_comment=row.actor_comment,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def list_submissions(
+        self, user_id: str | None = None, target_actor: str | None = None, status: str | None = None
+    ) -> list[SubmissionData]:
+        with self._new_session() as session:
+            query = session.query(ScriptSubmission)
+            if user_id is not None:
+                query = query.filter_by(user_id=user_id)
+            if target_actor is not None:
+                query = query.filter_by(target_actor=target_actor)
+            if status is not None:
+                query = query.filter_by(status=status)
+            rows = query.order_by(ScriptSubmission.created_at.desc()).all()
+            return [
+                SubmissionData(
+                    submission_id=r.submission_id,
+                    user_id=r.user_id,
+                    script_id=r.script_id,
+                    target_actor=r.target_actor,
+                    status=r.status,
+                    actor_comment=r.actor_comment,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def review_submission(self, submission_id: str, status: str, comment: str | None = None) -> bool:
+        with self._new_session() as session:
+            row = session.query(ScriptSubmission).filter_by(submission_id=submission_id).first()
+            if row is None:
+                return False
+            row.status = status
+            row.actor_comment = comment
+            row.updated_at = self._now()
+            session.commit()
+            logger.debug("Reviewed submission %s -> %s", submission_id, status)
+            return True
+
+    # ------------------------------------------------------------------ #
+    # 收益记录
+    # ------------------------------------------------------------------ #
+    def save_earning(self, record: EarningRecordData) -> EarningRecordData:
+        record_id = record.record_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = EarningRecord(
+                record_id=record_id,
+                user_id=record.user_id,
+                actor_name=record.actor_name,
+                record_type=record.record_type,
+                amount=record.amount,
+                description=record.description,
+            )
+            session.add(row)
+            session.commit()
+            logger.debug("Saved earning record: %s", record_id)
+            return EarningRecordData(
+                record_id=row.record_id,
+                user_id=row.user_id,
+                actor_name=row.actor_name,
+                record_type=row.record_type,
+                amount=row.amount,
+                description=row.description,
+                created_at=row.created_at,
+            )
+
+    def list_earnings(self, user_id: str | None = None, actor_name: str | None = None) -> list[EarningRecordData]:
+        with self._new_session() as session:
+            query = session.query(EarningRecord)
+            if user_id is not None:
+                query = query.filter_by(user_id=user_id)
+            if actor_name is not None:
+                query = query.filter_by(actor_name=actor_name)
+            rows = query.order_by(EarningRecord.created_at.desc()).all()
+            return [
+                EarningRecordData(
+                    record_id=r.record_id,
+                    user_id=r.user_id,
+                    actor_name=r.actor_name,
+                    record_type=r.record_type,
+                    amount=r.amount,
+                    description=r.description,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    # ------------------------------------------------------------------ #
+    # 敏感词
+    # ------------------------------------------------------------------ #
+    def save_banned_word(self, word: BannedWordData) -> BannedWordData:
+        with self._new_session() as session:
+            existing = session.query(BannedWord).filter_by(word=word.word).first()
+            if existing is not None:
+                existing.category = word.category
+                existing.added_by = word.added_by
+                session.commit()
+                row = existing
+            else:
+                row = BannedWord(
+                    word=word.word,
+                    category=word.category,
+                    added_by=word.added_by,
+                )
+                session.add(row)
+                session.commit()
+            logger.debug("Saved banned word: %s", row.word)
+            return BannedWordData(
+                word_id=row.word_id,
+                word=row.word,
+                category=row.category,
+                added_by=row.added_by,
+                created_at=row.created_at,
+            )
+
+    def list_banned_words(self, category: str | None = None) -> list[BannedWordData]:
+        with self._new_session() as session:
+            query = session.query(BannedWord)
+            if category is not None:
+                query = query.filter_by(category=category)
+            rows = query.order_by(BannedWord.created_at.desc()).all()
+            return [
+                BannedWordData(
+                    word_id=r.word_id,
+                    word=r.word,
+                    category=r.category,
+                    added_by=r.added_by,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    def delete_banned_word(self, word_id: int) -> bool:
+        with self._new_session() as session:
+            row = session.query(BannedWord).filter_by(word_id=word_id).first()
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted banned word: %d", word_id)
+            return True

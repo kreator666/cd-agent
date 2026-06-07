@@ -9,6 +9,7 @@ from comedy_agent.skills.joke_analyzer import JokeAnalyzerSkill
 from comedy_agent.skills.script_evaluator import ScriptEvaluatorSkill
 from comedy_agent.skills.manzai import ManzaiSkill
 from comedy_agent.skills.japanese_sketch import JapaneseSketchSkill
+from comedy_agent.skills.add_salt import AddSaltSkill
 
 __all__ = [
     "ComedySkill",
@@ -20,4 +21,5 @@ __all__ = [
     "ScriptEvaluatorSkill",
     "ManzaiSkill",
     "JapaneseSketchSkill",
+    "AddSaltSkill",
 ]

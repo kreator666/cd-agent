@@ -117,6 +117,13 @@ class TestSalt:
         assert data["original"] == "今天天气不错"
         assert data["token_cost"] == 10
 
+        # 验证通过 skill 指令调用 add_salt
+        from comedy_agent.api.server import state as server_state
+        assert server_state.orch is not None
+        call_args = server_state.orch.run.call_args
+        prompt_arg = call_args[0][0] if call_args[0] else call_args[1].get("user_input", "")
+        assert "add_salt" in prompt_arg
+
         # 验证扣费
         wallet = client.get("/me/wallet").json()
         assert wallet["balance"] == 5000 - 10

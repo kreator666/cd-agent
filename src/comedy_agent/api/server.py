@@ -42,6 +42,7 @@ from comedy_agent.rag.ingest import KnowledgeIngestor
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills import (
+    AddSaltSkill,
     CrosstalkSkill,
     JapaneseSketchSkill,
     JokeAnalyzerSkill,
@@ -373,6 +374,7 @@ async def lifespan(app: FastAPI):
         state.orch.register_skill(JapaneseSketchSkill())
         state.orch.register_skill(JokeAnalyzerSkill())
         state.orch.register_skill(ScriptEvaluatorSkill())
+        state.orch.register_skill(AddSaltSkill())
 
         # 加载外部插件 Skill
         for plugin in load_plugin_skills():

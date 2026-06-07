@@ -337,6 +337,7 @@ _BUILTIN_SKILL_NAMES = {
     "sitcom_generator",
     "joke_analyzer",
     "script_evaluator",
+    "add_salt",
 }
 
 

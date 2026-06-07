@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>演员工作台 — Comedy Agent</title>
+    <link rel="stylesheet" href="/static/common.css">
+    <style>
+        body { height: 100vh; display: flex; flex-direction: column; }
+        .container { flex: 1; max-width: 1000px; width: 100%; margin: 0 auto; padding: 1rem; overflow-y: auto; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card { background: #fff; border-radius: 0.75rem; border: 1px solid #e0e0e0; padding: 1rem; text-align: center; }
+        .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; color: #1a1a2e; }
+        .stat-card .stat-label { font-size: 0.8125rem; color: #666; margin-top: 0.25rem; }
+        .section { background: #fff; border-radius: 0.75rem; border: 1px solid #e0e0e0; padding: 1rem; margin-bottom: 1rem; }
+        .section h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+        .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        .table th, .table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        .table th { color: #666; font-weight: 500; }
+        .badge { font-size: 0.75rem; padding: 0.125rem 0.5rem; border-radius: 0.25rem; }
+        .badge.pending { background: #f5a623; color: #fff; }
+        .badge.adopted { background: #16c79a; color: #fff; }
+        .badge.rejected { background: #e94560; color: #fff; }
+        .btn { padding: 0.375rem 0.75rem; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.8125rem; }
+        .btn-primary { background: #1a1a2e; color: #fff; }
+        .btn-success { background: #16c79a; color: #fff; }
+        .btn-danger { background: #e94560; color: #fff; }
+        .withdraw-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+        .withdraw-form input { flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 0.375rem; font-size: 0.875rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🎤 演员工作台</h1>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <a href="/static/index.html">创作工坊</a>
+            <a href="/static/me.html">我的</a>
+            <span id="current-user" style="font-size:0.875rem;"></span>
+            <button onclick="logout()" style="font-size:0.75rem;padding:0.25rem 0.75rem;background:#e94560;color:#fff;border:none;border-radius:0.375rem;cursor:pointer;">退出</button>
+        </div>
+    </header>
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-usage">--</div>
+                <div class="stat-label">风格调用次数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-income">--</div>
+                <div class="stat-label">预计收益（分）</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-pending">--</div>
+                <div class="stat-label">待审核投稿</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📤 待审核投稿</h2>
+            <table class="table" id="submission-table">
+                <thead><tr><th>作品</th><th>投稿人</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody id="submission-list"><tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>💰 收益明细</h2>
+            <table class="table" id="earnings-table">
+                <thead><tr><th>类型</th><th>金额</th><th>说明</th><th>时间</th></tr></thead>
+                <tbody id="earnings-list"><tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+            </table>
+            <div class="withdraw-form">
+                <input type="number" id="withdraw-amount" placeholder="提现金额（分）" min="1">
+                <button class="btn btn-primary" onclick="requestWithdraw()">申请提现</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/common.js"></script>
+    <script>
+        requireAuth();
+        document.getElementById('current-user').textContent = getCurrentUserId() || '';
+
+        async function loadDashboard() {
+            try {
+                const res = await apiFetch('/actor/dashboard');
+                const data = await res.json();
+                document.getElementById('stat-usage').textContent = data.usage_count ?? '--';
+                document.getElementById('stat-income').textContent = data.estimated_income ?? '--';
+                document.getElementById('stat-pending').textContent = data.pending_count ?? '--';
+            } catch (err) {
+                console.error('加载仪表盘失败:', err);
+            }
+        }
+
+        async function loadSubmissions() {
+            const tbody = document.getElementById('submission-list');
+            try {
+                const res = await apiFetch('/submissions');
+                const data = await res.json();
+                const items = Array.isArray(data) ? data : (data.submissions || []);
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">暂无投稿</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                items.forEach(item => {
+                    const tr = document.createElement('tr');
+                    const statusClass = item.status === 'pending' ? 'pending' : (item.status === 'adopted' ? 'adopted' : 'rejected');
+                    const statusText = item.status === 'pending' ? '待审核' : (item.status === 'adopted' ? '已采纳' : '已拒绝');
+                    const actions = item.status === 'pending'
+                        ? `<button class="btn btn-success" onclick="reviewSubmission('${item.submission_id}', true)">采纳</button> <button class="btn btn-danger" onclick="reviewSubmission('${item.submission_id}', false)">拒绝</button>`
+                        : '';
+                    tr.innerHTML = `<td>${escapeHtml(item.script_title || '未命名')}</td><td>${escapeHtml(item.user_id || '')}</td><td><span class="badge ${statusClass}">${statusText}</span></td><td>${actions}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#999;">加载失败</td></tr>`;
+                console.error('加载投稿失败:', err);
+            }
+        }
+
+        async function reviewSubmission(submissionId, approve) {
+            const comment = approve ? '' : prompt('请输入拒绝原因（可选）：');
+            try {
+                await apiFetch(`/submissions/${submissionId}/review`, {
+                    method: 'POST',
+                    body: JSON.stringify({ status: approve ? 'adopted' : 'rejected', comment: comment || null }),
+                });
+                loadSubmissions();
+                loadDashboard();
+            } catch (err) {
+                alert('审核失败: ' + err.message);
+            }
+        }
+
+        async function loadEarnings() {
+            const tbody = document.getElementById('earnings-list');
+            try {
+                const res = await apiFetch('/actor/earnings');
+                const data = await res.json();
+                const items = Array.isArray(data) ? data : (data.earnings || []);
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                items.forEach(item => {
+                    const tr = document.createElement('tr');
+                    const time = item.created_at ? new Date(item.created_at).toLocaleDateString() : '';
+                    tr.innerHTML = `<td>${escapeHtml(item.record_type || '')}</td><td>${item.amount ?? 0}</td><td>${escapeHtml(item.description || '')}</td><td>${time}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#999;">加载失败</td></tr>`;
+                console.error('加载收益失败:', err);
+            }
+        }
+
+        async function requestWithdraw() {
+            const amount = document.getElementById('withdraw-amount').value;
+            if (!amount || amount <= 0) { alert('请输入有效金额'); return; }
+            try {
+                await apiFetch('/actor/withdraw', {
+                    method: 'POST',
+                    body: JSON.stringify({ amount: Number(amount) }),
+                });
+                alert('提现申请已提交');
+                loadEarnings();
+                loadDashboard();
+            } catch (err) {
+                alert('提现失败: ' + err.message);
+            }
+        }
+
+        loadDashboard();
+        loadSubmissions();
+        loadEarnings();
+    </script>
+</body>
+</html>

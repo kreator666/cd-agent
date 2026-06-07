@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理控制台 — Comedy Agent</title>
+    <link rel="stylesheet" href="/static/common.css">
+    <style>
+        body { height: 100vh; display: flex; flex-direction: column; }
+        .container { flex: 1; max-width: 1200px; width: 100%; margin: 0 auto; padding: 1rem; overflow-y: auto; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card { background: #fff; border-radius: 0.75rem; border: 1px solid #e0e0e0; padding: 1rem; text-align: center; }
+        .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; color: #1a1a2e; }
+        .stat-card .stat-label { font-size: 0.8125rem; color: #666; margin-top: 0.25rem; }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid #e0e0e0; }
+        .tab { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.875rem; border-bottom: 2px solid transparent; }
+        .tab.active { border-bottom-color: #1a1a2e; font-weight: 600; }
+        .tab:hover { background: #f8f8f8; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .section { background: #fff; border-radius: 0.75rem; border: 1px solid #e0e0e0; padding: 1rem; margin-bottom: 1rem; }
+        .section h3 { font-size: 1rem; margin: 0 0 0.75rem; }
+        .table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        .table th, .table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        .table th { color: #666; font-weight: 500; }
+        .btn { padding: 0.375rem 0.75rem; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.8125rem; }
+        .btn-primary { background: #1a1a2e; color: #fff; }
+        .btn-success { background: #16c79a; color: #fff; }
+        .btn-danger { background: #e94560; color: #fff; }
+        .form-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+        .form-row input, .form-row select { flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 0.375rem; font-size: 0.875rem; }
+        .word-tag { display: inline-block; padding: 0.25rem 0.5rem; background: #f8f8f8; border-radius: 0.375rem; font-size: 0.8125rem; margin: 0.25rem; }
+        .word-tag .del { color: #e94560; cursor: pointer; margin-left: 0.25rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>⚙️ 管理控制台</h1>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <a href="/static/index.html">创作工坊</a>
+            <a href="/static/me.html">我的</a>
+            <span id="current-user" style="font-size:0.875rem;"></span>
+            <button onclick="logout()" style="font-size:0.75rem;padding:0.25rem 0.75rem;background:#e94560;color:#fff;border:none;border-radius:0.375rem;cursor:pointer;">退出</button>
+        </div>
+    </header>
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-dau">--</div>
+                <div class="stat-label">日活跃用户</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-generations">--</div>
+                <div class="stat-label">总生成次数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-ip">--</div>
+                <div class="stat-label">IP 调用次数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-salt">--</div>
+                <div class="stat-label">加点盐使用</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-settlement">--</div>
+                <div class="stat-label">待结算（分）</div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('skills')">Skill 审核</div>
+            <div class="tab" onclick="switchTab('ip')">IP 模型管理</div>
+            <div class="tab" onclick="switchTab('words')">敏感词</div>
+        </div>
+
+        <div class="tab-panel active" id="panel-skills">
+            <div class="section">
+                <h3>待审核 Skill</h3>
+                <table class="table">
+                    <thead><tr><th>名称</th><th>描述</th><th>提交人</th><th>操作</th></tr></thead>
+                    <tbody id="pending-skills"><tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-ip">
+            <div class="section">
+                <h3>IP 风格模型列表</h3>
+                <table class="table">
+                    <thead><tr><th>演员</th><th>版本</th><th>状态</th><th>分成比例</th><th>操作</th></tr></thead>
+                    <tbody id="ip-list"><tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-words">
+            <div class="section">
+                <h3>敏感词管理</h3>
+                <div class="form-row">
+                    <input type="text" id="banned-word" placeholder="敏感词">
+                    <input type="text" id="banned-category" placeholder="分类（如 competitor）">
+                    <button class="btn btn-primary" onclick="addBannedWord()">添加</button>
+                </div>
+                <div id="banned-words-list" style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/common.js"></script>
+    <script>
+        requireAuth();
+        document.getElementById('current-user').textContent = getCurrentUserId() || '';
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('panel-' + name).classList.add('active');
+        }
+
+        async function loadOverview() {
+            try {
+                const res = await apiFetch('/admin/overview');
+                const data = await res.json();
+                document.getElementById('stat-dau').textContent = data.daily_active_users ?? '--';
+                document.getElementById('stat-generations').textContent = data.total_generations ?? '--';
+                document.getElementById('stat-ip').textContent = data.ip_style_usage ?? '--';
+                document.getElementById('stat-salt').textContent = data.salt_usage ?? '--';
+                document.getElementById('stat-settlement').textContent = data.pending_settlement ?? '--';
+            } catch (err) {
+                console.error('加载概览失败:', err);
+            }
+        }
+
+        async function loadPendingSkills() {
+            const tbody = document.getElementById('pending-skills');
+            try {
+                const res = await apiFetch('/admin/skills/pending');
+                const data = await res.json();
+                const items = Array.isArray(data) ? data : (data.skills || []);
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">暂无待审核 Skill</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                items.forEach(s => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.description || '')}</td><td>${escapeHtml(s.submitted_by || '')}</td><td><button class="btn btn-success" onclick="reviewSkill('${s.name}', true)">通过</button> <button class="btn btn-danger" onclick="reviewSkill('${s.name}', false)">拒绝</button></td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function reviewSkill(name, approve) {
+            try {
+                await apiFetch(`/admin/skills/${encodeURIComponent(name)}/review`, {
+                    method: 'POST',
+                    body: JSON.stringify({ approved: approve }),
+                });
+                loadPendingSkills();
+            } catch (err) {
+                alert('审核失败: ' + err.message);
+            }
+        }
+
+        async function loadAdminIPStyles() {
+            const tbody = document.getElementById('ip-list');
+            try {
+                const res = await apiFetch('/admin/ip-styles');
+                const data = await res.json();
+                const items = Array.isArray(data) ? data : (data.styles || []);
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无 IP 模型</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                items.forEach(s => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${escapeHtml(s.actor_name || '')}</td><td>${escapeHtml(s.version || '')}</td><td>${escapeHtml(s.status || 'active')}</td><td>${s.split_ratio ?? 70}%</td><td><button class="btn btn-primary" onclick="editIPStyle('${s.style_id}')">编辑</button></td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function editIPStyle(styleId) {
+            const ratio = prompt('请输入新的分成比例（0-100）：');
+            if (ratio === null || isNaN(Number(ratio))) return;
+            try {
+                await apiFetch(`/admin/ip-styles/${styleId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ split_ratio: Number(ratio) }),
+                });
+                loadAdminIPStyles();
+            } catch (err) {
+                alert('更新失败: ' + err.message);
+            }
+        }
+
+        async function loadBannedWords() {
+            const container = document.getElementById('banned-words-list');
+            try {
+                const res = await apiFetch('/admin/banned-words');
+                const data = await res.json();
+                const items = Array.isArray(data) ? data : (data.words || []);
+                if (items.length === 0) {
+                    container.innerHTML = '<span style="color:#999;font-size:0.875rem;">暂无敏感词</span>';
+                    return;
+                }
+                container.innerHTML = '';
+                items.forEach(w => {
+                    const tag = document.createElement('span');
+                    tag.className = 'word-tag';
+                    tag.innerHTML = `${escapeHtml(w.word)} <span class="del" onclick="deleteBannedWord('${w.word_id}')">✕</span>`;
+                    container.appendChild(tag);
+                });
+            } catch (err) {
+                container.innerHTML = '<span style="color:#999;font-size:0.875rem;">加载失败</span>';
+            }
+        }
+
+        async function addBannedWord() {
+            const word = document.getElementById('banned-word').value.trim();
+            const category = document.getElementById('banned-category').value.trim() || null;
+            if (!word) { alert('请输入敏感词'); return; }
+            try {
+                await apiFetch('/admin/banned-words', {
+                    method: 'POST',
+                    body: JSON.stringify({ word, category }),
+                });
+                document.getElementById('banned-word').value = '';
+                loadBannedWords();
+            } catch (err) {
+                alert('添加失败: ' + err.message);
+            }
+        }
+
+        async function deleteBannedWord(wordId) {
+            if (!confirm('确定删除该敏感词？')) return;
+            try {
+                await apiFetch(`/admin/banned-words/${wordId}`, { method: 'DELETE' });
+                loadBannedWords();
+            } catch (err) {
+                alert('删除失败: ' + err.message);
+            }
+        }
+
+        loadOverview();
+        loadPendingSkills();
+        loadAdminIPStyles();
+        loadBannedWords();
+    </script>
+</body>
+</html>

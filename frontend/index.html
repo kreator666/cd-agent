@@ -717,6 +717,25 @@
                 </div>
             </div>
 
+            <!-- 🤖 虚拟演员 Agent -->
+            <div class="creation-card collapsed" id="actor-card">
+                <h3 onclick="toggleCard('actor-card')">🤖 虚拟演员 Agent</h3>
+                <div class="card-body">
+                    <div class="skill-row">
+                        <select id="actor-select">
+                            <option value="">选择演员...</option>
+                        </select>
+                    </div>
+                    <div id="actor-chat" style="display:flex;flex-direction:column;gap:0.5rem;">
+                        <div id="actor-messages" style="background:#f8f8f8;border-radius:0.5rem;padding:0.75rem;height:150px;overflow-y:auto;font-size:0.875rem;display:flex;flex-direction:column;gap:0.5rem;"></div>
+                        <div style="display:flex;gap:0.5rem;">
+                            <input id="actor-input" placeholder="和演员聊聊你的稿子..." style="flex:1;padding:0.5rem;border:1px solid #ddd;border-radius:0.5rem;font-size:0.875rem;" onkeydown="if(event.key==='Enter')sendActorMessage();">
+                            <button onclick="sendActorMessage()" style="padding:0 1rem;background:#1a1a2e;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:0.875rem;">发送</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="chat-area" id="chat-area">
                 <div class="empty-state">
                     <h2>Comedy Agent</h2>
@@ -732,6 +751,26 @@
             <h3>🔥 热门 IP 风格</h3>
             <div id="ip-style-list" style="display:flex;flex-direction:column;gap:0.5rem;">
                 <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
+            </div>
+
+            <h3 style="margin-top:0.5rem;">📊 统计面板</h3>
+            <div id="stats-panel" style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.8125rem;">
+                <div style="display:flex;justify-content:space-between;padding:0.5rem;background:#f8f8f8;border-radius:0.5rem;">
+                    <span style="color:#666;">今日生成</span>
+                    <span style="font-weight:600;" id="stat-generations">--</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:0.5rem;background:#f8f8f8;border-radius:0.5rem;">
+                    <span style="color:#666;">IP 调用</span>
+                    <span style="font-weight:600;" id="stat-ip-usage">--</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:0.5rem;background:#f8f8f8;border-radius:0.5rem;">
+                    <span style="color:#666;">加点盐</span>
+                    <span style="font-weight:600;" id="stat-salt">--</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:0.5rem;background:#f8f8f8;border-radius:0.5rem;">
+                    <span style="color:#666;">你的收益</span>
+                    <span style="font-weight:600;color:#16c79a;" id="stat-earnings">--</span>
+                </div>
             </div>
         </aside>
     </div>
@@ -1114,6 +1153,7 @@
         loadIPStyles();
         loadProjects();
         loadSaltHistory();
+        loadStats();
 
         async function loadSkills() {
             const listEl = document.getElementById('skill-list');
@@ -1647,6 +1687,62 @@
             URL.revokeObjectURL(url);
         }
 
+        // 虚拟演员
+        async function sendActorMessage() {
+            const inputEl = document.getElementById('actor-input');
+            const text = inputEl.value.trim();
+            if (!text) return;
+            const actorId = document.getElementById('actor-select').value;
+            const actorName = document.getElementById('actor-select').options[document.getElementById('actor-select').selectedIndex]?.text || '演员';
+            const messagesEl = document.getElementById('actor-messages');
+
+            // 显示用户消息
+            const userDiv = document.createElement('div');
+            userDiv.innerHTML = `<strong style="color:#1a1a2e;">你：</strong>${escapeHtml(text)}`;
+            messagesEl.appendChild(userDiv);
+            inputEl.value = '';
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+
+            // 构造带角色设定的 prompt
+            let prompt = text;
+            if (actorId && window._ipStyles) {
+                const style = window._ipStyles.find(s => (s.style_id || s.id) === actorId);
+                if (style && style.prompt_snippet) {
+                    prompt = `${style.prompt_snippet}\n\n用户说：${text}`;
+                } else if (style) {
+                    prompt = `你是${style.actor_name || style.name}，一位喜剧演员。请用符合你风格的方式回应以下内容。\n\n用户说：${text}`;
+                }
+            }
+
+            try {
+                const res = await apiFetch('/chat', {
+                    method: 'POST',
+                    body: JSON.stringify({ prompt }),
+                });
+                const data = await res.json();
+                const agentDiv = document.createElement('div');
+                agentDiv.innerHTML = `<strong style="color:#e94560;">${escapeHtml(actorName)}：</strong>${escapeHtml(data.output || '（无回应）')}`;
+                messagesEl.appendChild(agentDiv);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+                loadWallet();
+            } catch (err) {
+                const errDiv = document.createElement('div');
+                errDiv.style.color = '#e94560';
+                errDiv.textContent = '错误: ' + err.message;
+                messagesEl.appendChild(errDiv);
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+        }
+
+        // 统计面板（占位）
+        async function loadStats() {
+            // TODO: 后端统计接口就绪后对接
+            document.getElementById('stat-generations').textContent = '—';
+            document.getElementById('stat-ip-usage').textContent = '—';
+            document.getElementById('stat-salt').textContent = '—';
+            document.getElementById('stat-earnings').textContent = '—';
+        }
+
         // Token 钱包
         async function loadProjects() {
             const listEl = document.getElementById('project-list');
@@ -1776,6 +1872,15 @@
                         html += `<option value="${escapeHtml(s.style_id || s.id || '')}">${escapeHtml(s.actor_name || s.name || '未命名')}</option>`;
                     });
                     selectEl.innerHTML = html;
+                }
+                // 填充虚拟演员下拉框
+                const actorSelect = document.getElementById('actor-select');
+                if (actorSelect) {
+                    let html = '<option value="">选择演员...</option>';
+                    styles.forEach(s => {
+                        html += `<option value="${escapeHtml(s.style_id || s.id || '')}">${escapeHtml(s.actor_name || s.name || '未命名')}</option>`;
+                    });
+                    actorSelect.innerHTML = html;
                 }
             } catch (err) {
                 if (listEl) listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载失败</div>';

@@ -1606,6 +1606,7 @@
                     if (history.length > 20) history = history.slice(-20);
                     currentSessionId = data.session_id || currentSessionId;
                     loadConversations();
+                    loadStats();
                 } else {
                     appendMessage('agent', `错误: ${data.detail || '未知错误'}`);
                 }
@@ -1644,6 +1645,7 @@
                 resultEl.textContent = data.polished;
                 loadWallet();
                 loadConversations();
+                loadStats();
             } catch (err) {
                 resultEl.textContent = '错误: ' + err.message;
             }
@@ -1688,6 +1690,7 @@
                 messagesEl.appendChild(agentDiv);
                 messagesEl.scrollTop = messagesEl.scrollHeight;
                 loadWallet();
+                loadStats();
             } catch (err) {
                 const errDiv = document.createElement('div');
                 errDiv.style.color = '#e94560';

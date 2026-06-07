@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 
@@ -34,8 +36,10 @@ async def export_script(
         media_type = "text/plain; charset=utf-8"
         filename = f"{script.title or 'script'}.txt"
 
+    # RFC 5987 编码中文文件名
+    encoded = quote(filename, safe="")
     return PlainTextResponse(
         content=content,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"},
     )

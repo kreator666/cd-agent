@@ -611,6 +611,12 @@
         @media (max-width: 768px) {
             .sidebar { display: none; }
             .container { padding: 0; }
+            .creation-card { padding: 0.75rem; }
+            .skill-row { flex-direction: column; }
+            .skill-row select, .skill-row input { width: 100%; }
+            .salt-levels { flex-direction: column; }
+            .salt-levels label { width: 100%; }
+            .main { padding: 0.5rem; gap: 0.5rem; }
         }
     </style>
 </head>
@@ -859,10 +865,11 @@
         const statusEl = document.getElementById('status');
         let history = [];
         let currentSessionId = null;
+        const currentUserId = getCurrentUserId();
 
         requireAuth();
-        document.getElementById('user-id').value = getCurrentUserId() || '';
-        document.getElementById('current-user').textContent = getCurrentUserId() || '';
+        document.getElementById('user-id').value = currentUserId || '';
+        document.getElementById('current-user').textContent = currentUserId || '';
 
         function startNewChat() {
             currentSessionId = null;
@@ -1632,6 +1639,16 @@
             }
         }
 
+        // Skill 名称 → API 端点映射
+        const SKILL_API_MAP = {
+            'standup_generator': 'standup',
+            'crosstalk_generator': 'crosstalk',
+            'sketch_generator': 'sketch',
+            'sitcom_generator': 'sitcom',
+            'manzai_generator': 'manzai',
+            'japanese_sketch_generator': 'japanese-sketch',
+        };
+
         // Skill 直调
         let _lastSkillResult = null;
         async function sendSkill() {
@@ -1639,12 +1656,13 @@
             const topic = document.getElementById('skill-topic').value.trim();
             if (!skillName) { alert('请选择 Skill'); return; }
             if (!topic) { alert('请输入创作主题'); return; }
+            const apiPath = SKILL_API_MAP[skillName] || skillName;
             const resultBox = document.getElementById('skill-result-box');
             const resultEl = document.getElementById('skill-result');
             resultBox.style.display = 'block';
             resultEl.textContent = '生成中...';
             try {
-                const res = await apiFetch(`/skills/${encodeURIComponent(skillName)}`, {
+                const res = await apiFetch(`/skills/${encodeURIComponent(apiPath)}`, {
                     method: 'POST',
                     body: JSON.stringify({ topic, style: '', scene: '' }),
                 });

@@ -239,13 +239,14 @@
         }
 
         .result-preview {
+            flex: 1;
+            min-height: 0;
             background: #f8f8f8;
             border-radius: 0.5rem;
             padding: 1rem;
             font-size: 0.9375rem;
             line-height: 1.6;
             white-space: pre-wrap;
-            max-height: 300px;
             overflow-y: auto;
             border: 1px solid #e0e0e0;
         }
@@ -704,7 +705,7 @@
                             <input type="radio" name="salt-level" id="salt-heavy" value="heavy">
                             <label for="salt-heavy">重盐 🧂🧂🧂</label>
                         </div>
-                        <div id="salt-result" class="result-preview" style="display:none;"></div>
+                        <div id="salt-result" class="result-preview" style="display:none;flex:1;min-height:0;"></div>
                     </div>
                     <div class="panel-input">
                         <textarea id="salt-input" placeholder="输入需要润色的文本..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSalt();}"></textarea>

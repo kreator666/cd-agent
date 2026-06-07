@@ -426,6 +426,94 @@
         }
         .script-item .rating-bar span.active { color: #f5a623; }
         .script-empty { color: #999; font-size: 0.75rem; text-align: center; padding: 0.5rem; }
+        .panel-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .panel-section summary {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #333;
+            cursor: pointer;
+            user-select: none;
+            list-style: none;
+        }
+        .panel-section summary::-webkit-details-marker { display: none; }
+        .panel-section summary::before {
+            content: '▸ ';
+            font-size: 0.75rem;
+            color: #888;
+        }
+        .panel-section[open] summary::before { content: '▾ '; }
+        .project-list, .salt-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+        .project-item {
+            padding: 0.5rem 0.625rem;
+            border-radius: 0.5rem;
+            background: #f8f8f8;
+            cursor: pointer;
+            font-size: 0.8125rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.15s;
+        }
+        .project-item:hover { background: #eee; }
+        .project-item .project-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+        }
+        .project-item .project-type {
+            font-size: 0.7rem;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            background: #1a1a2e;
+            color: #fff;
+            white-space: nowrap;
+            margin-left: 0.25rem;
+        }
+        .salt-history-item {
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            background: #f8f8f8;
+            font-size: 0.75rem;
+        }
+        .salt-history-item .salt-original {
+            color: #666;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .salt-history-item .salt-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.25rem;
+            color: #888;
+            font-size: 0.7rem;
+        }
+        .panel-actions {
+            display: flex;
+            gap: 0.375rem;
+        }
+        .panel-actions button {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border: none;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            width: auto;
+            background: #e0e0e0;
+            color: #333;
+        }
+        .panel-actions button:hover { background: #d0d0d0; }
         @media (max-width: 900px) {
             .right-panel { display: none; }
         }
@@ -471,10 +559,27 @@
             <button onclick="sendQuick('创作一个小品剧本，关于相亲')">🎬 相亲小品</button>
             <button onclick="sendQuick('分析一下这段段子的笑点结构：老板说要给我加薪，结果是加工作量')">🔍 笑点分析</button>
 
+            <details class="panel-section" open>
+                <summary>📁 我的项目</summary>
+                <div class="panel-actions">
+                    <button onclick="createProject()">+ 新建</button>
+                </div>
+                <div class="project-list" id="project-list">
+                    <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
+                </div>
+            </details>
+
             <label>历史会话</label>
             <div class="conversation-list" id="conversation-list">
                 <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
             </div>
+
+            <details class="panel-section">
+                <summary>🧂 加点盐历史</summary>
+                <div class="salt-history-list" id="salt-history-list">
+                    <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
+                </div>
+            </details>
 
         </aside>
         <main class="main">
@@ -873,6 +978,8 @@
         loadSkills();
         loadWallet();
         loadIPStyles();
+        loadProjects();
+        loadSaltHistory();
 
         async function loadSkills() {
             const listEl = document.getElementById('skill-list');
@@ -1317,6 +1424,78 @@
         }
 
         // Token 钱包
+        async function loadProjects() {
+            const listEl = document.getElementById('project-list');
+            try {
+                const res = await apiFetch('/projects');
+                const data = await res.json();
+                window._projects = data.projects || [];
+                renderProjectList();
+            } catch (err) {
+                listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载失败</div>';
+                console.error('加载项目失败:', err);
+            }
+        }
+
+        function renderProjectList() {
+            const listEl = document.getElementById('project-list');
+            const projects = window._projects || [];
+            if (projects.length === 0) {
+                listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">暂无项目</div>';
+                return;
+            }
+            listEl.innerHTML = '';
+            projects.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'project-item';
+                item.innerHTML = `<span class="project-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span><span class="project-type">${escapeHtml(p.project_type || '项目')}</span>`;
+                item.onclick = () => { alert(`项目「${p.name}」详情功能即将上线`); };
+                listEl.appendChild(item);
+            });
+        }
+
+        async function createProject() {
+            const name = prompt('请输入项目名称：');
+            if (!name || !name.trim()) return;
+            const project_type = prompt('项目类型（standup/sketch/salt/mixed，可选）：', 'mixed');
+            try {
+                const res = await apiFetch('/projects', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: name.trim(), project_type: project_type || 'mixed' }),
+                });
+                const data = await res.json();
+                window._projects = window._projects || [];
+                window._projects.unshift(data);
+                renderProjectList();
+            } catch (err) {
+                alert('创建项目失败: ' + err.message);
+            }
+        }
+
+        async function loadSaltHistory() {
+            const listEl = document.getElementById('salt-history-list');
+            try {
+                const res = await apiFetch('/salt/history');
+                const data = await res.json();
+                const histories = Array.isArray(data) ? data : [];
+                if (histories.length === 0) {
+                    listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">暂无记录</div>';
+                    return;
+                }
+                listEl.innerHTML = '';
+                histories.forEach(h => {
+                    const item = document.createElement('div');
+                    item.className = 'salt-history-item';
+                    const time = h.created_at ? new Date(h.created_at).toLocaleDateString() : '';
+                    item.innerHTML = `<div class="salt-original">${escapeHtml(h.original_text || '')}</div><div class="salt-meta"><span>${escapeHtml(h.salt_level || '')}</span><span>${time}</span></div>`;
+                    listEl.appendChild(item);
+                });
+            } catch (err) {
+                listEl.innerHTML = '<div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载失败</div>';
+                console.error('加载加点盐历史失败:', err);
+            }
+        }
+
         async function loadWallet() {
             try {
                 const res = await apiFetch('/me/wallet');

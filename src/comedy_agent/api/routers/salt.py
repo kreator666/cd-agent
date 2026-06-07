@@ -72,3 +72,22 @@ async def salt(request: SaltRequest, user_id: str = Depends(get_current_user)) -
     )
 
     return SaltResponse(original=request.text, polished=polished, token_cost=cost)
+
+
+@router.get("/salt/history")
+async def salt_history(user_id: str = Depends(get_current_user)) -> list[dict]:
+    """获取当前用户的加点盐历史。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    histories = state.memory.list_salt_history(user_id)
+    return [
+        {
+            "salt_id": h.salt_id,
+            "original_text": h.original_text,
+            "polished_text": h.polished_text,
+            "salt_level": h.salt_level,
+            "token_cost": h.token_cost,
+            "created_at": h.created_at.isoformat() if h.created_at else None,
+        }
+        for h in histories
+    ]

@@ -19,6 +19,15 @@ from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.middleware import RateLimitMiddleware
+from comedy_agent.api.state import state
+from comedy_agent.api.routers.actor import router as actor_router
+from comedy_agent.api.routers.admin import router as admin_router
+from comedy_agent.api.routers.export import router as export_router
+from comedy_agent.api.routers.ip_styles import router as ip_styles_router
+from comedy_agent.api.routers.projects import router as projects_router
+from comedy_agent.api.routers.salt import router as salt_router
+from comedy_agent.api.routers.submissions import router as submissions_router
+from comedy_agent.api.routers.wallet import router as wallet_router
 from comedy_agent.auth import get_current_user, router as auth_router
 from comedy_agent.core.config import settings
 from comedy_agent.core.observability import get_metrics, get_tracer, reset_observability, setup_langsmith
@@ -317,27 +326,12 @@ class KnowledgeCardListResponse(BaseModel):
     cards: list[KnowledgeCardData] = Field(description="卡片列表")
 
 
-# ------------------------------------------------------------------ #
-# 应用生命周期
-# ------------------------------------------------------------------ #
-class AppState:
-    """全局应用状态（持有 Orchestrator 与 Memory 实例）。"""
-
-    def __init__(self) -> None:
-        self.orch: AgentOrchestrator | None = None
-        self.memory: UnifiedMemory | None = None
-
-
-state = AppState()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时加载 Prompt、Memory、可观测性与初始化 Orchestrator。"""
-    global _START_TIME
     import time
 
-    _START_TIME = time.time()
+    state.start_time = time.time()
 
     # 自动配置 LangSmith（若配置了 API Key）
     setup_langsmith()
@@ -412,6 +406,14 @@ app.add_middleware(
 
 # 挂载认证路由
 app.include_router(auth_router, prefix="/auth")
+app.include_router(wallet_router)
+app.include_router(projects_router)
+app.include_router(salt_router)
+app.include_router(ip_styles_router)
+app.include_router(submissions_router)
+app.include_router(actor_router)
+app.include_router(admin_router)
+app.include_router(export_router)
 
 # 挂载前端静态文件（如果 frontend/ 目录存在）
 _frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
@@ -463,7 +465,7 @@ async def health() -> HealthResponse:
         version="0.1.0",
         memory_ready=state.memory is not None,
         orchestrator_ready=state.orch is not None,
-        uptime_seconds=time.time() - _START_TIME if _START_TIME else None,
+        uptime_seconds=time.time() - state.start_time if state.start_time else None,
     )
 
 
@@ -567,6 +569,8 @@ async def reload_skills(
     return SkillReloadResponse(**stats)
 
 
+CHAT_COST = 5
+
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(
     request: ChatRequest, user_id: str = Depends(get_current_user)
@@ -574,6 +578,10 @@ async def chat(
     """与 Agent 对话。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < CHAT_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {CHAT_COST}，余 {account.balance}）")
 
     tracer = get_tracer()
     metrics = get_metrics()
@@ -650,12 +658,18 @@ async def chat(
                         prompt_template="使用 {skill_name} 技能，主题是【{topic}】，风格改成【{style}】",
                     )
 
+            # 扣费
+            if state.memory is not None:
+                state.memory.deduct_tokens(user_id, CHAT_COST)
+
             return ChatResponse(
                 output=result["output"], session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+STANDUP_COST = 18
 
 @app.post("/skills/standup", response_model=StandupResponse, tags=["skills"])
 async def skill_standup(
@@ -664,6 +678,10 @@ async def skill_standup(
     """直接调用脱口秀创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < STANDUP_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {STANDUP_COST}，余 {account.balance}）")
 
     # 优先复用 orchestrator 中已注册的 Skill，保证模型上下文一致
     skill = None
@@ -693,10 +711,14 @@ async def skill_standup(
                 "debug": request.debug,
             }
         )
+        if state.memory is not None:
+            state.memory.deduct_tokens(user_id, STANDUP_COST)
         return StandupResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+SKETCH_COST = 18
 
 @app.post("/skills/sketch", response_model=SketchResponse, tags=["skills"])
 async def skill_sketch(
@@ -705,6 +727,10 @@ async def skill_sketch(
     """直接调用小品创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < SKETCH_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {SKETCH_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -730,10 +756,14 @@ async def skill_sketch(
                 "user_id": user_id,
             }
         )
+        if state.memory is not None:
+            state.memory.deduct_tokens(user_id, SKETCH_COST)
         return SketchResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+MANZAI_COST = 18
 
 @app.post("/skills/manzai", response_model=ManzaiResponse, tags=["skills"])
 async def skill_manzai(
@@ -742,6 +772,10 @@ async def skill_manzai(
     """直接调用漫才创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < MANZAI_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {MANZAI_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -766,10 +800,14 @@ async def skill_manzai(
                 "user_id": user_id,
             }
         )
+        if state.memory is not None:
+            state.memory.deduct_tokens(user_id, MANZAI_COST)
         return ManzaiResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+JAPANESE_SKETCH_COST = 18
 
 @app.post("/skills/japanese-sketch", response_model=JapaneseSketchResponse, tags=["skills"])
 async def skill_japanese_sketch(
@@ -778,6 +816,10 @@ async def skill_japanese_sketch(
     """直接调用日式短剧创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < JAPANESE_SKETCH_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {JAPANESE_SKETCH_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -804,6 +846,8 @@ async def skill_japanese_sketch(
                 "user_id": user_id,
             }
         )
+        if state.memory is not None:
+            state.memory.deduct_tokens(user_id, JAPANESE_SKETCH_COST)
         return JapaneseSketchResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -502,3 +502,18 @@ class MemoryStore(ABC):
     def delete_banned_word(self, word_id: int) -> bool:
         """删除敏感词。"""
         ...
+
+    # ------------------------------------------------------------------ #
+    # 统计
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def get_user_stats(self, user_id: str) -> dict[str, Any]:
+        """获取用户使用统计。
+
+        Args:
+            user_id: 用户唯一标识。
+
+        Returns:
+            dict: 包含 generations, actor_usage, salt_usage, earnings 的统计字典。
+        """
+        ...

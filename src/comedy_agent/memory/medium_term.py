@@ -1153,3 +1153,29 @@ class SQLMemoryStore(MemoryStore):
             session.commit()
             logger.debug("Deleted banned word: %d", word_id)
             return True
+
+    # ------------------------------------------------------------------ #
+    # 统计
+    # ------------------------------------------------------------------ #
+    def get_user_stats(self, user_id: str) -> dict[str, Any]:
+        with self._new_session() as session:
+            from sqlalchemy import func
+            # 按 source 统计 conversation 数量
+            rows = (
+                session.query(UserConversation.source, func.count(UserConversation.session_id))
+                .filter_by(user_id=user_id)
+                .group_by(UserConversation.source)
+                .all()
+            )
+            stats = {"generations": 0, "actor_usage": 0, "salt_usage": 0, "earnings": 0}
+            for source, count in rows:
+                if source == "chat":
+                    stats["generations"] = count
+                elif source == "actor":
+                    stats["actor_usage"] = count
+                elif source == "salt":
+                    stats["salt_usage"] = count
+            # 统计收益
+            earnings_rows = session.query(EarningRecord).filter_by(user_id=user_id).all()
+            stats["earnings"] = sum(r.amount for r in earnings_rows)
+            return stats

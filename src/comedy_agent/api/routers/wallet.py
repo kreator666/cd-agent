@@ -51,3 +51,26 @@ async def recharge(
         total_consumed=account.total_consumed,
         total_recharged=account.total_recharged,
     )
+
+
+class StatsResponse(BaseModel):
+    """用户统计响应。"""
+
+    generations: int = Field(default=0, description="Comedy Agent 生成次数")
+    actor_usage: int = Field(default=0, description="虚拟演员调用次数")
+    salt_usage: int = Field(default=0, description="加点盐调用次数")
+    earnings: int = Field(default=0, description="累计收益（分）")
+
+
+@router.get("/me/stats", response_model=StatsResponse)
+async def get_stats(user_id: str = Depends(get_current_user)) -> StatsResponse:
+    """获取当前用户使用统计。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    stats = state.memory.get_user_stats(user_id)
+    return StatsResponse(
+        generations=stats.get("generations", 0),
+        actor_usage=stats.get("actor_usage", 0),
+        salt_usage=stats.get("salt_usage", 0),
+        earnings=stats.get("earnings", 0),
+    )

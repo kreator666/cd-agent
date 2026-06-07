@@ -254,6 +254,12 @@ class UnifiedMemory(MemoryStore):
         return self._store.delete_banned_word(word_id)
 
     # ------------------------------------------------------------------ #
+    # 统计
+    # ------------------------------------------------------------------ #
+    def get_user_stats(self, user_id: str) -> dict[str, Any]:
+        return self._store.get_user_stats(user_id)
+
+    # ------------------------------------------------------------------ #
     # 高级接口：Token 预算控制的上下文文本
     # ------------------------------------------------------------------ #
     def build_context_text(

@@ -1697,13 +1697,21 @@
             }
         }
 
-        // 统计面板（占位）
+        // 统计面板
         async function loadStats() {
-            // TODO: 后端统计接口就绪后对接
-            document.getElementById('stat-generations').textContent = '—';
-            document.getElementById('stat-ip-usage').textContent = '—';
-            document.getElementById('stat-salt').textContent = '—';
-            document.getElementById('stat-earnings').textContent = '—';
+            try {
+                const res = await apiFetch('/me/stats');
+                const data = await res.json();
+                document.getElementById('stat-generations').textContent = data.generations || 0;
+                document.getElementById('stat-ip-usage').textContent = data.actor_usage || 0;
+                document.getElementById('stat-salt').textContent = data.salt_usage || 0;
+                document.getElementById('stat-earnings').textContent = (data.earnings || 0) + ' 分';
+            } catch (err) {
+                document.getElementById('stat-generations').textContent = '—';
+                document.getElementById('stat-ip-usage').textContent = '—';
+                document.getElementById('stat-salt').textContent = '—';
+                document.getElementById('stat-earnings').textContent = '—';
+            }
         }
 
         // Token 钱包

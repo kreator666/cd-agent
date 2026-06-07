@@ -78,8 +78,10 @@ class UnifiedMemory(MemoryStore):
         session_id: str,
         messages: list[dict[str, Any]],
         summary: str | None = None,
+        source: str = "chat",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        self._store.save_conversation(user_id, session_id, messages, summary)
+        self._store.save_conversation(user_id, session_id, messages, summary, source, metadata)
 
     def load_conversation(
         self, user_id: str, session_id: str

@@ -38,6 +38,8 @@ class ConversationData(BaseModel):
         default_factory=list, description="消息列表 [(role, content), ...]"
     )
     summary: str | None = Field(default=None, description="对话摘要")
+    source: str = Field(default="chat", description="来源：chat / salt / actor")
+    metadata: dict[str, Any] | None = Field(default=None, description="额外元数据")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
     expires_at: datetime | None = Field(default=None, description="过期时间")

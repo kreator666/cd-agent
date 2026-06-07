@@ -124,6 +124,15 @@ class TestSalt:
         prompt_arg = call_args[0][0] if call_args[0] else call_args[1].get("user_input", "")
         assert "add_salt" in prompt_arg
 
+        # 验证保存为 conversation，source="salt"
+        conv_resp = client.get("/conversations?limit=10")
+        assert conv_resp.status_code == 200
+        convs = conv_resp.json()["conversations"]
+        salt_convs = [c for c in convs if c.get("source") == "salt"]
+        assert len(salt_convs) == 1
+        assert salt_convs[0]["metadata"]["original_text"] == "今天天气不错"
+        assert salt_convs[0]["metadata"]["salt_level"] == "light"
+
         # 验证扣费
         wallet = client.get("/me/wallet").json()
         assert wallet["balance"] == 5000 - 10

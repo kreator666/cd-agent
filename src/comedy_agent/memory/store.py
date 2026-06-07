@@ -58,6 +58,8 @@ class MemoryStore(ABC):
         session_id: str,
         messages: list[dict[str, Any]],
         summary: str | None = None,
+        source: str = "chat",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """保存会话记录。
 
@@ -66,6 +68,8 @@ class MemoryStore(ABC):
             session_id: 会话唯一标识。
             messages: 消息列表，格式为 ``[{"role": "human", "content": "..."}, ...]``。
             summary: 可选的对话摘要。
+            source: 来源标识，如 chat / salt / actor。
+            metadata: 额外元数据。
         """
         ...
 

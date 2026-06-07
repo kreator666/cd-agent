@@ -75,8 +75,9 @@ class SQLMemoryStore(MemoryStore):
                 conn.exec_driver_sql("PRAGMA journal_mode=WAL")
                 conn.commit()
         Base.metadata.create_all(self.engine)
-        # 简单迁移：为旧表添加 password_hash 列（开发阶段兼容）
+        # 简单迁移：为旧表添加缺失列（开发阶段兼容）
         with self.engine.connect() as conn:
+            # user_profiles.password_hash
             columns = [
                 row[1]
                 for row in conn.exec_driver_sql("PRAGMA table_info(user_profiles)")
@@ -87,6 +88,23 @@ class SQLMemoryStore(MemoryStore):
                 )
                 conn.commit()
                 logger.info("Migrated user_profiles: added password_hash column")
+            # user_conversations.source / metadata
+            conv_columns = [
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(user_conversations)")
+            ]
+            if "source" not in conv_columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE user_conversations ADD COLUMN source VARCHAR(16) DEFAULT 'chat'"
+                )
+                conn.commit()
+                logger.info("Migrated user_conversations: added source column")
+            if "extra_metadata" not in conv_columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE user_conversations ADD COLUMN extra_metadata JSON"
+                )
+                conn.commit()
+                logger.info("Migrated user_conversations: added extra_metadata column")
         self.Session = sessionmaker(bind=self.engine)
         logger.info("SQLMemoryStore initialized: %s", db_url)
 
@@ -176,6 +194,8 @@ class SQLMemoryStore(MemoryStore):
         session_id: str,
         messages: list[dict[str, Any]],
         summary: str | None = None,
+        source: str = "chat",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         with self._new_session() as session:
             conv = (
@@ -189,15 +209,20 @@ class SQLMemoryStore(MemoryStore):
                     user_id=user_id,
                     messages=messages,
                     summary=summary,
+                    source=source,
+                    extra_metadata=metadata,
                     expires_at=self._now() + timedelta(hours=24),
                 )
                 session.add(conv)
             else:
                 conv.messages = messages
                 conv.summary = summary
+                conv.source = source
+                if metadata is not None:
+                    conv.extra_metadata = metadata
                 conv.updated_at = self._now()
             session.commit()
-            logger.debug("Saved conversation: %s", session_id)
+            logger.debug("Saved conversation: %s (%s)", session_id, source)
 
     def load_conversation(
         self, user_id: str, session_id: str
@@ -214,6 +239,8 @@ class SQLMemoryStore(MemoryStore):
                 session_id=conv.session_id,
                 messages=conv.messages,
                 summary=conv.summary,
+                source=conv.source,
+                metadata=conv.extra_metadata,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
                 expires_at=conv.expires_at,
@@ -242,6 +269,8 @@ class SQLMemoryStore(MemoryStore):
                         session_id=row.session_id,
                         messages=row.messages,
                         summary=row.summary,
+                        source=row.source,
+                        metadata=row.extra_metadata,
                         created_at=row.created_at,
                         updated_at=row.updated_at,
                         expires_at=row.expires_at,

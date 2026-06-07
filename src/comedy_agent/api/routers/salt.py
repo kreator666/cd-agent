@@ -60,15 +60,25 @@ async def salt(request: SaltRequest, user_id: str = Depends(get_current_user)) -
     polished = result.get("output", "")
 
     state.memory.deduct_tokens(user_id, cost)
-    state.memory.save_salt_history(
-        SaltHistoryData(
-            user_id=user_id,
-            project_id=request.project_id,
-            original_text=request.text,
-            polished_text=polished,
-            salt_level=request.salt_level,
-            token_cost=cost,
-        )
+    # 统一保存到 conversation，source="salt"
+    import uuid
+    session_id = uuid.uuid4().hex[:16]
+    state.memory.save_conversation(
+        user_id=user_id,
+        session_id=session_id,
+        messages=[
+            {"role": "human", "content": request.text},
+            {"role": "ai", "content": polished},
+        ],
+        summary=(request.text[:40] + "… [加点盐]") if len(request.text) > 40 else (request.text + " [加点盐]"),
+        source="salt",
+        metadata={
+            "salt_level": request.salt_level,
+            "original_text": request.text,
+            "polished_text": polished,
+            "token_cost": cost,
+            "project_id": request.project_id,
+        },
     )
 
     return SaltResponse(original=request.text, polished=polished, token_cost=cost)
@@ -76,18 +86,19 @@ async def salt(request: SaltRequest, user_id: str = Depends(get_current_user)) -
 
 @router.get("/salt/history")
 async def salt_history(user_id: str = Depends(get_current_user)) -> list[dict]:
-    """获取当前用户的加点盐历史。"""
+    """获取当前用户的加点盐历史（从统一 conversation 中过滤）。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
-    histories = state.memory.list_salt_history(user_id)
+    conversations = state.memory.list_conversations(user_id, limit=100)
+    salt_convs = [c for c in conversations if c.source == "salt"]
     return [
         {
-            "salt_id": h.salt_id,
-            "original_text": h.original_text,
-            "polished_text": h.polished_text,
-            "salt_level": h.salt_level,
-            "token_cost": h.token_cost,
-            "created_at": h.created_at.isoformat() if h.created_at else None,
+            "salt_id": c.session_id,
+            "original_text": c.metadata.get("original_text", "") if c.metadata else "",
+            "polished_text": c.metadata.get("polished_text", "") if c.metadata else "",
+            "salt_level": c.metadata.get("salt_level", "") if c.metadata else "",
+            "token_cost": c.metadata.get("token_cost", 0) if c.metadata else 0,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
         }
-        for h in histories
+        for c in salt_convs
     ]

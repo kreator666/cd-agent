@@ -114,6 +114,8 @@ class UserConversation(Base):
     )
     messages: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), default="chat", nullable=False)
+    extra_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

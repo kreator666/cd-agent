@@ -71,6 +71,7 @@ class ChatRequest(BaseModel):
     chat_history: list[tuple[str, str]] | None = Field(
         default=None, description="历史消息 [(role, content), ...]"
     )
+    source: str = Field(default="chat", description="来源标识：chat / actor")
 
 
 class SuggestionResponse(BaseModel):
@@ -625,6 +626,7 @@ async def chat(
                         session_id=session_id,
                         messages=messages,
                         summary=result["output"][:80] if result["output"] else None,
+                        source=request.source,
                     )
                 except Exception as save_err:
                     logger.warning("保存会话记录失败: %s", save_err)
@@ -1007,6 +1009,8 @@ async def list_conversations(
             {
                 "session_id": c.session_id,
                 "summary": c.summary,
+                "source": c.source,
+                "metadata": c.metadata,
                 "message_count": len(c.messages),
                 "created_at": c.created_at.isoformat() if c.created_at else None,
                 "updated_at": c.updated_at.isoformat() if c.updated_at else None,
@@ -1031,6 +1035,8 @@ async def get_conversation(
         "session_id": conv.session_id,
         "messages": conv.messages,
         "summary": conv.summary,
+        "source": conv.source,
+        "metadata": conv.metadata,
         "created_at": conv.created_at.isoformat() if conv.created_at else None,
         "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
     }

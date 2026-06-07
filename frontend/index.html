@@ -678,13 +678,6 @@
                 <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
             </div>
 
-            <details class="panel-section">
-                <summary>🧂 加点盐历史</summary>
-                <div class="salt-history-list" id="salt-history-list">
-                    <div style="font-size:0.75rem;color:#999;text-align:center;padding:0.5rem;">加载中...</div>
-                </div>
-            </details>
-
         </aside>
         <main class="main">
             <div class="tabbed-container">
@@ -895,12 +888,14 @@
                 return;
             }
             listEl.innerHTML = '';
+            const sourceLabels = { chat: '💬', salt: '🧂', actor: '🎭' };
             conversations.forEach(conv => {
                 const item = document.createElement('div');
                 item.className = 'conversation-item' + (conv.session_id === currentSessionId ? ' active' : '');
+                const label = sourceLabels[conv.source] || '💬';
                 const title = conv.summary || '未命名会话';
                 const time = conv.updated_at ? new Date(conv.updated_at).toLocaleDateString() : '';
-                item.innerHTML = `<span class="conv-title" title="${title}">${title}</span><span style="font-size:0.7rem;color:#888;white-space:nowrap;">${time}</span><span class="conv-del" onclick="event.stopPropagation();deleteConversation('${conv.session_id}')">✕</span>`;
+                item.innerHTML = `<span style="font-size:0.75rem;margin-right:0.25rem;">${label}</span><span class="conv-title" title="${title}">${title}</span><span style="font-size:0.7rem;color:#888;white-space:nowrap;">${time}</span><span class="conv-del" onclick="event.stopPropagation();deleteConversation('${conv.session_id}')">✕</span>`;
                 item.onclick = () => loadConversation(conv.session_id);
                 listEl.appendChild(item);
             });
@@ -911,27 +906,59 @@
                 const res = await fetch(`${API_BASE}/conversations/${sessionId}`, { headers: authHeaders() });
                 if (!res.ok) throw new Error('加载失败');
                 const data = await res.json();
-                currentSessionId = data.session_id;
-                history = [];
-                chatArea.innerHTML = '';
-                if (data.messages && data.messages.length > 0) {
-                    data.messages.forEach(msg => {
-                        if (msg.role === 'human') {
-                            appendMessage('user', msg.content);
-                            history.push(['human', msg.content]);
-                        } else if (msg.role === 'ai') {
-                            appendMessage('agent', msg.content);
-                            history.push(['ai', msg.content]);
-                        }
-                    });
-                }
-                if (chatArea.children.length === 0) {
-                    chatArea.innerHTML = `
-                        <div class="empty-state">
-                            <h2>Comedy Agent</h2>
-                            <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
-                        </div>
-                    `;
+                const source = data.source || 'chat';
+                if (source === 'salt') {
+                    // 加载到加点盐 tab
+                    switchTab('salt');
+                    const meta = data.metadata || {};
+                    document.getElementById('salt-input').value = meta.original_text || '';
+                    const resultEl = document.getElementById('salt-result');
+                    resultEl.style.display = 'block';
+                    resultEl.textContent = meta.polished_text || '';
+                    currentSessionId = null;
+                } else if (source === 'actor') {
+                    // 加载到虚拟演员 tab
+                    switchTab('actor');
+                    const messagesEl = document.getElementById('actor-messages');
+                    messagesEl.innerHTML = '';
+                    if (data.messages && data.messages.length > 0) {
+                        data.messages.forEach(msg => {
+                            const div = document.createElement('div');
+                            if (msg.role === 'human') {
+                                div.innerHTML = `<strong style="color:#1a1a2e;">你：</strong>${escapeHtml(msg.content)}`;
+                            } else {
+                                const actorName = document.getElementById('actor-select').options[document.getElementById('actor-select').selectedIndex]?.text || '演员';
+                                div.innerHTML = `<strong style="color:#e94560;">${escapeHtml(actorName)}：</strong>${escapeHtml(msg.content)}`;
+                            }
+                            messagesEl.appendChild(div);
+                        });
+                    }
+                    currentSessionId = null;
+                } else {
+                    // 默认加载到 Comedy Agent tab
+                    switchTab('chat');
+                    currentSessionId = data.session_id;
+                    history = [];
+                    chatArea.innerHTML = '';
+                    if (data.messages && data.messages.length > 0) {
+                        data.messages.forEach(msg => {
+                            if (msg.role === 'human') {
+                                appendMessage('user', msg.content);
+                                history.push(['human', msg.content]);
+                            } else if (msg.role === 'ai') {
+                                appendMessage('agent', msg.content);
+                                history.push(['ai', msg.content]);
+                            }
+                        });
+                    }
+                    if (chatArea.children.length === 0) {
+                        chatArea.innerHTML = `
+                            <div class="empty-state">
+                                <h2>Comedy Agent</h2>
+                                <p>输入你的创作需求，让 AI 为你生成喜剧内容</p>
+                            </div>
+                        `;
+                    }
                 }
                 renderConversationList();
             } catch (err) {
@@ -1150,7 +1177,6 @@
         loadWallet();
         loadIPStyles();
         loadProjects();
-        loadSaltHistory();
         loadStats();
 
         async function loadSkills() {
@@ -1617,7 +1643,7 @@
                 _lastSaltResult = data;
                 resultEl.textContent = data.polished;
                 loadWallet();
-                loadSaltHistory();
+                loadConversations();
             } catch (err) {
                 resultEl.textContent = '错误: ' + err.message;
             }
@@ -1654,7 +1680,7 @@
                 const model = document.getElementById('model').value || null;
                 const res = await apiFetch('/chat', {
                     method: 'POST',
-                    body: JSON.stringify({ prompt, model }),
+                    body: JSON.stringify({ prompt, model, source: 'actor' }),
                 });
                 const data = await res.json();
                 const agentDiv = document.createElement('div');

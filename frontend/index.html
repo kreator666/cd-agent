@@ -662,12 +662,6 @@
 
             <button class="new-chat-btn" onclick="startNewChat()">➕ 新对话</button>
 
-            <label>快捷指令</label>
-            <button onclick="sendQuick('写一个关于职场加班的脱口秀')">🎤 职场脱口秀</button>
-            <button onclick="sendQuick('写一段相声，主题是年轻人谈恋爱')">🎭 恋爱相声</button>
-            <button onclick="sendQuick('创作一个小品剧本，关于相亲')">🎬 相亲小品</button>
-            <button onclick="sendQuick('分析一下这段段子的笑点结构：老板说要给我加薪，结果是加工作量')">🔍 笑点分析</button>
-
             <details class="panel-section" open>
                 <summary>📁 我的项目</summary>
                 <div class="panel-actions">
@@ -1593,11 +1587,6 @@
             } finally {
                 setLoading(false);
             }
-        }
-
-        function sendQuick(text) {
-            input.value = text;
-            sendMessage();
         }
 
         // Tab 切换

@@ -23,80 +23,48 @@
             font-size: 1.5rem;
         }
         .container {
-            display: flex;
-            max-width: 1400px;
+            max-width: 900px;
             margin: 20px auto;
-            gap: 20px;
             padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
         .sidebar {
-            width: 200px;
-            background: #fff;
-            border-radius: 8px;
-            padding: 16px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-            height: fit-content;
+            display: none;
         }
-        .sidebar a {
-            display: block;
-            padding: 10px 12px;
-            margin-bottom: 6px;
-            color: #333;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 0.875rem;
-            cursor: pointer;
-        }
-        .sidebar a:hover {
-            background: #f0f0f0;
-        }
-        .sidebar a.active {
-            background: #2c7da0;
-            color: #fff;
-        }
-        .main {
-            flex: 1;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            align-content: start;
-        }
-        .card {
-            background: #fff;
-            border-radius: 8px;
-            padding: 24px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-        }
-        .card h3 {
-            color: #0f3b5c;
-            margin-top: 0;
-            font-size: 1.25rem;
-        }
-        .card p {
-            color: #555;
-            line-height: 1.6;
-        }
-        .card .badge {
-            display: inline-block;
-            background: #2c7da0;
-            color: #fff;
-            font-size: 0.75rem;
-            padding: 4px 10px;
-            border-radius: 12px;
-            margin-bottom: 12px;
-        }
-        .btn {
-            background: #2c7da0;
-            color: #fff;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9375rem;
-            margin-top: 12px;
-        }
-        .btn:hover {
-            background: #1f5a75;
+        @media (min-width: 1100px) {
+            .layout {
+                display: flex;
+                gap: 20px;
+                max-width: 1200px;
+                margin: 20px auto;
+                padding: 0 20px;
+            }
+            .sidebar {
+                display: block;
+                width: 200px;
+                background: #fff;
+                border-radius: 8px;
+                padding: 16px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                height: fit-content;
+                position: sticky;
+                top: 20px;
+            }
+            .sidebar a {
+                display: block;
+                padding: 10px 12px;
+                margin-bottom: 6px;
+                color: #333;
+                text-decoration: none;
+                border-radius: 4px;
+                font-size: 0.875rem;
+                cursor: pointer;
+            }
+            .sidebar a:hover { background: #f0f0f0; }
+            .sidebar a.active { background: #2c7da0; color: #fff; }
+            .main-content { flex: 1; }
         }
         .token-card {
             background: #0f3b5c;
@@ -116,18 +84,195 @@
             opacity: 0.8;
             margin-top: 4px;
         }
+
+        /* 轮播 */
+        .carousel-wrap {
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .carousel-track {
+            display: flex;
+            transition: transform 0.5s ease;
+        }
+        .carousel-slide {
+            min-width: 100%;
+            padding: 40px 32px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .carousel-slide .badge {
+            display: inline-block;
+            background: #2c7da0;
+            color: #fff;
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 12px;
+            width: fit-content;
+        }
+        .carousel-slide h2 {
+            color: #0f3b5c;
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .carousel-slide p { color: #555; line-height: 1.6; margin: 0; }
+        .carousel-slide .features { color: #777; font-size: 0.875rem; }
+        .carousel-slide .btn {
+            background: #2c7da0;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9375rem;
+            width: fit-content;
+            margin-top: 4px;
+        }
+        .carousel-slide .btn:hover { background: #1f5a75; }
+        .carousel-slide .btn.pro { background: #e94560; }
+        .carousel-slide .btn.pro:hover { background: #c73850; }
+
+        .carousel-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #ddd;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.25rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+        }
+        .carousel-arrow:hover { background: #fff; }
+        .carousel-arrow.prev { left: 12px; }
+        .carousel-arrow.next { right: 12px; }
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px;
+            background: #fff;
+        }
+        .carousel-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ccc;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .carousel-dots span.active { background: #2c7da0; }
+
+        /* 个人主页 */
+        .profile-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .profile-header {
+            height: 120px;
+            background: linear-gradient(135deg, #0f3b5c 0%, #2c7da0 100%);
+        }
+        .profile-body {
+            padding: 0 24px 24px;
+            position: relative;
+        }
+        .profile-avatar {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: 4px solid #fff;
+            background: #e0e0e0;
+            margin-top: -45px;
+            object-fit: cover;
+        }
+        .profile-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a1a2e;
+            margin: 8px 0 4px;
+        }
+        .profile-id {
+            font-size: 0.8125rem;
+            color: #888;
+        }
+        .profile-bio {
+            color: #555;
+            font-size: 0.9375rem;
+            line-height: 1.6;
+            margin: 12px 0;
+        }
+        .profile-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .profile-tags .tag {
+            background: #f0f4f8;
+            color: #2c7da0;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.8125rem;
+        }
+        .profile-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            text-align: center;
+            padding-top: 16px;
+            border-top: 1px solid #f0f0f0;
+        }
+        .profile-stats .stat-value {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+        .profile-stats .stat-label {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 2px;
+        }
+        .profile-section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #0f3b5c;
+            margin: 20px 0 12px;
+        }
+        .profile-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .profile-info-item {
+            font-size: 0.875rem;
+            color: #555;
+        }
+        .profile-info-item .label {
+            color: #888;
+            font-size: 0.75rem;
+        }
         @media (max-width: 768px) {
-            .container { flex-direction: column; }
-            .sidebar { width: auto; }
-            .main { grid-template-columns: 1fr; }
+            .profile-stats { grid-template-columns: repeat(2, 1fr); }
+            .profile-info-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-<header>
-    <h1>MCN-AI Agent｜模式入口</h1>
-</header>
-<div class="container">
+<header><h1>MCN-AI Agent｜模式入口</h1></header>
+
+<div class="layout">
     <div class="sidebar">
         <div class="token-card">
             <div class="token-balance" id="token-balance">--</div>
@@ -139,37 +284,161 @@
         <a onclick="goSkills()">🧩 Skill市场</a>
         <a onclick="goMe()">👤 我的</a>
     </div>
-    <div class="main">
-        <div class="card">
-            <span class="badge">极速版</span>
-            <h3>趣味表达引擎</h3>
-            <p><strong>加点料，不改味</strong></p>
-            <p>适合轻量化改稿、加梗、IP 风格化二创。输入任意文案，一键生成带有趣味表达的短视频脚本。</p>
-            <p>✅ 保留原意 ✅ 自动加梗 ✅ IP 角色风格化</p>
-            <button class="btn" onclick="goSpeed()">进入极速版 →</button>
+
+    <div class="main-content">
+        <!-- 轮播 -->
+        <div class="carousel-wrap">
+            <div class="carousel-track" id="carousel-track">
+                <div class="carousel-slide">
+                    <span class="badge">极速版</span>
+                    <h2>趣味表达引擎</h2>
+                    <p><strong>加点料，不改味</strong></p>
+                    <p>适合轻量化改稿、加梗、IP 风格化二创。输入任意文案，一键生成带有趣味表达的短视频脚本。</p>
+                    <p class="features">✅ 保留原意　✅ 自动加梗　✅ IP 角色风格化</p>
+                    <button class="btn" onclick="goSpeed()">进入极速版 →</button>
+                </div>
+                <div class="carousel-slide">
+                    <span class="badge" style="background:#e94560;">专业版</span>
+                    <h2>剧本工坊</h2>
+                    <p><strong>人物画像 + Skill 组合</strong></p>
+                    <p>适合系统化剧本创作、分镜、台词生成。基于人物画像写作规则，组合话题/态度/情绪/风格 Skill，输出高质量结构化剧本。</p>
+                    <p class="features">✅ 人物画像约束　✅ 多 Skill 组合　✅ Markdown 剧本输出</p>
+                    <button class="btn pro" onclick="goPro()">进入专业版 →</button>
+                </div>
+            </div>
+            <button class="carousel-arrow prev" onclick="prevSlide()">‹</button>
+            <button class="carousel-arrow next" onclick="nextSlide()">›</button>
+            <div class="carousel-dots">
+                <span class="active" onclick="goToSlide(0)"></span>
+                <span onclick="goToSlide(1)"></span>
+            </div>
         </div>
-        <div class="card">
-            <span class="badge" style="background:#e94560;">专业版</span>
-            <h3>剧本工坊</h3>
-            <p><strong>人物画像 + Skill 组合</strong></p>
-            <p>适合系统化剧本创作、分镜、台词生成。基于人物画像写作规则，组合话题/态度/情绪/风格 Skill，输出高质量结构化剧本。</p>
-            <p>✅ 人物画像约束 ✅ 多 Skill 组合 ✅ Markdown 剧本输出</p>
-            <button class="btn" style="background:#e94560;" onclick="goPro()">进入专业版 →</button>
+
+        <!-- 个人主页 -->
+        <div class="profile-card">
+            <div class="profile-header"></div>
+            <div class="profile-body">
+                <img class="profile-avatar" src="https://via.placeholder.com/90?text=👤" id="profile-avatar" alt="头像">
+                <div class="profile-name" id="profile-name">加载中...</div>
+                <div class="profile-id" id="profile-id">@--</div>
+                <div class="profile-bio" id="profile-bio">MCN 内容创作者，热爱喜剧创作与短视频剧本。</div>
+
+                <div class="profile-tags" id="profile-tags">
+                    <span class="tag">🎭 喜剧创作</span>
+                    <span class="tag">🎬 短视频</span>
+                    <span class="tag">✍️ 剧本写作</span>
+                    <span class="tag">🤖 AI 辅助</span>
+                </div>
+
+                <div class="profile-stats" id="profile-stats">
+                    <div>
+                        <div class="stat-value" id="stat-generations">--</div>
+                        <div class="stat-label">生成次数</div>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="stat-scripts">--</div>
+                        <div class="stat-label">作品数</div>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="stat-salt">--</div>
+                        <div class="stat-label">极速版</div>
+                    </div>
+                    <div>
+                        <div class="stat-value" id="stat-tokens">--</div>
+                        <div class="stat-label">Token 消耗</div>
+                    </div>
+                </div>
+
+                <div class="profile-section-title">📋 个人信息</div>
+                <div class="profile-info-grid">
+                    <div class="profile-info-item">
+                        <div class="label">用户 ID</div>
+                        <div id="info-user-id">--</div>
+                    </div>
+                    <div class="profile-info-item">
+                        <div class="label">加入时间</div>
+                        <div id="info-joined">--</div>
+                    </div>
+                    <div class="profile-info-item">
+                        <div class="label">昵称</div>
+                        <div id="info-nickname">--</div>
+                    </div>
+                    <div class="profile-info-item">
+                        <div class="label">角色</div>
+                        <div id="info-role">创作者</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
 <script src="/static/common.js"></script>
 <script>
     requireAuth();
+    const currentUserId = getCurrentUserId();
+
+    // 轮播逻辑
+    let currentSlide = 0;
+    const totalSlides = 2;
+    const track = document.getElementById('carousel-track');
+    const dots = document.querySelectorAll('.carousel-dots span');
+
+    function updateCarousel() {
+        track.style.transform = `translateX(-${currentSlide * 100}%)`;
+        dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    }
+    function nextSlide() { currentSlide = (currentSlide + 1) % totalSlides; updateCarousel(); }
+    function prevSlide() { currentSlide = (currentSlide - 1 + totalSlides) % totalSlides; updateCarousel(); }
+    function goToSlide(n) { currentSlide = n; updateCarousel(); }
+    // 自动轮播
+    setInterval(nextSlide, 8000);
+
+    // 加载用户数据
+    async function loadUserProfile() {
+        try {
+            // 用户信息
+            const meRes = await apiFetch('/me');
+            const me = await meRes.json();
+            document.getElementById('profile-name').textContent = me.nickname || me.user_id;
+            document.getElementById('profile-id').textContent = '@' + me.user_id;
+            document.getElementById('info-user-id').textContent = me.user_id;
+            document.getElementById('info-nickname').textContent = me.nickname || '未设置';
+            if (me.created_at) {
+                document.getElementById('info-joined').textContent = new Date(me.created_at).toLocaleDateString('zh-CN');
+            }
+            document.getElementById('info-role').textContent = me.user_id === 'admin' ? '管理员' : '创作者';
+        } catch (err) {
+            document.getElementById('profile-name').textContent = currentUserId || '未知用户';
+            document.getElementById('profile-id').textContent = '@' + (currentUserId || '--');
+        }
+    }
+
+    async function loadStats() {
+        try {
+            const res = await apiFetch('/me/stats');
+            const data = await res.json();
+            document.getElementById('stat-generations').textContent = (data.generations || 0).toLocaleString();
+            document.getElementById('stat-scripts').textContent = '--';
+            document.getElementById('stat-salt').textContent = (data.salt_usage || 0).toLocaleString();
+        } catch (err) {
+            console.error('加载统计失败', err);
+        }
+    }
+
     async function loadTokenBalance() {
         try {
             const res = await apiFetch('/me/wallet');
             const data = await res.json();
             document.getElementById('token-balance').textContent = data.balance ?? '--';
+            document.getElementById('stat-tokens').textContent = (data.total_consumed || 0).toLocaleString();
         } catch {
             document.getElementById('token-balance').textContent = '--';
         }
     }
+
+    loadUserProfile();
+    loadStats();
     loadTokenBalance();
 </script>
 </body>

@@ -31,14 +31,24 @@ class PreferenceItem(BaseModel):
 
 
 class ConversationData(BaseModel):
-    """会话数据（短期记忆）。"""
+    """会话数据（短期记忆）。
+
+    metadata 字段在极速版/专业版生成时扩展使用：
+    - ip_role_id: 极速版关联的 IP 角色 ID
+    - persona_id: 专业版关联的人物画像 ID
+    - combined_skill_ids: 专业版使用的 Skill 组合列表
+    - estimated_tokens: 预估 Token 数
+    - actual_tokens: 实际 Token 消耗
+    - intensity / salt_level: 加梗强度
+    - original_text / polished_text: 原文与改写文本
+    """
 
     session_id: str = Field(description="会话唯一标识")
     messages: list[dict[str, Any]] = Field(
         default_factory=list, description="消息列表 [(role, content), ...]"
     )
     summary: str | None = Field(default=None, description="对话摘要")
-    source: str = Field(default="chat", description="来源：chat / salt / actor")
+    source: str = Field(default="chat", description="来源：chat / salt / actor / speed / pro")
     metadata: dict[str, Any] | None = Field(default=None, description="额外元数据")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")

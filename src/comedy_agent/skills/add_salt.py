@@ -13,12 +13,19 @@ from comedy_agent.models.factory import ModelFactory
 
 
 class AddSaltArgs(BaseModel):
-    """加点盐参数 Schema。"""
+    """加点盐参数 Schema（PRD v2 扩展支持 IP 风格注入）。"""
 
     text: str = Field(description="需要润色的原始文本")
     salt_level: str = Field(
         default="medium",
         description="盐度级别：light（约10%）/ medium（约20%）/ heavy（约30%）",
+    )
+    intensity: str = Field(
+        default="medium",
+        description="加梗强度（与 salt_level 同义，优先使用）：light / medium / heavy",
+    )
+    ip_role_prompt: str | None = Field(
+        default=None, description="可选的 IP 角色风格提示片段"
     )
 
 
@@ -45,12 +52,23 @@ class AddSaltSkill(ComedySkill):
         "4. 保持原文的语言风格和场景。"
     )
 
-    def _build_user_prompt(self, text: str, salt_level: str) -> str:
+    def _build_system_prompt(self, ip_role_prompt: str | None = None) -> str:
+        base = self.SYSTEM_PROMPT
+        if ip_role_prompt:
+            base += (
+                f"\n\n【风格要求】\n"
+                f"请模仿以下 IP 角色的语气进行改写：\n"
+                f"{ip_role_prompt}\n"
+                f"在改写时，必须保留原意，同时融入该角色的典型表达习惯和语气特征。"
+            )
+        return base
+
+    def _build_user_prompt(self, text: str, intensity: str) -> str:
         level_desc = {
             "light": "约10%（轻微调味，点到为止）",
             "medium": "约20%（适度幽默，自然流露）",
             "heavy": "约30%（重度调味，明显搞笑）",
-        }.get(salt_level, "约20%（适度幽默，自然流露）")
+        }.get(intensity, "约20%（适度幽默，自然流露）")
         return (
             f"请对以下文本进行幽默润色，不改变原意，幽默程度{level_desc}：\n\n{text}"
         )
@@ -59,11 +77,16 @@ class AddSaltSkill(ComedySkill):
         self,
         text: str,
         salt_level: str = "medium",
+        intensity: str | None = None,
+        ip_role_prompt: str | None = None,
         user_id: str | None = None,
     ) -> str:
+        # 向后兼容：salt_level 映射为 intensity
+        effective_intensity = intensity or salt_level
+        system = self._build_system_prompt(ip_role_prompt)
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.SYSTEM_PROMPT),
-            ("human", self._build_user_prompt(text, salt_level)),
+            ("system", system),
+            ("human", self._build_user_prompt(text, effective_intensity)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm
@@ -76,6 +99,8 @@ class AddSaltSkill(ComedySkill):
         self,
         text: str,
         salt_level: str = "medium",
+        intensity: str | None = None,
+        ip_role_prompt: str | None = None,
         user_id: str | None = None,
     ) -> str:
-        return self._run(text, salt_level, user_id=user_id)
+        return self._run(text, salt_level, intensity=intensity, ip_role_prompt=ip_role_prompt, user_id=user_id)

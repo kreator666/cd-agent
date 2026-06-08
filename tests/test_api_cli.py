@@ -82,6 +82,7 @@ class TestCLI:
                     "style": "自嘲",
                     "duration": 5,
                     "audience": "互联网人",
+                    "debug": False,
                 }
             )
 

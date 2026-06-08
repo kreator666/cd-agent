@@ -101,6 +101,31 @@ async def admin_update_ip_style(
     return state.memory.save_ip_style(style)
 
 
+@router.post("/admin/ip-roles", response_model=IPStyleData)
+async def admin_create_ip_role(
+    style: IPStyleData,
+    _admin: str = Depends(require_admin),
+) -> IPStyleData:
+    """新增 IP 角色。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    return state.memory.save_ip_style(style)
+
+
+@router.delete("/admin/ip-roles/{role_id}")
+async def admin_delete_ip_role(
+    role_id: str,
+    _admin: str = Depends(require_admin),
+) -> dict[str, bool]:
+    """下架/删除 IP 角色。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    ok = state.memory.delete_ip_style(role_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="IP 角色不存在")
+    return {"success": True}
+
+
 @router.get("/admin/banned-words")
 async def admin_list_banned_words(
     category: str | None = None,

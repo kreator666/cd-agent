@@ -333,7 +333,7 @@ class SaltHistory(Base):
 # IPStyle —— IP 风格模型
 # ------------------------------------------------------------------ #
 class IPStyle(Base):
-    """IP 风格模型表。"""
+    """IP 风格模型表（扩展为 IP 角色）。"""
 
     __tablename__ = "ip_styles"
 
@@ -349,6 +349,21 @@ class IPStyle(Base):
     )
     split_ratio: Mapped[int] = mapped_column(Integer, default=70, nullable=False)
     usage_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # --- PRD v2 扩展字段 ---
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="角色头像 URL")
+    homepage_background: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="主页背景图 URL"
+    )
+    profile_url: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, comment="个人主页路径，如 /ip/lidan"
+    )
+    follower_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="粉丝数")
+    is_official: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="是否官方认证角色"
+    )
+    skill_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="关联的风格 Skill ID"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

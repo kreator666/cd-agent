@@ -886,6 +886,12 @@ class SQLMemoryStore(MemoryStore):
                     status=style.status,
                     split_ratio=style.split_ratio,
                     usage_count=style.usage_count,
+                    avatar_url=style.avatar_url,
+                    homepage_background=style.homepage_background,
+                    profile_url=style.profile_url,
+                    follower_count=style.follower_count or 0,
+                    is_official=style.is_official if style.is_official is not None else False,
+                    skill_id=style.skill_id,
                 )
                 session.add(row)
             else:
@@ -896,6 +902,12 @@ class SQLMemoryStore(MemoryStore):
                 row.status = style.status
                 row.split_ratio = style.split_ratio
                 row.usage_count = style.usage_count
+                row.avatar_url = style.avatar_url
+                row.homepage_background = style.homepage_background
+                row.profile_url = style.profile_url
+                row.follower_count = style.follower_count or 0
+                row.is_official = style.is_official if style.is_official is not None else False
+                row.skill_id = style.skill_id
                 row.updated_at = self._now()
             session.commit()
             logger.debug("Saved IP style: %s", style_id)
@@ -908,6 +920,12 @@ class SQLMemoryStore(MemoryStore):
                 status=row.status,
                 split_ratio=row.split_ratio,
                 usage_count=row.usage_count,
+                avatar_url=row.avatar_url,
+                homepage_background=row.homepage_background,
+                profile_url=row.profile_url,
+                follower_count=row.follower_count,
+                is_official=row.is_official,
+                skill_id=row.skill_id,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
             )
@@ -926,6 +944,12 @@ class SQLMemoryStore(MemoryStore):
                 status=row.status,
                 split_ratio=row.split_ratio,
                 usage_count=row.usage_count,
+                avatar_url=row.avatar_url,
+                homepage_background=row.homepage_background,
+                profile_url=row.profile_url,
+                follower_count=row.follower_count,
+                is_official=row.is_official,
+                skill_id=row.skill_id,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
             )
@@ -946,6 +970,12 @@ class SQLMemoryStore(MemoryStore):
                     status=r.status,
                     split_ratio=r.split_ratio,
                     usage_count=r.usage_count,
+                    avatar_url=r.avatar_url,
+                    homepage_background=r.homepage_background,
+                    profile_url=r.profile_url,
+                    follower_count=r.follower_count,
+                    is_official=r.is_official,
+                    skill_id=r.skill_id,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )

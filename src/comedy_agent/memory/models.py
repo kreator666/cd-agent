@@ -151,7 +151,7 @@ class SaltHistoryData(BaseModel):
 # IP 风格模型
 # ------------------------------------------------------------------ #
 class IPStyleData(BaseModel):
-    """IP 风格模型数据。"""
+    """IP 风格模型数据（扩展为 IP 角色）。"""
 
     style_id: str | None = Field(default=None, description="风格唯一标识，留空则自动生成")
     actor_name: str = Field(description="演员名称")
@@ -161,6 +161,13 @@ class IPStyleData(BaseModel):
     status: str = Field(default="active", description="状态：active / testing / offline")
     split_ratio: int = Field(default=70, description="演员分成比例")
     usage_count: int = Field(default=0, description="累计调用次数")
+    # --- PRD v2 扩展字段 ---
+    avatar_url: str | None = Field(default=None, description="角色头像 URL")
+    homepage_background: str | None = Field(default=None, description="主页背景图 URL")
+    profile_url: str | None = Field(default=None, description="个人主页路径，如 /ip/lidan")
+    follower_count: int = Field(default=0, description="粉丝数")
+    is_official: bool = Field(default=False, description="是否官方认证角色")
+    skill_id: str | None = Field(default=None, description="关联的风格 Skill ID")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
 

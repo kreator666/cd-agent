@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的知识库 — Comedy Agent</title>
+    <title>系统知识库 — Comedy Agent</title>
     <link rel="stylesheet" href="/static/common.css">
     <style>
         .container {
@@ -207,11 +207,15 @@
     </header>
     <div class="container">
         <div class="page-title">
-            <span>我的知识库</span>
+            <span>系统知识库</span>
             <a href="/static/me.html" style="font-size:0.875rem;color:#666;text-decoration:none;">返回</a>
         </div>
 
-        <div class="upload-area">
+        <div id="admin-hint" style="display:none;background:#fff3cd;color:#856404;padding:10px 16px;border-radius:6px;margin-bottom:16px;font-size:0.875rem;">
+            ℹ️ 仅管理员可维护系统知识库，您当前仅可查看文档列表。
+        </div>
+
+        <div class="upload-area" id="upload-area">
             <h3>上传文档</h3>
             <p class="upload-hint">支持 PDF、Word、Markdown、纯文本、SRT/ASS/VTT 字幕等格式</p>
 
@@ -283,6 +287,14 @@
     <script src="/static/common.js"></script>
     <script>
         requireAuth();
+
+        const isAdmin = getCurrentUserId() === 'admin';
+
+        // 非管理员隐藏上传区域
+        if (!isAdmin) {
+            document.getElementById('upload-area').style.display = 'none';
+            document.getElementById('admin-hint').style.display = 'block';
+        }
 
         let pendingFiles = [];
 
@@ -416,6 +428,9 @@
                         headers: { 'Authorization': `Bearer ${token}` },
                         body: formData,
                     });
+                    if (res.status === 403) {
+                        throw new Error('需要管理员权限才能维护系统知识库');
+                    }
                     if (!res.ok) throw new Error('上传失败');
 
                     progresses[i].status = 'done';
@@ -473,7 +488,7 @@
                         </div>
                         <div class="actions">
                             <span class="status ${statusClass}"${errorTip}>${statusText}</span>
-                            <span class="del-btn" onclick="deleteDocument('${d.doc_id}')">✕</span>
+                            ${isAdmin ? `<span class="del-btn" onclick="deleteDocument('${d.doc_id}')">✕</span>` : ''}
                         </div>
                     `;
                     listEl.appendChild(item);

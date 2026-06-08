@@ -21,7 +21,7 @@ from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.actor import router as actor_router
-from comedy_agent.api.routers.admin import router as admin_router
+from comedy_agent.api.routers.admin import require_admin, router as admin_router
 from comedy_agent.api.routers.export import router as export_router
 from comedy_agent.api.routers.ip_styles import router as ip_styles_router
 from comedy_agent.api.routers.projects import router as projects_router
@@ -1086,8 +1086,9 @@ async def upload_documents(
     chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
     topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
     user_id: str = Depends(get_current_user),
+    _admin: str = Depends(require_admin),
 ) -> list[DocumentUploadResponse]:
-    """上传文档到个人知识库。支持多文件上传，自动解析并入库。"""
+    """上传文档到系统知识库。仅管理员可维护。支持多文件上传，自动解析并入库。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
@@ -1199,8 +1200,9 @@ async def list_documents(
 async def delete_document(
     doc_id: str,
     user_id: str = Depends(get_current_user),
+    _admin: str = Depends(require_admin),
 ) -> SuccessResponse:
-    """删除指定文档，同时清理向量库中的对应内容。"""
+    """删除指定文档，同时清理向量库中的对应内容。仅管理员可维护。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 

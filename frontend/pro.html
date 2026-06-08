@@ -56,6 +56,12 @@ textarea{width:100%;height:100px;padding:8px;border-radius:4px;border:1px solid 
     <div class="card">
       <h3>📝 选题 / 大纲 / 创意</h3>
       <textarea id="outline" placeholder="输入创意大纲，例如：实习生被领导刁难后逆袭..."></textarea>
+      <div style="margin-top:8px;">
+        <label style="font-size:.8125rem;color:#666;">模型选择：</label>
+        <select id="model-select" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:.8125rem;">
+          <option value="">使用默认配置</option>
+        </select>
+      </div>
     </div>
     <!-- 人物画像 -->
     <div class="card">
@@ -129,6 +135,19 @@ textarea{width:100%;height:100px;padding:8px;border-radius:4px;border:1px solid 
   let personas = [];
   let selectedSkills = new Set();
   let allSkills = [];
+
+  async function loadModels() {
+    try {
+      const res = await apiFetch('/models');
+      const data = await res.json();
+      const sel = document.getElementById('model-select');
+      const opts = data.models || [];
+      sel.innerHTML = '<option value="">使用默认配置</option>' +
+        opts.map(m => `<option value="${m}">${m}</option>`).join('');
+    } catch (err) {
+      console.error('加载模型列表失败', err);
+    }
+  }
 
   async function loadPersonas() {
     try {
@@ -218,9 +237,10 @@ textarea{width:100%;height:100px;padding:8px;border-radius:4px;border:1px solid 
     const btn = document.getElementById('gen-btn');
     btn.disabled = true; btn.textContent = '生成中...';
     try {
+      const model = document.getElementById('model-select').value || undefined;
       const res = await apiFetch('/pro/generate', {
         method: 'POST',
-        body: JSON.stringify({outline, persona_id: personaId, skill_ids: skillIds, confirm_budget: true})
+        body: JSON.stringify({outline, persona_id: personaId, skill_ids: skillIds, confirm_budget: true, model})
       });
       const data = await res.json();
       document.getElementById('script-output').innerHTML = `<pre style="white-space:pre-wrap;margin:0;">${escapeHtml(data.script||'')}</pre>`;
@@ -263,6 +283,7 @@ textarea{width:100%;height:100px;padding:8px;border-radius:4px;border:1px solid 
     }
   }
 
+  loadModels();
   loadPersonas();
   loadSkills();
 </script>

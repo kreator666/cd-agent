@@ -268,8 +268,17 @@ async def pro_generate(
             detail="本次预计消耗超预算，是否继续？",
         )
 
-    if request.model:
-        state.orch.set_model(request.model)
+    # 模型选择：用户传入 > 用户配置 > 默认
+    model_name = request.model
+    if not model_name:
+        prefs = state.memory.list_preferences(user_id)
+        for p in prefs:
+            if p.key == "model_config" and p.value:
+                model_name = p.value.get("pro_model")
+                if model_name:
+                    break
+    if model_name:
+        state.orch.set_model(model_name)
 
     # 3. 构造组合 Pipeline 调用
     # 按类型排序：topic → attitude → emotion → genre → rule_persona → script_composer

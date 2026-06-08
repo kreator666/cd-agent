@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -73,4 +75,58 @@ async def get_stats(user_id: str = Depends(get_current_user)) -> StatsResponse:
         actor_usage=stats.get("actor_usage", 0),
         salt_usage=stats.get("salt_usage", 0),
         earnings=stats.get("earnings", 0),
+    )
+
+
+# ------------------------------------------------------------------ #
+# 模型配置
+# ------------------------------------------------------------------ #
+class ModelConfigResponse(BaseModel):
+    """用户模型配置响应。"""
+
+    speed_model: str | None = Field(default=None, description="极速版使用的模型")
+    pro_model: str | None = Field(default=None, description="专业版使用的模型")
+
+
+class ModelConfigRequest(BaseModel):
+    """用户模型配置请求。"""
+
+    speed_model: str | None = Field(default=None, description="极速版使用的模型")
+    pro_model: str | None = Field(default=None, description="专业版使用的模型")
+
+
+@router.get("/me/model-config", response_model=ModelConfigResponse)
+async def get_model_config(user_id: str = Depends(get_current_user)) -> ModelConfigResponse:
+    """获取当前用户的模型配置（极速版/专业版）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    prefs = state.memory.list_preferences(user_id)
+    config: dict[str, Any] = {}
+    for p in prefs:
+        if p.key == "model_config" and p.value:
+            config = p.value
+    return ModelConfigResponse(
+        speed_model=config.get("speed_model"),
+        pro_model=config.get("pro_model"),
+    )
+
+
+@router.post("/me/model-config", response_model=ModelConfigResponse)
+async def save_model_config(
+    request: ModelConfigRequest, user_id: str = Depends(get_current_user)
+) -> ModelConfigResponse:
+    """保存当前用户的模型配置（极速版/专业版）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    state.memory.save_preference(
+        user_id=user_id,
+        key="model_config",
+        value={
+            "speed_model": request.speed_model,
+            "pro_model": request.pro_model,
+        },
+    )
+    return ModelConfigResponse(
+        speed_model=request.speed_model,
+        pro_model=request.pro_model,
     )

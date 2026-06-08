@@ -80,8 +80,17 @@ async def speed_polish(
             detail=f"Token 余额不足（需 {cost}，余 {account.balance}）",
         )
 
-    if request.model:
-        state.orch.set_model(request.model)
+    # 模型选择：用户传入 > 用户配置 > 默认
+    model_name = request.model
+    if not model_name:
+        prefs = state.memory.list_preferences(user_id)
+        for p in prefs:
+            if p.key == "model_config" and p.value:
+                model_name = p.value.get("speed_model")
+                if model_name:
+                    break
+    if model_name:
+        state.orch.set_model(model_name)
 
     # 加载 IP 角色风格片段（若指定）
     ip_role_info: IPRoleInfo | None = None

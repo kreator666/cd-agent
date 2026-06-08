@@ -90,10 +90,75 @@
                 <span class="desc">平台概览、Skill 审核、IP 模型与敏感词管理</span>
             </a>
         </div>
+
+        <!-- 模型配置 -->
+        <div class="page-title" style="margin-top:2rem;">⚙️ 模型配置</div>
+        <div class="card" style="background:#fff;border-radius:.75rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);max-width:600px;">
+            <div style="margin-bottom:1rem;">
+                <label style="font-size:.875rem;color:#666;display:block;margin-bottom:.25rem;">极速版默认模型</label>
+                <select id="speed-model" style="width:100%;padding:.5rem;border:1px solid #ddd;border-radius:.375rem;font-size:.875rem;">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+            <div style="margin-bottom:1rem;">
+                <label style="font-size:.875rem;color:#666;display:block;margin-bottom:.25rem;">专业版默认模型</label>
+                <select id="pro-model" style="width:100%;padding:.5rem;border:1px solid #ddd;border-radius:.375rem;font-size:.875rem;">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+            <button class="btn" onclick="saveModelConfig()" style="background:#2c7da0;color:#fff;padding:.5rem 1rem;border:none;border-radius:.375rem;cursor:pointer;">保存配置</button>
+        </div>
     </div>
     <script src="/static/common.js"></script>
     <script>
         requireAuth();
+
+        let availableModels = [];
+
+        async function loadModels() {
+            try {
+                const res = await apiFetch('/models');
+                const data = await res.json();
+                availableModels = data.models || [];
+                const defaultModel = data.default || '';
+                const speedSel = document.getElementById('speed-model');
+                const proSel = document.getElementById('pro-model');
+                const options = `<option value="">使用系统默认 (${defaultModel})</option>` +
+                    availableModels.map(m => `<option value="${m}">${m}</option>`).join('');
+                speedSel.innerHTML = options;
+                proSel.innerHTML = options;
+            } catch (err) {
+                console.error('加载模型列表失败', err);
+            }
+        }
+
+        async function loadModelConfig() {
+            try {
+                const res = await apiFetch('/me/model-config');
+                const data = await res.json();
+                if (data.speed_model) document.getElementById('speed-model').value = data.speed_model;
+                if (data.pro_model) document.getElementById('pro-model').value = data.pro_model;
+            } catch (err) {
+                console.error('加载模型配置失败', err);
+            }
+        }
+
+        async function saveModelConfig() {
+            const speedModel = document.getElementById('speed-model').value;
+            const proModel = document.getElementById('pro-model').value;
+            try {
+                await apiFetch('/me/model-config', {
+                    method: 'POST',
+                    body: JSON.stringify({speed_model: speedModel || null, pro_model: proModel || null})
+                });
+                alert('模型配置已保存');
+            } catch (err) {
+                alert('保存失败：' + err.message);
+            }
+        }
+
+        loadModels();
+        loadModelConfig();
     </script>
 </body>
 </html>

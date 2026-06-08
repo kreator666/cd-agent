@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>专业版｜剧本工坊</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+body{font-family:'Segoe UI',sans-serif;margin:0;background:#f5f6f8;min-height:100vh;}
+header{background:#0f3b5c;color:#fff;text-align:center;padding:16px;}
+header h1{margin:0;font-size:1.25rem;}
+.container{display:flex;max-width:1400px;margin:20px auto;gap:20px;padding:0 20px;}
+.sidebar{width:200px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);height:fit-content;}
+.sidebar a{display:block;padding:10px 12px;margin-bottom:6px;color:#333;text-decoration:none;border-radius:4px;font-size:.875rem;cursor:pointer;}
+.sidebar a:hover{background:#f0f0f0;}
+.sidebar a.active{background:#e94560;color:#fff;}
+.main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;}
+.card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.card h3{color:#0f3b5c;margin-top:0;font-size:1rem;}
+textarea{width:100%;height:100px;padding:8px;border-radius:4px;border:1px solid #ccc;font-family:inherit;font-size:.9375rem;resize:vertical;}
+.btn{background:#e94560;color:#fff;padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.875rem;}
+.btn:hover{background:#c73850;}
+.btn-secondary{background:#e0e0e0;color:#333;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.chip{display:inline-block;padding:4px 10px;margin:4px;background:#eee;border-radius:12px;font-size:.8125rem;cursor:pointer;transition:all .15s;}
+.chip:hover{background:#ddd;}
+.chip.selected{background:#e94560;color:#fff;}
+.output{background:#f4f6f8;padding:12px;border-radius:4px;min-height:120px;margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:.9375rem;max-height:400px;overflow-y:auto;}
+.select-box{width:100%;padding:8px;border-radius:4px;border:1px solid #ccc;font-size:.875rem;}
+.warning{color:#e94560;font-size:.8125rem;margin-top:4px;}
+.token-estimate{font-size:.75rem;color:#888;margin-top:4px;}
+.rule-summary{font-size:.8125rem;color:#555;background:#f8f8f8;padding:8px;border-radius:4px;margin-top:8px;}
+.empty-state{color:#999;text-align:center;padding:20px;}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:1000;}
+.modal-overlay.active{display:flex;}
+.modal-box{background:#fff;padding:24px;border-radius:8px;width:480px;max-width:90vw;max-height:90vh;overflow-y:auto;}
+.modal-box h3{margin-top:0;}
+.modal-box input,.modal-box textarea,.modal-box select{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-family:inherit;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+.fullwidth{grid-column:1 / -1;}
+@media(max-width:768px){.container{flex-direction:column;}.sidebar{width:auto;}.main{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header><h1>🎬 专业版｜剧本工坊</h1></header>
+<div class="container">
+  <div class="sidebar">
+    <a onclick="goHome()">🏠 首页</a>
+    <a onclick="goSpeed()">⚡ 极速版</a>
+    <a class="active" onclick="goPro()">🎬 专业版</a>
+    <a onclick="goSkills()">🧩 Skill市场</a>
+    <a onclick="goMe()">👤 我的</a>
+  </div>
+  <div class="main">
+    <!-- 选题/大纲 -->
+    <div class="card">
+      <h3>📝 选题 / 大纲 / 创意</h3>
+      <textarea id="outline" placeholder="输入创意大纲，例如：实习生被领导刁难后逆袭..."></textarea>
+    </div>
+    <!-- 人物画像 -->
+    <div class="card">
+      <h3>🎭 人物画像中心（Rules）</h3>
+      <select class="select-box" id="persona-select" onchange="onPersonaChange()">
+        <option value="">加载中...</option>
+      </select>
+      <div class="rule-summary" id="persona-summary">请先选择或创建人物画像</div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="openPersonaModal()">+ 新建画像</button>
+      </div>
+    </div>
+    <!-- Skill 组合 -->
+    <div class="card fullwidth">
+      <h3>🧩 Skill 组合面板</h3>
+      <div>
+        <div style="font-size:.8125rem;color:#666;margin-bottom:4px;">话题 Skill：</div>
+        <div id="skill-topic"></div>
+      </div>
+      <div>
+        <div style="font-size:.8125rem;color:#666;margin-bottom:4px;">态度 Skill：</div>
+        <div id="skill-attitude"></div>
+      </div>
+      <div>
+        <div style="font-size:.8125rem;color:#666;margin-bottom:4px;">情绪 Skill：</div>
+        <div id="skill-emotion"></div>
+      </div>
+      <div>
+        <div style="font-size:.8125rem;color:#666;margin-bottom:4px;">风格 Skill：</div>
+        <div id="skill-genre"></div>
+      </div>
+      <div class="token-estimate" id="pro-estimate">预计消耗约 0 tokens</div>
+      <div class="warning" id="budget-warning" style="display:none;">⚠️ 本次预计消耗超预算，是否继续？</div>
+    </div>
+    <!-- 剧本输出 -->
+    <div class="card fullwidth">
+      <h3>📜 结构化剧本输出</h3>
+      <div class="output" id="script-output"><div class="empty-state">选择人物画像和 Skill 后点击生成...</div></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn" onclick="generateScript()" id="gen-btn">生成剧本</button>
+        <button class="btn btn-secondary" onclick="copyScript()">📋 复制</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 创建画像 Modal -->
+<div class="modal-overlay" id="persona-modal">
+  <div class="modal-box">
+    <h3>新建人物画像</h3>
+    <input type="text" id="p-name" placeholder="画像名称，如：毒舌职场侠">
+    <label style="font-size:.8125rem;color:#666;"><input type="checkbox" id="p-short"> 偏好短句（每句不超过15字）</label>
+    <input type="text" id="p-forbidden" placeholder="禁用词，用逗号分隔">
+    <select id="p-pace">
+      <option value="fast">快节奏</option>
+      <option value="medium" selected>中节奏</option>
+      <option value="slow">慢节奏</option>
+    </select>
+    <label style="font-size:.8125rem;color:#666;"><input type="checkbox" id="p-hook"> 开头必须有钩子</label>
+    <textarea id="p-example" placeholder="风格示例（可选）" style="height:60px;"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closePersonaModal()">取消</button>
+      <button class="btn" onclick="createPersona()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+  requireAuth();
+  let personas = [];
+  let selectedSkills = new Set();
+  let allSkills = [];
+
+  async function loadPersonas() {
+    try {
+      const res = await apiFetch('/pro/personas');
+      personas = await res.json();
+      const sel = document.getElementById('persona-select');
+      if (personas.length === 0) {
+        sel.innerHTML = '<option value="">暂无画像，请先创建</option>';
+        document.getElementById('gen-btn').disabled = true;
+      } else {
+        sel.innerHTML = personas.map(p => `<option value="${p.persona_id}">${escapeHtml(p.name)}</option>`).join('');
+        document.getElementById('gen-btn').disabled = false;
+      }
+      onPersonaChange();
+    } catch (err) {
+      console.error('加载画像失败', err);
+    }
+  }
+
+  function onPersonaChange() {
+    const id = document.getElementById('persona-select').value;
+    const p = personas.find(x => x.persona_id === id);
+    const el = document.getElementById('persona-summary');
+    if (!p) {
+      el.textContent = '请先选择或创建人物画像';
+      return;
+    }
+    const rules = [];
+    if (p.rule_content?.prefer_short_sentence) rules.push('偏好短句');
+    if (p.rule_content?.sentence_pace) rules.push(`节奏：${p.rule_content.sentence_pace}`);
+    if (p.rule_content?.opening_hook) rules.push('开头有钩子');
+    if (p.rule_content?.forbidden_words?.length) rules.push(`禁用词：${p.rule_content.forbidden_words.join('、')}`);
+    el.textContent = rules.length ? rules.join(' | ') : '无特殊规则约束';
+  }
+
+  async function loadSkills() {
+    try {
+      const res = await apiFetch('/pro/skills');
+      allSkills = await res.json();
+      const types = ['topic','attitude','emotion','genre'];
+      types.forEach(t => {
+        const container = document.getElementById('skill-'+t);
+        const list = allSkills.filter(s => s.skill_type === t);
+        container.innerHTML = list.map(s =>
+          `<span class="chip" data-skill="${s.name}" onclick="toggleSkill(this)">${escapeHtml(s.name)}</span>`
+        ).join('') || '<span style="color:#999;font-size:.75rem;">暂无可用 Skill</span>';
+      });
+    } catch (err) {
+      console.error('加载 Skill 失败', err);
+    }
+  }
+
+  function toggleSkill(el) {
+    const name = el.dataset.skill;
+    if (selectedSkills.has(name)) {
+      selectedSkills.delete(name);
+      el.classList.remove('selected');
+    } else {
+      selectedSkills.add(name);
+      el.classList.add('selected');
+    }
+    updateEstimate();
+  }
+
+  function updateEstimate() {
+    const outline = document.getElementById('outline').value;
+    const base = Math.round(outline.length * 0.8);
+    const skillCost = {topic:15,attitude:10,emotion:10,genre:15,rule_persona:20,script_composer:25};
+    let skillTokens = 0;
+    selectedSkills.forEach(s => {
+      const info = allSkills.find(x => x.name === s);
+      if (info) skillTokens += skillCost[info.skill_type] || 10;
+    });
+    const total = base + skillTokens;
+    document.getElementById('pro-estimate').textContent = `预计消耗约 ${total} tokens`;
+    document.getElementById('budget-warning').style.display = total > 1000 ? 'block' : 'none';
+  }
+
+  document.getElementById('outline').addEventListener('input', updateEstimate);
+
+  async function generateScript() {
+    const outline = document.getElementById('outline').value.trim();
+    const personaId = document.getElementById('persona-select').value;
+    if (!outline) { alert('请输入创意大纲'); return; }
+    if (!personaId) { alert('请选择人物画像'); return; }
+    const skillIds = Array.from(selectedSkills);
+    const btn = document.getElementById('gen-btn');
+    btn.disabled = true; btn.textContent = '生成中...';
+    try {
+      const res = await apiFetch('/pro/generate', {
+        method: 'POST',
+        body: JSON.stringify({outline, persona_id: personaId, skill_ids: skillIds, confirm_budget: true})
+      });
+      const data = await res.json();
+      document.getElementById('script-output').innerHTML = `<pre style="white-space:pre-wrap;margin:0;">${escapeHtml(data.script||'')}</pre>`;
+    } catch (err) {
+      alert('生成失败：' + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '生成剧本';
+    }
+  }
+
+  function copyScript() {
+    const text = document.getElementById('script-output').innerText;
+    if (!text || text.includes('选择人物画像')) return;
+    navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板'));
+  }
+
+  // Modal
+  function openPersonaModal() { document.getElementById('persona-modal').classList.add('active'); }
+  function closePersonaModal() { document.getElementById('persona-modal').classList.remove('active'); }
+
+  async function createPersona() {
+    const name = document.getElementById('p-name').value.trim();
+    if (!name) { alert('请输入画像名称'); return; }
+    const rule_content = {
+      prefer_short_sentence: document.getElementById('p-short').checked,
+      forbidden_words: document.getElementById('p-forbidden').value.split(',').map(s=>s.trim()).filter(Boolean),
+      sentence_pace: document.getElementById('p-pace').value,
+      opening_hook: document.getElementById('p-hook').checked,
+      example_style: document.getElementById('p-example').value.trim(),
+    };
+    try {
+      await apiFetch('/pro/personas', {
+        method: 'POST',
+        body: JSON.stringify({name, rule_content})
+      });
+      closePersonaModal();
+      loadPersonas();
+    } catch (err) {
+      alert('创建失败：' + err.message);
+    }
+  }
+
+  loadPersonas();
+  loadSkills();
+</script>
+</body>
+</html>

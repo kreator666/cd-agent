@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP 角色主页</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+body{font-family:'Segoe UI',sans-serif;margin:0;background:#f5f6f8;min-height:100vh;}
+header{background:#0f3b5c;color:#fff;text-align:center;padding:16px;}
+header h1{margin:0;font-size:1.25rem;}
+.container{display:flex;max-width:1400px;margin:20px auto;gap:20px;padding:0 20px;}
+.sidebar{width:200px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);height:fit-content;}
+.sidebar a{display:block;padding:10px 12px;margin-bottom:6px;color:#333;text-decoration:none;border-radius:4px;font-size:.875rem;cursor:pointer;}
+.sidebar a:hover{background:#f0f0f0;}
+.sidebar a.active{background:#2c7da0;color:#fff;}
+.main{flex:1;display:flex;flex-direction:column;gap:20px;}
+.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.card h3{color:#0f3b5c;margin-top:0;font-size:1rem;}
+.hero{display:flex;align-items:center;gap:20px;}
+.hero img{width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #2c7da0;}
+.hero-info{flex:1;}
+.hero-info h2{margin:0 0 8px;color:#0f3b5c;}
+.hero-info .stats{display:flex;gap:20px;font-size:.875rem;color:#555;}
+.hero-info .stats span{display:flex;align-items:center;gap:4px;}
+.btn{background:#2c7da0;color:#fff;padding:10px 20px;border:none;border-radius:4px;cursor:pointer;font-size:.875rem;}
+.btn:hover{background:#1f5a75;}
+.works-list{display:flex;flex-direction:column;gap:8px;}
+.work-item{padding:10px;background:#f8f8f8;border-radius:6px;font-size:.875rem;}
+.empty-state{color:#999;text-align:center;padding:20px;}
+@media(max-width:768px){.container{flex-direction:column;}.sidebar{width:auto;}.hero{flex-direction:column;text-align:center;}}
+</style>
+</head>
+<body>
+<header><h1>🎭 IP 角色主页</h1></header>
+<div class="container">
+  <div class="sidebar">
+    <a onclick="goHome()">🏠 首页</a>
+    <a onclick="goSpeed()">⚡ 极速版</a>
+    <a onclick="goPro()">🎬 专业版</a>
+    <a onclick="goSkills()">🧩 Skill市场</a>
+    <a onclick="goMe()">👤 我的</a>
+  </div>
+  <div class="main">
+    <!-- 角色信息 -->
+    <div class="card">
+      <div class="hero">
+        <img id="role-avatar" src="https://via.placeholder.com/100" alt="角色头像">
+        <div class="hero-info">
+          <h2 id="role-name">加载中...</h2>
+          <div class="stats">
+            <span>👥 粉丝数：<strong id="role-followers">--</strong></span>
+            <span>🔥 使用次数：<strong id="role-usage">--</strong></span>
+            <span id="role-official" style="display:none;">✅ 官方认证</span>
+          </div>
+          <p id="role-desc" style="color:#555;line-height:1.6;">加载中...</p>
+          <button class="btn" onclick="tryStyle()">🚀 试一下该风格</button>
+        </div>
+      </div>
+    </div>
+    <!-- 风格描述 -->
+    <div class="card">
+      <h3>🎨 风格特点</h3>
+      <div id="role-style">加载中...</div>
+    </div>
+    <!-- 代表作品 -->
+    <div class="card">
+      <h3>🏆 代表作品</h3>
+      <div class="works-list" id="works-list">
+        <div class="empty-state">暂无代表作品</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/common.js"></script>
+<script>
+  requireAuth();
+  const params = new URLSearchParams(window.location.search);
+  const roleId = params.get('role_id');
+  let roleData = null;
+
+  async function loadRole() {
+    if (!roleId) {
+      document.getElementById('role-name').textContent = '未指定角色';
+      return;
+    }
+    try {
+      const res = await apiFetch(`/ip-roles/${roleId}`);
+      roleData = await res.json();
+      document.getElementById('role-name').textContent = roleData.actor_name || '未知角色';
+      document.getElementById('role-avatar').src = roleData.avatar_url || 'https://via.placeholder.com/100';
+      document.getElementById('role-followers').textContent = (roleData.follower_count || 0).toLocaleString();
+      document.getElementById('role-usage').textContent = (roleData.usage_count || 0).toLocaleString();
+      document.getElementById('role-desc').textContent = roleData.description || '暂无描述';
+      document.getElementById('role-style').textContent = roleData.prompt_snippet || '暂无风格描述';
+      if (roleData.is_official) {
+        document.getElementById('role-official').style.display = 'inline-flex';
+      }
+    } catch (err) {
+      document.getElementById('role-name').textContent = '加载失败';
+      console.error(err);
+    }
+  }
+
+  function tryStyle() {
+    if (!roleId) return;
+    window.location.href = `/static/speed.html?role_id=${encodeURIComponent(roleId)}`;
+  }
+
+  loadRole();
+</script>
+</body>
+</html>

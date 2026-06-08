@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>极速版｜趣味表达引擎</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+body{font-family:'Segoe UI',sans-serif;margin:0;background:#f5f6f8;min-height:100vh;}
+header{background:#0f3b5c;color:#fff;text-align:center;padding:16px;}
+header h1{margin:0;font-size:1.25rem;}
+.container{display:flex;max-width:1400px;margin:20px auto;gap:20px;padding:0 20px;}
+.sidebar{width:200px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);height:fit-content;}
+.sidebar a{display:block;padding:10px 12px;margin-bottom:6px;color:#333;text-decoration:none;border-radius:4px;font-size:.875rem;cursor:pointer;}
+.sidebar a:hover{background:#f0f0f0;}
+.sidebar a.active{background:#2c7da0;color:#fff;}
+.main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;}
+.card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.card h3{color:#0f3b5c;margin-top:0;font-size:1rem;}
+textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid #ccc;font-family:inherit;font-size:.9375rem;resize:vertical;}
+.btn{background:#2c7da0;color:#fff;padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.875rem;}
+.btn:hover{background:#1f5a75;}
+.btn-secondary{background:#e0e0e0;color:#333;}
+.avatar-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;}
+.avatar{width:80px;text-align:center;cursor:pointer;}
+.avatar img{width:60px;height:60px;border-radius:50%;border:2px solid #ccc;object-fit:cover;}
+.avatar.selected img{border-color:#2c7da0;}
+.avatar .name{font-size:.75rem;color:#333;margin-top:4px;}
+.intensity-row{display:flex;gap:8px;margin:8px 0;}
+.intensity-row label{flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:6px;text-align:center;font-size:.8125rem;cursor:pointer;transition:all .15s;}
+.intensity-row input{display:none;}
+.intensity-row input:checked+label{border-color:#2c7da0;background:#2c7da0;color:#fff;}
+.output{background:#f4f6f8;padding:12px;border-radius:4px;min-height:80px;margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:.9375rem;}
+.tabs{display:flex;margin-bottom:8px;border-bottom:1px solid #e0e0e0;}
+.tab{padding:8px 16px;cursor:pointer;font-size:.875rem;color:#666;}
+.tab.active{border-bottom:2px solid #2c7da0;font-weight:bold;color:#0f3b5c;}
+.token-estimate{font-size:.75rem;color:#888;margin-top:4px;}
+.ip-result{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px;background:#f8f8f8;border-radius:6px;}
+.ip-result img{width:36px;height:36px;border-radius:50%;object-fit:cover;}
+.ip-result a{color:#2c7da0;text-decoration:none;font-size:.8125rem;}
+.fullwidth{grid-column:1 / -1;}
+@media(max-width:768px){.container{flex-direction:column;}.sidebar{width:auto;}.main{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header><h1>⚡ 极速版｜趣味表达引擎</h1></header>
+<div class="container">
+  <div class="sidebar">
+    <a onclick="goHome()">🏠 首页</a>
+    <a class="active" onclick="goSpeed()">⚡ 极速版</a>
+    <a onclick="goPro()">🎬 专业版</a>
+    <a onclick="goSkills()">🧩 Skill市场</a>
+    <a onclick="goMe()">👤 我的</a>
+  </div>
+  <div class="main">
+    <!-- 文本输入 -->
+    <div class="card">
+      <h3>📝 原始文本输入</h3>
+      <textarea id="input-text" placeholder="输入需要润色的文本...">这款防晒霜防水效果很好，夏天出去玩也不怕。</textarea>
+      <div class="intensity-row">
+        <input type="radio" name="intensity" id="int-light" value="light" checked><label for="int-light">轻度 🧂</label>
+        <input type="radio" name="intensity" id="int-medium" value="medium"><label for="int-medium">中度 🧂🧂</label>
+        <input type="radio" name="intensity" id="int-heavy" value="heavy"><label for="int-heavy">重度 🧂🧂🧂</label>
+      </div>
+      <div class="token-estimate" id="token-estimate">预计消耗约 0 tokens，约 ¥0.00</div>
+      <button class="btn" onclick="generate()" id="gen-btn">一键生成</button>
+    </div>
+    <!-- IP 角色选择 -->
+    <div class="card">
+      <h3>🎭 IP 角色风格选择</h3>
+      <div class="avatar-grid" id="avatar-grid">
+        <div class="avatar selected" data-role-id="" onclick="selectRole(this)">
+          <img src="https://via.placeholder.com/60?text=默认"><div class="name">默认风格</div>
+        </div>
+      </div>
+    </div>
+    <!-- 生成结果 -->
+    <div class="card fullwidth">
+      <h3>✨ 生成结果</h3>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab(this,'result-polished')">风格版</div>
+        <div class="tab" onclick="switchTab(this,'result-compare')">原文对比</div>
+      </div>
+      <div id="result-polished" class="output" style="display:block;">点击"一键生成"查看结果...</div>
+      <div id="result-compare" class="output" style="display:none;"></div>
+      <div id="ip-result-info"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="copyResult()">📋 复制</button>
+        <button class="btn btn-secondary" onclick="shareResult()">🔗 分享</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/common.js"></script>
+<script>
+  requireAuth();
+  let selectedRoleId = '';
+  let lastResult = {original:'',polished:'',ip_role:null};
+
+  // 加载 IP 角色列表
+  async function loadIPRoles() {
+    try {
+      const res = await apiFetch('/speed/ip-roles');
+      const roles = await res.json();
+      const grid = document.getElementById('avatar-grid');
+      grid.innerHTML = `
+        <div class="avatar selected" data-role-id="" onclick="selectRole(this)">
+          <img src="https://via.placeholder.com/60?text=默认"><div class="name">默认风格</div>
+        </div>`;
+      roles.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'avatar';
+        div.dataset.roleId = r.style_id;
+        div.onclick = () => selectRole(div);
+        const imgUrl = r.avatar_url || `https://via.placeholder.com/60?text=${encodeURIComponent(r.actor_name?.[0]||'IP')}`;
+        div.innerHTML = `<img src="${imgUrl}"><div class="name">${escapeHtml(r.actor_name)}</div>`;
+        grid.appendChild(div);
+      });
+    } catch (err) {
+      console.error('加载 IP 角色失败', err);
+    }
+  }
+
+  function selectRole(el) {
+    document.querySelectorAll('.avatar').forEach(a => a.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedRoleId = el.dataset.roleId || '';
+  }
+
+  function getIntensity() {
+    const el = document.querySelector('input[name="intensity"]:checked');
+    return el ? el.value : 'medium';
+  }
+
+  function updateEstimate() {
+    const text = document.getElementById('input-text').value;
+    const estimated = Math.round(text.length * 0.8);
+    const cost = (estimated * 0.0001).toFixed(4);
+    document.getElementById('token-estimate').textContent = `预计消耗约 ${estimated} tokens，约 ¥${cost}`;
+  }
+
+  document.getElementById('input-text').addEventListener('input', updateEstimate);
+  updateEstimate();
+
+  async function generate() {
+    const text = document.getElementById('input-text').value.trim();
+    if (!text) { alert('请输入原始文本'); return; }
+    const btn = document.getElementById('gen-btn');
+    btn.disabled = true; btn.textContent = '生成中...';
+    try {
+      const res = await apiFetch('/speed/polish', {
+        method: 'POST',
+        body: JSON.stringify({text, intensity: getIntensity(), ip_role_id: selectedRoleId || undefined})
+      });
+      const data = await res.json();
+      lastResult = data;
+      document.getElementById('result-polished').textContent = data.polished || '（无输出）';
+      document.getElementById('result-compare').innerHTML =
+        `<div style="color:#888;margin-bottom:8px;">原文：</div><div style="margin-bottom:16px;">${escapeHtml(data.original)}</div>` +
+        `<div style="color:#2c7da0;margin-bottom:8px;">风格版：</div><div>${escapeHtml(data.polished||'')}</div>`;
+
+      const infoEl = document.getElementById('ip-result-info');
+      if (data.ip_role) {
+        infoEl.innerHTML = `
+          <div class="ip-result">
+            <img src="${data.ip_role.avatar_url || 'https://via.placeholder.com/36'}">
+            <div>
+              <div style="font-size:.8125rem;font-weight:600;">${escapeHtml(data.ip_role.actor_name||'')}</div>
+              <a href="javascript:void(0)" onclick="goIPRole('${data.ip_role.role_id}')">查看主页 →</a>
+            </div>
+          </div>`;
+      } else {
+        infoEl.innerHTML = '';
+      }
+    } catch (err) {
+      alert('生成失败：' + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '一键生成';
+    }
+  }
+
+  function switchTab(el, panelId) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('result-polished').style.display = panelId==='result-polished'?'block':'none';
+    document.getElementById('result-compare').style.display = panelId==='result-compare'?'block':'none';
+  }
+
+  function copyResult() {
+    const text = lastResult.polished;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板'));
+  }
+
+  function shareResult() {
+    alert('分享功能开发中...');
+  }
+
+  loadIPRoles();
+</script>
+</body>
+</html>

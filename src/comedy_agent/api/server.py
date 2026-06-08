@@ -43,14 +43,21 @@ from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills import (
     AddSaltSkill,
+    AttitudeSkill,
     CrosstalkSkill,
+    EmotionSkill,
+    GenreSkill,
     JapaneseSketchSkill,
     JokeAnalyzerSkill,
     ManzaiSkill,
+    RulePersonaSkill,
+    ScriptComposerSkill,
     ScriptEvaluatorSkill,
     SitcomSkill,
     SketchSkill,
     StandupSkill,
+    StyleMimicSkill,
+    TopicSkill,
 )
 from comedy_agent.skills.loader import load_plugin_skills
 from comedy_agent.core.prompt_manager import PromptManager
@@ -376,6 +383,14 @@ async def lifespan(app: FastAPI):
         state.orch.register_skill(JokeAnalyzerSkill())
         state.orch.register_skill(ScriptEvaluatorSkill())
         state.orch.register_skill(AddSaltSkill())
+        # PRD v2 新增 Skill
+        state.orch.register_skill(StyleMimicSkill())
+        state.orch.register_skill(TopicSkill())
+        state.orch.register_skill(AttitudeSkill())
+        state.orch.register_skill(EmotionSkill())
+        state.orch.register_skill(GenreSkill())
+        state.orch.register_skill(RulePersonaSkill())
+        state.orch.register_skill(ScriptComposerSkill())
 
         # 加载外部插件 Skill
         for plugin in load_plugin_skills():

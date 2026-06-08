@@ -145,6 +145,9 @@ class SQLMemoryStore(MemoryStore):
             return UserProfileData(
                 user_id=user.user_id,
                 nickname=user.nickname,
+                bio=user.bio,
+                tags=user.tags,
+                avatar_url=user.avatar_url,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -164,6 +167,9 @@ class SQLMemoryStore(MemoryStore):
             return UserProfileData(
                 user_id=user.user_id,
                 nickname=user.nickname,
+                bio=user.bio,
+                tags=user.tags,
+                avatar_url=user.avatar_url,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -183,6 +189,38 @@ class SQLMemoryStore(MemoryStore):
             return UserProfileData(
                 user_id=user.user_id,
                 nickname=user.nickname,
+                bio=user.bio,
+                tags=user.tags,
+                avatar_url=user.avatar_url,
+                created_at=user.created_at,
+                updated_at=user.updated_at,
+            )
+
+    def update_user_profile(
+        self, user_id: str, nickname: str | None = None, bio: str | None = None,
+        tags: list[str] | None = None, avatar_url: str | None = None
+    ) -> UserProfileData | None:
+        """更新用户画像信息。"""
+        with self._new_session() as session:
+            user = session.query(UserProfile).filter_by(user_id=user_id).first()
+            if user is None:
+                return None
+            if nickname is not None:
+                user.nickname = nickname
+            if bio is not None:
+                user.bio = bio
+            if tags is not None:
+                user.tags = tags
+            if avatar_url is not None:
+                user.avatar_url = avatar_url
+            user.updated_at = self._now()
+            session.commit()
+            return UserProfileData(
+                user_id=user.user_id,
+                nickname=user.nickname,
+                bio=user.bio,
+                tags=user.tags,
+                avatar_url=user.avatar_url,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -1310,3 +1348,110 @@ class SQLMemoryStore(MemoryStore):
             session.commit()
             logger.debug("Deleted persona: %s", persona_id)
             return True
+
+    # ------------------------------------------------------------------ #
+    # 关注 (Follow)
+    # ------------------------------------------------------------------ #
+    def follow(self, follower_id: str, following_id: str) -> FollowData:
+        """关注用户。"""
+        with self._new_session() as session:
+            existing = session.query(Follow).filter_by(
+                follower_id=follower_id, following_id=following_id
+            ).first()
+            if existing is not None:
+                return FollowData(
+                    follow_id=existing.follow_id,
+                    follower_id=existing.follower_id,
+                    following_id=existing.following_id,
+                    created_at=existing.created_at,
+                )
+            follow = Follow(
+                follow_id=uuid.uuid4().hex[:16],
+                follower_id=follower_id,
+                following_id=following_id,
+            )
+            session.add(follow)
+            session.commit()
+            logger.debug("Follow: %s -> %s", follower_id, following_id)
+            return FollowData(
+                follow_id=follow.follow_id,
+                follower_id=follow.follower_id,
+                following_id=follow.following_id,
+                created_at=follow.created_at,
+            )
+
+    def unfollow(self, follower_id: str, following_id: str) -> bool:
+        """取消关注。"""
+        with self._new_session() as session:
+            row = session.query(Follow).filter_by(
+                follower_id=follower_id, following_id=following_id
+            ).first()
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Unfollow: %s -> %s", follower_id, following_id)
+            return True
+
+    def is_following(self, follower_id: str, following_id: str) -> bool:
+        """检查是否已关注。"""
+        with self._new_session() as session:
+            return session.query(Follow).filter_by(
+                follower_id=follower_id, following_id=following_id
+            ).first() is not None
+
+    def count_followers(self, user_id: str) -> int:
+        """统计粉丝数。"""
+        with self._new_session() as session:
+            return session.query(Follow).filter_by(following_id=user_id).count()
+
+    def count_following(self, user_id: str) -> int:
+        """统计关注数。"""
+        with self._new_session() as session:
+            return session.query(Follow).filter_by(follower_id=user_id).count()
+
+    def list_followers(self, user_id: str) -> list[UserProfileData]:
+        """列出粉丝列表。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(UserProfile)
+                .join(Follow, UserProfile.user_id == Follow.follower_id)
+                .filter(Follow.following_id == user_id)
+                .order_by(Follow.created_at.desc())
+                .all()
+            )
+            return [
+                UserProfileData(
+                    user_id=r.user_id,
+                    nickname=r.nickname,
+                    bio=r.bio,
+                    tags=r.tags,
+                    avatar_url=r.avatar_url,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def list_following(self, user_id: str) -> list[UserProfileData]:
+        """列出关注列表。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(UserProfile)
+                .join(Follow, UserProfile.user_id == Follow.following_id)
+                .filter(Follow.follower_id == user_id)
+                .order_by(Follow.created_at.desc())
+                .all()
+            )
+            return [
+                UserProfileData(
+                    user_id=r.user_id,
+                    nickname=r.nickname,
+                    bio=r.bio,
+                    tags=r.tags,
+                    avatar_url=r.avatar_url,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]

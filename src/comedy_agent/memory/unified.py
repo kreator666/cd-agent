@@ -234,6 +234,30 @@ class UnifiedMemory(MemoryStore):
         return self._store.delete_persona(persona_id)
 
     # ------------------------------------------------------------------ #
+    # 关注 (Follow)
+    # ------------------------------------------------------------------ #
+    def follow(self, follower_id: str, following_id: str) -> FollowData:
+        return self._store.follow(follower_id, following_id)
+
+    def unfollow(self, follower_id: str, following_id: str) -> bool:
+        return self._store.unfollow(follower_id, following_id)
+
+    def is_following(self, follower_id: str, following_id: str) -> bool:
+        return self._store.is_following(follower_id, following_id)
+
+    def count_followers(self, user_id: str) -> int:
+        return self._store.count_followers(user_id)
+
+    def count_following(self, user_id: str) -> int:
+        return self._store.count_following(user_id)
+
+    def list_followers(self, user_id: str) -> list[UserProfileData]:
+        return self._store.list_followers(user_id)
+
+    def list_following(self, user_id: str) -> list[UserProfileData]:
+        return self._store.list_following(user_id)
+
+    # ------------------------------------------------------------------ #
     # 投稿
     # ------------------------------------------------------------------ #
     def save_submission(self, submission: SubmissionData) -> SubmissionData:

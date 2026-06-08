@@ -29,6 +29,7 @@ from comedy_agent.api.routers.pro import router as pro_router
 from comedy_agent.api.routers.salt import router as salt_router
 from comedy_agent.api.routers.speed import router as speed_router
 from comedy_agent.api.routers.submissions import router as submissions_router
+from comedy_agent.api.routers.users import router as users_router
 from comedy_agent.api.routers.wallet import router as wallet_router
 from comedy_agent.auth import get_current_user, router as auth_router
 from comedy_agent.core.config import settings
@@ -433,6 +434,7 @@ app.include_router(salt_router)
 app.include_router(speed_router)
 app.include_router(ip_styles_router)
 app.include_router(submissions_router)
+app.include_router(users_router)
 app.include_router(actor_router)
 app.include_router(admin_router)
 app.include_router(export_router)

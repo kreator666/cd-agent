@@ -474,6 +474,44 @@ class MemoryStore(ABC):
         ...
 
     # ------------------------------------------------------------------ #
+    # 关注 (Follow)
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def follow(self, follower_id: str, following_id: str) -> FollowData:
+        """关注用户。"""
+        ...
+
+    @abstractmethod
+    def unfollow(self, follower_id: str, following_id: str) -> bool:
+        """取消关注。"""
+        ...
+
+    @abstractmethod
+    def is_following(self, follower_id: str, following_id: str) -> bool:
+        """检查是否已关注。"""
+        ...
+
+    @abstractmethod
+    def count_followers(self, user_id: str) -> int:
+        """统计粉丝数。"""
+        ...
+
+    @abstractmethod
+    def count_following(self, user_id: str) -> int:
+        """统计关注数。"""
+        ...
+
+    @abstractmethod
+    def list_followers(self, user_id: str) -> list[UserProfileData]:
+        """列出粉丝列表。"""
+        ...
+
+    @abstractmethod
+    def list_following(self, user_id: str) -> list[UserProfileData]:
+        """列出关注列表。"""
+        ...
+
+    # ------------------------------------------------------------------ #
     # 投稿
     # ------------------------------------------------------------------ #
     @abstractmethod

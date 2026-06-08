@@ -19,6 +19,9 @@ class UserProfileData(BaseModel):
 
     user_id: str = Field(description="用户唯一标识")
     nickname: str | None = Field(default=None, description="用户昵称")
+    bio: str | None = Field(default=None, description="个人简介")
+    tags: list[str] | None = Field(default=None, description="兴趣标签")
+    avatar_url: str | None = Field(default=None, description="头像 URL")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
 
@@ -236,6 +239,15 @@ class EarningRecordData(BaseModel):
 # ------------------------------------------------------------------ #
 # 敏感词
 # ------------------------------------------------------------------ #
+class FollowData(BaseModel):
+    """关注关系数据。"""
+
+    follow_id: str | None = Field(default=None, description="关注记录 ID")
+    follower_id: str = Field(description="关注者用户 ID")
+    following_id: str = Field(description="被关注者用户 ID")
+    created_at: datetime | None = Field(default=None, description="关注时间")
+
+
 class BannedWordData(BaseModel):
     """敏感词数据。"""
 

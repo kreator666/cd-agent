@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -31,6 +31,9 @@ class UserProfile(Base):
     user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     nickname: Mapped[str | None] = mapped_column(String(128), nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True, comment="个人简介")
+    tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, comment="兴趣标签")
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="头像 URL")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -71,6 +74,55 @@ class UserProfile(Base):
     )
     personas: Mapped[list["Persona"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
+    followers: Mapped[list["Follow"]] = relationship(
+        foreign_keys="Follow.following_id",
+        back_populates="following_user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    following: Mapped[list["Follow"]] = relationship(
+        foreign_keys="Follow.follower_id",
+        back_populates="follower_user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+# ------------------------------------------------------------------ #
+# Follow —— 关注关系
+# ------------------------------------------------------------------ #
+class Follow(Base):
+    """关注关系表。"""
+
+    __tablename__ = "follows"
+    __table_args__ = (
+        UniqueConstraint("follower_id", "following_id", name="uq_follow"),
+    )
+
+    follow_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    follower_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    following_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    # Relationships
+    follower_user: Mapped["UserProfile"] = relationship(
+        foreign_keys=[follower_id], back_populates="following"
+    )
+    following_user: Mapped["UserProfile"] = relationship(
+        foreign_keys=[following_id], back_populates="followers"
     )
 
 

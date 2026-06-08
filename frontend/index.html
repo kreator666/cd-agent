@@ -318,17 +318,15 @@
         <div class="profile-card">
             <div class="profile-header"></div>
             <div class="profile-body">
-                <img class="profile-avatar" src="https://via.placeholder.com/90?text=👤" id="profile-avatar" alt="头像">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <img class="profile-avatar" src="https://via.placeholder.com/90?text=👤" id="profile-avatar" alt="头像">
+                    <button class="btn" onclick="openEditModal()" style="background:#e0e0e0;color:#333;padding:6px 14px;font-size:0.8125rem;margin-top:8px;">✏️ 编辑资料</button>
+                </div>
                 <div class="profile-name" id="profile-name">加载中...</div>
                 <div class="profile-id" id="profile-id">@--</div>
-                <div class="profile-bio" id="profile-bio">MCN 内容创作者，热爱喜剧创作与短视频剧本。</div>
+                <div class="profile-bio" id="profile-bio">--</div>
 
-                <div class="profile-tags" id="profile-tags">
-                    <span class="tag">🎭 喜剧创作</span>
-                    <span class="tag">🎬 短视频</span>
-                    <span class="tag">✍️ 剧本写作</span>
-                    <span class="tag">🤖 AI 辅助</span>
-                </div>
+                <div class="profile-tags" id="profile-tags"></div>
 
                 <div class="profile-stats" id="profile-stats">
                     <div>
@@ -336,12 +334,12 @@
                         <div class="stat-label">生成次数</div>
                     </div>
                     <div>
-                        <div class="stat-value" id="stat-scripts">--</div>
-                        <div class="stat-label">作品数</div>
+                        <div class="stat-value" id="stat-followers">--</div>
+                        <div class="stat-label">粉丝</div>
                     </div>
                     <div>
-                        <div class="stat-value" id="stat-salt">--</div>
-                        <div class="stat-label">极速版</div>
+                        <div class="stat-value" id="stat-following">--</div>
+                        <div class="stat-label">关注</div>
                     </div>
                     <div>
                         <div class="stat-value" id="stat-tokens">--</div>
@@ -373,6 +371,25 @@
     </div>
 </div>
 
+<!-- 编辑资料 Modal -->
+<div class="modal-overlay" id="edit-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000;">
+    <div class="modal-box" style="background:#fff;padding:24px;border-radius:8px;width:480px;max-width:90vw;max-height:90vh;overflow-y:auto;">
+        <h3 style="margin-top:0;">编辑个人资料</h3>
+        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">头像 URL</label>
+        <input type="text" id="edit-avatar" placeholder="头像图片链接" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;">
+        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">昵称</label>
+        <input type="text" id="edit-nickname" placeholder="你的昵称" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;">
+        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">个人简介</label>
+        <textarea id="edit-bio" placeholder="写一段个人简介..." style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;height:80px;resize:vertical;font-family:inherit;"></textarea>
+        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">兴趣标签（用逗号分隔）</label>
+        <input type="text" id="edit-tags" placeholder="如：喜剧创作, 短视频, 剧本写作" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+            <button onclick="closeEditModal()" style="padding:8px 16px;border:1px solid #ddd;border-radius:4px;background:#f0f0f0;cursor:pointer;">取消</button>
+            <button onclick="saveProfile()" style="padding:8px 16px;border:none;border-radius:4px;background:#2c7da0;color:#fff;cursor:pointer;">保存</button>
+        </div>
+    </div>
+</div>
+
 <script src="/static/common.js"></script>
 <script>
     requireAuth();
@@ -391,23 +408,38 @@
     function nextSlide() { currentSlide = (currentSlide + 1) % totalSlides; updateCarousel(); }
     function prevSlide() { currentSlide = (currentSlide - 1 + totalSlides) % totalSlides; updateCarousel(); }
     function goToSlide(n) { currentSlide = n; updateCarousel(); }
-    // 自动轮播
     setInterval(nextSlide, 8000);
+
+    let profileData = {};
 
     // 加载用户数据
     async function loadUserProfile() {
         try {
-            // 用户信息
             const meRes = await apiFetch('/me');
             const me = await meRes.json();
+            profileData = me;
             document.getElementById('profile-name').textContent = me.nickname || me.user_id;
             document.getElementById('profile-id').textContent = '@' + me.user_id;
+            document.getElementById('profile-bio').textContent = me.bio || '暂无简介';
+            document.getElementById('profile-avatar').src = me.avatar_url || 'https://via.placeholder.com/90?text=👤';
             document.getElementById('info-user-id').textContent = me.user_id;
             document.getElementById('info-nickname').textContent = me.nickname || '未设置';
             if (me.created_at) {
                 document.getElementById('info-joined').textContent = new Date(me.created_at).toLocaleDateString('zh-CN');
             }
             document.getElementById('info-role').textContent = me.user_id === 'admin' ? '管理员' : '创作者';
+
+            // 标签
+            const tagsEl = document.getElementById('profile-tags');
+            if (me.tags && me.tags.length) {
+                tagsEl.innerHTML = me.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
+            } else {
+                tagsEl.innerHTML = '<span style="color:#999;font-size:.8125rem;">暂无标签</span>';
+            }
+
+            // 粉丝/关注
+            document.getElementById('stat-followers').textContent = (me.follower_count || 0).toLocaleString();
+            document.getElementById('stat-following').textContent = (me.following_count || 0).toLocaleString();
         } catch (err) {
             document.getElementById('profile-name').textContent = currentUserId || '未知用户';
             document.getElementById('profile-id').textContent = '@' + (currentUserId || '--');
@@ -419,8 +451,6 @@
             const res = await apiFetch('/me/stats');
             const data = await res.json();
             document.getElementById('stat-generations').textContent = (data.generations || 0).toLocaleString();
-            document.getElementById('stat-scripts').textContent = '--';
-            document.getElementById('stat-salt').textContent = (data.salt_usage || 0).toLocaleString();
         } catch (err) {
             console.error('加载统计失败', err);
         }
@@ -434,6 +464,33 @@
             document.getElementById('stat-tokens').textContent = (data.total_consumed || 0).toLocaleString();
         } catch {
             document.getElementById('token-balance').textContent = '--';
+        }
+    }
+
+    // 编辑 Modal
+    function openEditModal() {
+        document.getElementById('edit-avatar').value = profileData.avatar_url || '';
+        document.getElementById('edit-nickname').value = profileData.nickname || '';
+        document.getElementById('edit-bio').value = profileData.bio || '';
+        document.getElementById('edit-tags').value = (profileData.tags || []).join(', ');
+        document.getElementById('edit-modal').style.display = 'flex';
+    }
+    function closeEditModal() {
+        document.getElementById('edit-modal').style.display = 'none';
+    }
+    async function saveProfile() {
+        const payload = {
+            avatar_url: document.getElementById('edit-avatar').value.trim() || null,
+            nickname: document.getElementById('edit-nickname').value.trim() || null,
+            bio: document.getElementById('edit-bio').value.trim() || null,
+            tags: document.getElementById('edit-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+        };
+        try {
+            await apiFetch('/me', { method: 'PUT', body: JSON.stringify(payload) });
+            closeEditModal();
+            loadUserProfile();
+        } catch (err) {
+            alert('保存失败：' + err.message);
         }
     }
 

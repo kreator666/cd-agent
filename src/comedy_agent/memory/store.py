@@ -273,11 +273,11 @@ class MemoryStore(ABC):
         ...
 
     @abstractmethod
-    def list_documents(self, user_id: str) -> list[DocumentData]:
+    def list_documents(self, user_id: str | None = None) -> list[DocumentData]:
         """列出用户上传的所有文档。
 
         Args:
-            user_id: 用户唯一标识。
+            user_id: 用户唯一标识。为 None 时返回所有文档。
 
         Returns:
             list[DocumentData]: 文档列表，按创建时间倒序。

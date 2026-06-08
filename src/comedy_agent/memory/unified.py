@@ -139,7 +139,7 @@ class UnifiedMemory(MemoryStore):
     def save_document(self, document: DocumentData) -> DocumentData:
         return self._store.save_document(document)
 
-    def list_documents(self, user_id: str) -> list[DocumentData]:
+    def list_documents(self, user_id: str | None = None) -> list[DocumentData]:
         return self._store.list_documents(user_id)
 
     def get_document(self, user_id: str, doc_id: str) -> DocumentData | None:

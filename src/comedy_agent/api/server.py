@@ -1189,10 +1189,10 @@ async def upload_documents(
 async def list_documents(
     user_id: str = Depends(get_current_user),
 ) -> DocumentListResponse:
-    """列出当前用户上传的文档。"""
+    """列出系统知识库中的所有文档（共享可见）。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
-    docs = state.memory.list_documents(user_id)
+    docs = state.memory.list_documents()  # user_id=None 返回所有文档
     return DocumentListResponse(documents=docs)
 
 

@@ -496,15 +496,16 @@ class SQLMemoryStore(MemoryStore):
                 updated_at=row.updated_at,
             )
 
-    def list_documents(self, user_id: str) -> list[DocumentData]:
-        """列出用户上传的所有文档，按创建时间倒序。"""
+    def list_documents(self, user_id: str | None = None) -> list[DocumentData]:
+        """列出用户上传的所有文档，按创建时间倒序。
+
+        user_id 为 None 时返回所有文档（系统知识库模式）。
+        """
         with self._new_session() as session:
-            rows = (
-                session.query(UserDocument)
-                .filter_by(user_id=user_id)
-                .order_by(UserDocument.created_at.desc())
-                .all()
-            )
+            query = session.query(UserDocument)
+            if user_id:
+                query = query.filter_by(user_id=user_id)
+            rows = query.order_by(UserDocument.created_at.desc()).all()
             return [
                 DocumentData(
                     doc_id=r.doc_id,

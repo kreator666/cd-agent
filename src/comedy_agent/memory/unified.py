@@ -17,6 +17,7 @@ from comedy_agent.memory.models import (
     EarningRecordData,
     IPStyleData,
     KnowledgeCardData,
+    PersonaData,
     ProjectData,
     SaltHistoryData,
     ScriptData,
@@ -214,6 +215,23 @@ class UnifiedMemory(MemoryStore):
 
     def delete_ip_style(self, style_id: str) -> bool:
         return self._store.delete_ip_style(style_id)
+
+    # ------------------------------------------------------------------ #
+    # 人物画像 (Persona)
+    # ------------------------------------------------------------------ #
+    def save_persona(self, persona: PersonaData) -> PersonaData:
+        return self._store.save_persona(persona)
+
+    def load_persona(self, persona_id: str) -> PersonaData | None:
+        return self._store.load_persona(persona_id)
+
+    def list_personas(
+        self, creator_id: str | None = None, org_id: str | None = None, is_active: bool | None = None
+    ) -> list[PersonaData]:
+        return self._store.list_personas(creator_id, org_id, is_active)
+
+    def delete_persona(self, persona_id: str) -> bool:
+        return self._store.delete_persona(persona_id)
 
     # ------------------------------------------------------------------ #
     # 投稿

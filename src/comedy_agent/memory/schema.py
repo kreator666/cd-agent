@@ -69,6 +69,9 @@ class UserProfile(Base):
     earnings: Mapped[list["EarningRecord"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
+    personas: Mapped[list["Persona"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -370,6 +373,47 @@ class IPStyle(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+# ------------------------------------------------------------------ #
+# Persona —— 人物画像（写作 Rules）
+# ------------------------------------------------------------------ #
+class Persona(Base):
+    """人物画像表。存储用户预设的写作规则约束。"""
+
+    __tablename__ = "personas"
+
+    persona_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    org_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True, comment="组织 ID"
+    )
+    creator_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False, comment="画像名称")
+    rule_content: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False, comment="结构化写作约束 JSON"
+    )
+    skill_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="关联的 rule 类型 Skill ID"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        default=True, nullable=False, comment="是否启用"
+    )
+    usage_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="personas")
 
 
 # ------------------------------------------------------------------ #

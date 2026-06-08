@@ -16,6 +16,7 @@ from comedy_agent.memory.models import (
     EarningRecordData,
     IPStyleData,
     KnowledgeCardData,
+    PersonaData,
     PreferenceItem,
     ProjectData,
     SaltHistoryData,
@@ -445,6 +446,31 @@ class MemoryStore(ABC):
     @abstractmethod
     def delete_ip_style(self, style_id: str) -> bool:
         """删除 IP 风格模型。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 人物画像 (Persona)
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_persona(self, persona: PersonaData) -> PersonaData:
+        """保存或更新人物画像。"""
+        ...
+
+    @abstractmethod
+    def load_persona(self, persona_id: str) -> PersonaData | None:
+        """读取指定人物画像。"""
+        ...
+
+    @abstractmethod
+    def list_personas(
+        self, creator_id: str | None = None, org_id: str | None = None, is_active: bool | None = None
+    ) -> list[PersonaData]:
+        """列出人物画像，支持按创建者、组织、状态过滤。"""
+        ...
+
+    @abstractmethod
+    def delete_persona(self, persona_id: str) -> bool:
+        """删除人物画像。"""
         ...
 
     # ------------------------------------------------------------------ #

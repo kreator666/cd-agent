@@ -23,6 +23,7 @@ from comedy_agent.memory.models import (
     EarningRecordData,
     IPStyleData,
     KnowledgeCardData,
+    PersonaData,
     ProjectData,
     SaltHistoryData,
     ScriptData,
@@ -46,6 +47,7 @@ from comedy_agent.memory.schema import (
     UserProject,
     UserScript,
     UserTokenAccount,
+    Persona,
 )
 from comedy_agent.memory.store import MemoryStore
 
@@ -1209,3 +1211,101 @@ class SQLMemoryStore(MemoryStore):
             earnings_rows = session.query(EarningRecord).filter_by(user_id=user_id).all()
             stats["earnings"] = sum(r.amount for r in earnings_rows)
             return stats
+
+    # ------------------------------------------------------------------ #
+    # 人物画像 (Persona)
+    # ------------------------------------------------------------------ #
+    def save_persona(self, persona: PersonaData) -> PersonaData:
+        persona_id = persona.persona_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = session.query(Persona).filter_by(persona_id=persona_id).first()
+            if row is None:
+                row = Persona(
+                    persona_id=persona_id,
+                    org_id=persona.org_id,
+                    creator_id=persona.creator_id,
+                    name=persona.name,
+                    rule_content=persona.rule_content,
+                    skill_id=persona.skill_id,
+                    is_active=persona.is_active if persona.is_active is not None else True,
+                    usage_count=persona.usage_count or 0,
+                )
+                session.add(row)
+            else:
+                row.org_id = persona.org_id
+                row.name = persona.name
+                row.rule_content = persona.rule_content
+                row.skill_id = persona.skill_id
+                row.is_active = persona.is_active if persona.is_active is not None else True
+                row.usage_count = persona.usage_count or 0
+                row.updated_at = self._now()
+            session.commit()
+            logger.debug("Saved persona: %s", persona_id)
+            return PersonaData(
+                persona_id=row.persona_id,
+                org_id=row.org_id,
+                creator_id=row.creator_id,
+                name=row.name,
+                rule_content=row.rule_content,
+                skill_id=row.skill_id,
+                is_active=row.is_active,
+                usage_count=row.usage_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def load_persona(self, persona_id: str) -> PersonaData | None:
+        with self._new_session() as session:
+            row = session.query(Persona).filter_by(persona_id=persona_id).first()
+            if row is None:
+                return None
+            return PersonaData(
+                persona_id=row.persona_id,
+                org_id=row.org_id,
+                creator_id=row.creator_id,
+                name=row.name,
+                rule_content=row.rule_content,
+                skill_id=row.skill_id,
+                is_active=row.is_active,
+                usage_count=row.usage_count,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+
+    def list_personas(
+        self, creator_id: str | None = None, org_id: str | None = None, is_active: bool | None = None
+    ) -> list[PersonaData]:
+        with self._new_session() as session:
+            query = session.query(Persona)
+            if creator_id is not None:
+                query = query.filter_by(creator_id=creator_id)
+            if org_id is not None:
+                query = query.filter_by(org_id=org_id)
+            if is_active is not None:
+                query = query.filter_by(is_active=is_active)
+            rows = query.order_by(Persona.updated_at.desc()).all()
+            return [
+                PersonaData(
+                    persona_id=r.persona_id,
+                    org_id=r.org_id,
+                    creator_id=r.creator_id,
+                    name=r.name,
+                    rule_content=r.rule_content,
+                    skill_id=r.skill_id,
+                    is_active=r.is_active,
+                    usage_count=r.usage_count,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
+                for r in rows
+            ]
+
+    def delete_persona(self, persona_id: str) -> bool:
+        with self._new_session() as session:
+            row = session.query(Persona).filter_by(persona_id=persona_id).first()
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            logger.debug("Deleted persona: %s", persona_id)
+            return True

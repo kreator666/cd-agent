@@ -173,6 +173,26 @@ class IPStyleData(BaseModel):
 
 
 # ------------------------------------------------------------------ #
+# 人物画像
+# ------------------------------------------------------------------ #
+class PersonaData(BaseModel):
+    """人物画像数据。"""
+
+    persona_id: str | None = Field(default=None, description="画像唯一标识")
+    org_id: str | None = Field(default=None, description="组织 ID")
+    creator_id: str = Field(description="创建者用户 ID")
+    name: str = Field(description="画像名称")
+    rule_content: dict[str, Any] = Field(
+        default_factory=dict, description="结构化写作约束"
+    )
+    skill_id: str | None = Field(default=None, description="关联的 rule 类型 Skill ID")
+    is_active: bool = Field(default=True, description="是否启用")
+    usage_count: int = Field(default=0, description="累计使用次数")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
 # 投稿
 # ------------------------------------------------------------------ #
 class SubmissionData(BaseModel):

@@ -75,3 +75,19 @@ function requireAuth() {
         window.location.href = '/static/login.html';
     }
 }
+
+/* ================================================
+   页面导航（PRD v2 双模式）
+   ================================================ */
+function goHome() { window.location.href = '/static/index.html'; }
+function goSpeed() { window.location.href = '/static/speed.html'; }
+function goPro() { window.location.href = '/static/pro.html'; }
+function goIPRole(roleId) {
+    if (roleId) {
+        window.location.href = `/static/ip-role.html?role_id=${encodeURIComponent(roleId)}`;
+    } else {
+        window.location.href = '/static/ip-role.html';
+    }
+}
+function goSkills() { window.location.href = '/static/skills.html'; }
+function goMe() { window.location.href = '/static/me.html'; }

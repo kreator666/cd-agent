@@ -79,7 +79,7 @@
                 <span class="title">演员工作台</span>
                 <span class="desc">管理投稿审核、查看收益明细与提现</span>
             </a>
-            <a href="/static/admin-console.html" class="menu-card">
+            <a href="/static/admin-console.html" class="menu-card" id="menu-admin-console-card" style="display:none;">
                 <span class="icon">⚙️</span>
                 <span class="title">管理控制台</span>
                 <span class="desc">平台概览、Skill 审核、IP 模型与敏感词管理</span>
@@ -350,10 +350,11 @@
             }
         }
 
-        // admin 显示系统知识库和认证审核
+        // admin 显示系统知识库、管理控制台和认证审核
         const currentUser = getCurrentUserId();
         if (currentUser === 'admin') {
             document.getElementById('menu-knowledge-card').style.display = 'flex';
+            document.getElementById('menu-admin-console-card').style.display = 'flex';
             document.getElementById('menu-verify-card').style.display = 'flex';
             document.getElementById('verify-section').style.display = 'block';
             loadVerifications('pending');

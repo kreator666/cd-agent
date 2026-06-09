@@ -6,15 +6,15 @@
 <title>极速版｜趣味表达引擎</title>
 <link rel="stylesheet" href="/static/common.css">
 <style>
-body{font-family:'Segoe UI',sans-serif;margin:0;background:#f5f6f8;min-height:100vh;}
+body{font-family:'Segoe UI',sans-serif;margin:0;background:#f5f6f8;min-height:100vh;display:flex;flex-direction:column;}
 header{background:#0f3b5c;color:#fff;text-align:center;padding:16px;}
 header h1{margin:0;font-size:1.25rem;}
-.container{display:flex;max-width:1400px;margin:20px auto;gap:20px;padding:0 20px;}
+.container{display:flex;max-width:1400px;margin:20px auto;gap:20px;padding:0 20px;flex:1;min-height:0;}
 .sidebar{width:200px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);height:fit-content;}
 .sidebar a{display:block;padding:10px 12px;margin-bottom:6px;color:#333;text-decoration:none;border-radius:4px;font-size:.875rem;cursor:pointer;}
 .sidebar a:hover{background:#f0f0f0;}
 .sidebar a.active{background:#2c7da0;color:#fff;}
-.main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;}
+.main{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr;gap:20px;align-content:stretch;height:100%;min-height:0;}
 .card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
 .card h3{color:#0f3b5c;margin-top:0;font-size:1rem;}
 textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid #ccc;font-family:inherit;font-size:.9375rem;resize:vertical;}
@@ -31,7 +31,7 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
 .intensity-row label{flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:6px;text-align:center;font-size:.8125rem;cursor:pointer;transition:all .15s;}
 .intensity-row input{display:none;}
 .intensity-row input:checked+label{border-color:#2c7da0;background:#2c7da0;color:#fff;}
-.output{background:#f4f6f8;padding:12px;border-radius:4px;min-height:80px;margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:.9375rem;}
+.output{background:#f4f6f8;padding:12px;border-radius:4px;min-height:80px;margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:.9375rem;flex:1;overflow-y:auto;}
 .tabs{display:flex;margin-bottom:8px;border-bottom:1px solid #e0e0e0;}
 .tab{padding:8px 16px;cursor:pointer;font-size:.875rem;color:#666;}
 .tab.active{border-bottom:2px solid #2c7da0;font-weight:bold;color:#0f3b5c;}
@@ -39,8 +39,8 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
 .ip-result{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px;background:#f8f8f8;border-radius:6px;}
 .ip-result img{width:36px;height:36px;border-radius:50%;object-fit:cover;}
 .ip-result a{color:#2c7da0;text-decoration:none;font-size:.8125rem;}
-.fullwidth{grid-column:1 / -1;}
-@media(max-width:768px){.container{flex-direction:column;}.sidebar{width:auto;}.main{grid-template-columns:1fr;}}
+.fullwidth{grid-column:1 / -1;display:flex;flex-direction:column;min-height:0;}
+@media(max-width:768px){.container{flex-direction:column;}.sidebar{width:auto;}.main{grid-template-columns:1fr;grid-template-rows:auto auto 1fr;}}
 </style>
 </head>
 <body>

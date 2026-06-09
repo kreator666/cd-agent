@@ -120,6 +120,21 @@ async def speed_polish(
                     profile_url=f"/users/{user.user_id}",
                 )
 
+    # 检索选中大V的知识库内容（若指定）
+    ip_knowledge_lines: list[str] = []
+    if request.ip_role_id:
+        try:
+            store = state.orch._get_user_vector_store(request.ip_role_id)
+            docs = store.search(request.text, top_k=3)
+            if docs:
+                for idx, doc in enumerate(docs, 1):
+                    source = doc.metadata.get("source", "大V知识库") if hasattr(doc, "metadata") and doc.metadata else "大V知识库"
+                    text = doc.page_content.strip().replace("\n", " ") if hasattr(doc, "page_content") else str(doc)
+                    ip_knowledge_lines.append(f"[{idx}] 来源: {source}\n{text}")
+        except Exception:
+            # 大V无知识库或检索失败，静默跳过
+            pass
+
     # 构造 skill 指令调用 add_salt
     prompt = (
         f"使用 add_salt 技能 来对以下文本进行幽默润色。\n\n"
@@ -128,6 +143,14 @@ async def speed_polish(
     )
     if ip_role_prompt:
         prompt += f"\n角色风格：{ip_role_prompt}"
+    if ip_knowledge_lines:
+        knowledge_text = "\n\n".join(ip_knowledge_lines)
+        prompt += (
+            f"\n\n【参考知识】\n"
+            f"以下是与该文本相关的参考内容，请在润色时参考其中风格和表达方式：\n\n"
+            f"{knowledge_text}\n"
+            f"【参考知识结束】"
+        )
 
     result = state.orch.run(prompt, user_id=user_id)
     polished = result.get("output", "")

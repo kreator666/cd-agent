@@ -22,9 +22,10 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
 .btn:hover{background:#1f5a75;}
 .btn-secondary{background:#e0e0e0;color:#333;}
 .avatar-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;}
-.avatar{width:80px;text-align:center;cursor:pointer;}
-.avatar img{width:60px;height:60px;border-radius:50%;border:2px solid #ccc;object-fit:cover;}
-.avatar.selected img{border-color:#2c7da0;}
+.avatar{width:80px;text-align:center;cursor:pointer;transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
+.avatar img{width:60px;height:60px;border-radius:50%;border:2px solid #ccc;object-fit:cover;transition:all .25s cubic-bezier(.34,1.56,.64,1);}
+.avatar.selected{transform:scale(1.08);}
+.avatar.selected img{border-color:#2c7da0;box-shadow:0 0 0 4px rgba(44,125,160,.25),0 4px 12px rgba(44,125,160,.35);}
 .avatar .name{font-size:.75rem;color:#333;margin-top:4px;}
 .intensity-row{display:flex;gap:8px;margin:8px 0;}
 .intensity-row label{flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:6px;text-align:center;font-size:.8125rem;cursor:pointer;transition:all .15s;}
@@ -75,9 +76,7 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
     <div class="card">
       <h3>🎭 大V角色风格选择 <span style="font-size:.75rem;color:#999;font-weight:400;">Top 10</span></h3>
       <div class="avatar-grid" id="avatar-grid">
-        <div class="avatar selected" data-role-id="" onclick="selectRole(this)">
-          <img src="https://via.placeholder.com/60?text=默认"><div class="name">默认风格</div>
-        </div>
+        <!-- 大V列表由 JS 动态加载，默认不选中任何风格 -->
       </div>
     </div>
     <!-- 生成结果 -->
@@ -128,19 +127,17 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
         grid.innerHTML = '<div style="color:#999;font-size:.875rem;padding:8px;">暂无认证大V角色</div>';
         return;
       }
-      roles.forEach((r, idx) => {
+      roles.forEach((r) => {
         const div = document.createElement('div');
-        div.className = 'avatar' + (idx === 0 ? ' selected' : '');
+        div.className = 'avatar';
         div.dataset.roleId = r.style_id;
         div.onclick = () => selectRole(div);
         const imgUrl = r.avatar_url || `https://via.placeholder.com/60?text=${encodeURIComponent(r.actor_name?.[0]||'IP')}`;
         div.innerHTML = `<img src="${imgUrl}"><div class="name">${escapeHtml(r.actor_name)}</div>`;
         grid.appendChild(div);
       });
-      // 默认选中第一个大V
-      if (roles.length > 0) {
-        selectedRoleId = roles[0].style_id;
-      }
+      // 默认不选中任何风格
+      selectedRoleId = '';
     } catch (err) {
       console.error('加载 IP 角色失败', err);
     }

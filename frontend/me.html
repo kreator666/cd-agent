@@ -89,9 +89,40 @@
                 <span class="title">管理控制台</span>
                 <span class="desc">平台概览、Skill 审核、IP 模型与敏感词管理</span>
             </a>
+            <a href="#verify-section" class="menu-card" id="menu-verify-card" style="display:none;">
+                <span class="icon">🏅</span>
+                <span class="title">认证审核</span>
+                <span class="desc">审核用户提交的大V认证申请</span>
+            </a>
         </div>
 
         <!-- 模型配置 -->
+        <!-- 认证审核面板（仅 admin 可见） -->
+        <div id="verify-section" style="display:none;margin-top:2rem;">
+            <div class="page-title">🏅 认证审核</div>
+            <div class="card" style="background:#fff;border-radius:.75rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                <div style="margin-bottom:1rem;">
+                    <button class="btn" onclick="loadVerifications('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:.5rem;padding:.375rem .75rem;border-radius:.375rem;cursor:pointer;font-size:.8125rem;">待审核</button>
+                    <button class="btn" onclick="loadVerifications('approved')" style="background:#e6fffb;color:#13c2c2;border:1px solid #87e8de;margin-right:.5rem;padding:.375rem .75rem;border-radius:.375rem;cursor:pointer;font-size:.8125rem;">已通过</button>
+                    <button class="btn" onclick="loadVerifications('rejected')" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;margin-right:.5rem;padding:.375rem .75rem;border-radius:.375rem;cursor:pointer;font-size:.8125rem;">已拒绝</button>
+                    <button class="btn" onclick="loadVerifications()" style="background:#f5f5f5;color:#666;border:1px solid #d9d9d9;padding:.375rem .75rem;border-radius:.375rem;cursor:pointer;font-size:.8125rem;">全部</button>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:.875rem;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #f0f0f0;">
+                            <th style="padding:.5rem;text-align:left;color:#666;font-weight:500;">ID</th>
+                            <th style="padding:.5rem;text-align:left;color:#666;font-weight:500;">用户ID</th>
+                            <th style="padding:.5rem;text-align:left;color:#666;font-weight:500;">申请理由</th>
+                            <th style="padding:.5rem;text-align:left;color:#666;font-weight:500;">状态</th>
+                            <th style="padding:.5rem;text-align:left;color:#666;font-weight:500;">申请时间</th>
+                            <th style="padding:.5rem;text-align:left;color:#666;font-weight:500;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="verify-list"><tr><td colspan="6" style="padding:.5rem;text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="page-title" style="margin-top:2rem;">⚙️ 模型配置</div>
         <div class="card" style="background:#fff;border-radius:.75rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.1);max-width:600px;">
             <div style="margin-bottom:1rem;">
@@ -155,6 +186,59 @@
             } catch (err) {
                 alert('保存失败：' + err.message);
             }
+        }
+
+        async function loadVerifications(status) {
+            const tbody = document.getElementById('verify-list');
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:.5rem;text-align:center;color:#999;">加载中...</td></tr>';
+            try {
+                const url = status ? `/admin/verifications?status=${status}` : '/admin/verifications';
+                const res = await apiFetch(url);
+                const data = await res.json();
+                const items = data.applications || [];
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="padding:.5rem;text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                items.forEach(v => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid #f0f0f0';
+                    const statusMap = { pending: '⏳ 待审核', approved: '✅ 已通过', rejected: '❌ 已拒绝' };
+                    const statusText = statusMap[v.status] || v.status;
+                    const date = v.applied_at ? new Date(v.applied_at).toLocaleString('zh-CN') : '--';
+                    let actions = '';
+                    if (v.status === 'pending') {
+                        actions = `<button style="background:#16c79a;color:#fff;border:none;border-radius:.25rem;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;margin-right:.25rem;" onclick="reviewVerify(${v.id}, true)">通过</button><button style="background:#e94560;color:#fff;border:none;border-radius:.25rem;padding:.25rem .5rem;font-size:.75rem;cursor:pointer;" onclick="reviewVerify(${v.id}, false)">拒绝</button>`;
+                    }
+                    tr.innerHTML = `<td style="padding:.5rem;">${v.id}</td><td style="padding:.5rem;">${escapeHtml(v.user_id)}</td><td style="padding:.5rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(v.reason || '')}">${escapeHtml(v.reason || '--')}</td><td style="padding:.5rem;">${statusText}</td><td style="padding:.5rem;font-size:.75rem;color:#999;">${date}</td><td style="padding:.5rem;">${actions}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="padding:.5rem;text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function reviewVerify(appId, approve) {
+            const note = approve ? null : prompt('请输入拒绝理由（可选）：');
+            if (note === null && !approve) return;
+            try {
+                await apiFetch(`/admin/verifications/${appId}/${approve ? 'approve' : 'reject'}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ review_note: note || null }),
+                });
+                loadVerifications('pending');
+            } catch (err) {
+                alert('审核失败: ' + err.message);
+            }
+        }
+
+        // admin 显示认证审核
+        const currentUser = getCurrentUserId();
+        if (currentUser === 'admin') {
+            document.getElementById('menu-verify-card').style.display = 'flex';
+            document.getElementById('verify-section').style.display = 'block';
+            loadVerifications('pending');
         }
 
         loadModels();

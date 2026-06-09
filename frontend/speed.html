@@ -117,25 +117,30 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
     }
   }
 
-  // 加载 IP 角色列表
+  // 加载 IP 角色列表（从大V用户中读取，无默认风格）
   async function loadIPRoles() {
     try {
       const res = await apiFetch('/speed/ip-roles');
       const roles = await res.json();
       const grid = document.getElementById('avatar-grid');
-      grid.innerHTML = `
-        <div class="avatar selected" data-role-id="" onclick="selectRole(this)">
-          <img src="https://via.placeholder.com/60?text=默认"><div class="name">默认风格</div>
-        </div>`;
-      roles.forEach(r => {
+      grid.innerHTML = '';
+      if (roles.length === 0) {
+        grid.innerHTML = '<div style="color:#999;font-size:.875rem;padding:8px;">暂无认证大V角色</div>';
+        return;
+      }
+      roles.forEach((r, idx) => {
         const div = document.createElement('div');
-        div.className = 'avatar';
+        div.className = 'avatar' + (idx === 0 ? ' selected' : '');
         div.dataset.roleId = r.style_id;
         div.onclick = () => selectRole(div);
         const imgUrl = r.avatar_url || `https://via.placeholder.com/60?text=${encodeURIComponent(r.actor_name?.[0]||'IP')}`;
         div.innerHTML = `<img src="${imgUrl}"><div class="name">${escapeHtml(r.actor_name)}</div>`;
         grid.appendChild(div);
       });
+      // 默认选中第一个大V
+      if (roles.length > 0) {
+        selectedRoleId = roles[0].style_id;
+      }
     } catch (err) {
       console.error('加载 IP 角色失败', err);
     }

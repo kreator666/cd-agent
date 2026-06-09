@@ -157,10 +157,13 @@ async def speed_polish(
 
 @router.get("/speed/ip-roles")
 async def speed_ip_roles() -> list[IPStyleData]:
-    """列出极速版可用的 IP 角色（状态为 active）。"""
+    """列出极速版可用的 IP 角色——从官方认证（大V）角色中按粉丝数取 top 10。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
-    return state.memory.list_ip_styles(status="active")
+    roles = state.memory.list_ip_styles(status="active")
+    official_roles = [r for r in roles if r.is_official]
+    official_roles.sort(key=lambda r: r.follower_count, reverse=True)
+    return official_roles[:10]
 
 
 @router.get("/speed/history")

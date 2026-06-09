@@ -44,25 +44,7 @@ from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.rag.ingest import KnowledgeIngestor
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
-from comedy_agent.skills import (
-    AddSaltSkill,
-    AttitudeSkill,
-    CrosstalkSkill,
-    EmotionSkill,
-    GenreSkill,
-    JapaneseSketchSkill,
-    JokeAnalyzerSkill,
-    ManzaiSkill,
-    RulePersonaSkill,
-    ScriptComposerSkill,
-    ScriptEvaluatorSkill,
-    SitcomSkill,
-    SketchSkill,
-    StandupSkill,
-    StyleMimicSkill,
-    TopicSkill,
-)
-from comedy_agent.skills.loader import load_plugin_skills
+from comedy_agent.skills.loader import load_plugin_skills, load_single_skill
 from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.models.factory import ModelFactory
 
@@ -377,25 +359,8 @@ async def lifespan(app: FastAPI):
 
     try:
         state.orch = AgentOrchestrator(memory=state.memory, retriever=retriever)
-        state.orch.register_skill(StandupSkill())
-        state.orch.register_skill(CrosstalkSkill())
-        state.orch.register_skill(SketchSkill())
-        state.orch.register_skill(SitcomSkill())
-        state.orch.register_skill(ManzaiSkill())
-        state.orch.register_skill(JapaneseSketchSkill())
-        state.orch.register_skill(JokeAnalyzerSkill())
-        state.orch.register_skill(ScriptEvaluatorSkill())
-        state.orch.register_skill(AddSaltSkill())
-        # PRD v2 新增 Skill
-        state.orch.register_skill(StyleMimicSkill())
-        state.orch.register_skill(TopicSkill())
-        state.orch.register_skill(AttitudeSkill())
-        state.orch.register_skill(EmotionSkill())
-        state.orch.register_skill(GenreSkill())
-        state.orch.register_skill(RulePersonaSkill())
-        state.orch.register_skill(ScriptComposerSkill())
 
-        # 加载外部插件 Skill
+        # 从 skills/ 目录加载所有 Skill（内置 + 外部插件）
         for plugin in load_plugin_skills():
             state.orch.register_skill(plugin)
     except ModelConfigError as e:
@@ -715,9 +680,9 @@ async def skill_standup(
             skill = tool
             break
 
-    # 若未注册，则新建（兼容测试与边缘场景）
+    # 若未注册，则从 skills/ 目录动态加载
     if skill is None:
-        skill = StandupSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "standup")
 
     # 若前端指定了模型，覆盖 Skill 的模型
     if request.model is not None:
@@ -764,7 +729,7 @@ async def skill_sketch(
             break
 
     if skill is None:
-        skill = SketchSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "sketch")
 
     if request.model is not None:
         skill.model_name = request.model
@@ -809,7 +774,7 @@ async def skill_manzai(
             break
 
     if skill is None:
-        skill = ManzaiSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "manzai")
 
     if request.model is not None:
         skill.model_name = request.model
@@ -853,7 +818,7 @@ async def skill_japanese_sketch(
             break
 
     if skill is None:
-        skill = JapaneseSketchSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "japanese_sketch")
 
     if request.model is not None:
         skill.model_name = request.model

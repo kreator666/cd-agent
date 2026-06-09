@@ -13,15 +13,7 @@ from comedy_agent import __version__
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError
-from comedy_agent.skills import (
-    CrosstalkSkill,
-    JokeAnalyzerSkill,
-    ScriptEvaluatorSkill,
-    SitcomSkill,
-    SketchSkill,
-    StandupSkill,
-)
-from comedy_agent.skills.loader import load_plugin_skills
+from comedy_agent.skills.loader import load_plugin_skills, load_single_skill
 from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.memory.models import ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
@@ -61,14 +53,7 @@ def _build_orchestrator(
     except ModelConfigError as e:
         print(f"\n❌ 模型配置错误\n\n{e}\n", file=sys.stderr)
         sys.exit(1)
-    orch.register_skill(StandupSkill())
-    orch.register_skill(CrosstalkSkill())
-    orch.register_skill(SketchSkill())
-    orch.register_skill(SitcomSkill())
-    orch.register_skill(JokeAnalyzerSkill())
-    orch.register_skill(ScriptEvaluatorSkill())
-
-    # 加载外部插件 Skill
+    # 从 skills/ 目录加载所有 Skill（内置 + 外部插件）
     for plugin in load_plugin_skills():
         orch.register_skill(plugin)
 
@@ -167,7 +152,13 @@ def cmd_run(prompt: str, model_name: str | None = None, user_id: str | None = No
 
 def cmd_skill_standup(topic: str, style: str, duration: int, audience: str, debug: bool = False) -> None:
     """直接调用脱口秀创作 Skill。"""
-    skill = StandupSkill()
+    from pathlib import Path
+    from comedy_agent.core.config import settings
+    skill_dir = Path(settings.skills_dir) / "standup"
+    skill = load_single_skill(skill_dir)
+    if skill is None:
+        print("错误：未找到 standup Skill", file=sys.stderr)
+        sys.exit(1)
     result = skill.invoke({
         "topic": topic,
         "style": style,

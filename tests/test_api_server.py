@@ -1,5 +1,6 @@
 """FastAPI HTTP 服务单元测试。"""
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,9 +20,19 @@ def _patched_create_engine(*args, **kwargs):
 
 
 @pytest.fixture
-def client():
-    """提供 TestClient（ lifespan 自动执行，memory 使用内存数据库，带认证）。"""
-    with patch(
+def client(request):
+    """提供 TestClient（ lifespan 自动执行，memory 使用内存数据库，带认证）。
+
+    默认会 mock VectorStore / ComedyRetriever 以跳过 HuggingFace 模型加载，加速测试。
+    传入 --full-lifespan 则执行完整的 lifespan（包括模型加载）。
+    """
+    full_lifespan = request.config.getoption("--full-lifespan")
+
+    # 条件 mock：默认跳过 VectorStore 初始化（HuggingFaceEmbeddings 加载极慢）
+    cm_vector = patch("comedy_agent.api.server.VectorStore") if not full_lifespan else contextlib.nullcontext()
+    cm_retriever = patch("comedy_agent.api.server.ComedyRetriever") if not full_lifespan else contextlib.nullcontext()
+
+    with cm_vector, cm_retriever, patch(
         "comedy_agent.memory.medium_term.create_engine",
         side_effect=_patched_create_engine,
     ), patch(
@@ -136,11 +147,11 @@ class TestChat:
 class TestStandupSkill:
     def test_standup_skill(self, client):
         with patch(
-            "comedy_agent.api.server.StandupSkill"
-        ) as mock_skill_cls:
+            "comedy_agent.api.server.load_single_skill"
+        ) as mock_loader:
             mock_skill = MagicMock()
             mock_skill.invoke.return_value = "生成的段子"
-            mock_skill_cls.return_value = mock_skill
+            mock_loader.return_value = mock_skill
 
             response = client.post(
                 "/skills/standup",
@@ -161,11 +172,11 @@ class TestStandupSkill:
 class TestSketchSkill:
     def test_sketch_skill(self, client):
         with patch(
-            "comedy_agent.api.server.SketchSkill"
-        ) as mock_skill_cls:
+            "comedy_agent.api.server.load_single_skill"
+        ) as mock_loader:
             mock_skill = MagicMock()
             mock_skill.invoke.return_value = "生成的小品"
-            mock_skill_cls.return_value = mock_skill
+            mock_loader.return_value = mock_skill
 
             response = client.post(
                 "/skills/sketch",
@@ -185,11 +196,11 @@ class TestSketchSkill:
 class TestManzaiSkill:
     def test_manzai_skill(self, client):
         with patch(
-            "comedy_agent.api.server.ManzaiSkill"
-        ) as mock_skill_cls:
+            "comedy_agent.api.server.load_single_skill"
+        ) as mock_loader:
             mock_skill = MagicMock()
             mock_skill.invoke.return_value = "生成的漫才"
-            mock_skill_cls.return_value = mock_skill
+            mock_loader.return_value = mock_skill
 
             response = client.post(
                 "/skills/manzai",
@@ -208,11 +219,11 @@ class TestManzaiSkill:
 class TestJapaneseSketchSkill:
     def test_japanese_sketch_skill(self, client):
         with patch(
-            "comedy_agent.api.server.JapaneseSketchSkill"
-        ) as mock_skill_cls:
+            "comedy_agent.api.server.load_single_skill"
+        ) as mock_loader:
             mock_skill = MagicMock()
             mock_skill.invoke.return_value = "生成的日式短剧"
-            mock_skill_cls.return_value = mock_skill
+            mock_loader.return_value = mock_skill
 
             response = client.post(
                 "/skills/japanese-sketch",

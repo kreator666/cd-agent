@@ -193,3 +193,49 @@ class TestVerificationAdminReview:
         res = client.get("/users/creator3")
         assert res.status_code == 200
         assert res.json()["is_verified"] is True
+
+
+class TestSpeedIPRolesFromVerifiedUsers:
+    def test_speed_ip_roles_returns_verified_users(self, client):
+        """极速版 IP 角色列表从认证大V用户中返回。"""
+        user_token = _register_and_login(client, "bigv_user")
+        admin_token = _register_and_login(client, "admin")
+
+        # 提交并审批通过
+        client.post("/me/verify-apply", json={"reason": ""}, headers={"Authorization": f"Bearer {user_token}"})
+        app_res = client.get("/me/verification", headers={"Authorization": f"Bearer {user_token}"})
+        app_id = app_res.json()["id"]
+        client.post(f"/admin/verifications/{app_id}/approve", json={}, headers={"Authorization": f"Bearer {admin_token}"})
+
+        # 调用 /speed/ip-roles
+        res = client.get("/speed/ip-roles")
+        assert res.status_code == 200
+        roles = res.json()
+        assert len(roles) >= 1
+        assert any(r["style_id"] == "bigv_user" for r in roles)
+        assert all("actor_name" in r and "avatar_url" in r for r in roles)
+
+    def test_speed_polish_with_verified_user_as_role(self, client):
+        """极速版 polish 支持使用大V用户作为 IP 角色。"""
+        user_token = _register_and_login(client, "bigv_user2")
+        admin_token = _register_and_login(client, "admin")
+
+        # 更新 bio
+        client.put("/me", json={"bio": "李诞式自嘲风格"}, headers={"Authorization": f"Bearer {user_token}"})
+
+        # 提交并审批通过
+        client.post("/me/verify-apply", json={}, headers={"Authorization": f"Bearer {user_token}"})
+        app_res = client.get("/me/verification", headers={"Authorization": f"Bearer {user_token}"})
+        app_id = app_res.json()["id"]
+        client.post(f"/admin/verifications/{app_id}/approve", json={}, headers={"Authorization": f"Bearer {admin_token}"})
+
+        # 使用 bigv_user2 作为 ip_role_id 进行 polish
+        polish_res = client.post(
+            "/speed/polish",
+            json={"text": "今天天气很好", "intensity": "medium", "ip_role_id": "bigv_user2"},
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert polish_res.status_code == 200
+        data = polish_res.json()
+        assert data["ip_role"] is not None
+        assert data["ip_role"]["role_id"] == "bigv_user2"

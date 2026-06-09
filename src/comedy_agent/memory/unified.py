@@ -267,6 +267,9 @@ class UnifiedMemory(MemoryStore):
     def list_following(self, user_id: str) -> list[UserProfileData]:
         return self._store.list_following(user_id)
 
+    def list_verified_users(self, limit: int = 10) -> list[dict[str, Any]]:
+        return self._store.list_verified_users(limit)
+
     # ------------------------------------------------------------------ #
     # 认证申请
     # ------------------------------------------------------------------ #

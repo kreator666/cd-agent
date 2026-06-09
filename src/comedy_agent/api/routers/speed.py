@@ -108,6 +108,17 @@ async def speed_polish(
             # 更新使用次数
             role.usage_count = (role.usage_count or 0) + 1
             state.memory.save_ip_style(role)
+        else:
+            # 尝试查找大V用户作为 IP 角色
+            user = state.memory.get_user(request.ip_role_id)
+            if user and user.is_verified:
+                ip_role_prompt = user.bio or f"以{user.nickname or user.user_id}的风格进行创作"
+                ip_role_info = IPRoleInfo(
+                    role_id=user.user_id,
+                    actor_name=user.nickname or user.user_id,
+                    avatar_url=user.avatar_url,
+                    profile_url=f"/users/{user.user_id}",
+                )
 
     # 构造 skill 指令调用 add_salt
     prompt = (
@@ -156,14 +167,21 @@ async def speed_polish(
 
 
 @router.get("/speed/ip-roles")
-async def speed_ip_roles() -> list[IPStyleData]:
-    """列出极速版可用的 IP 角色——从官方认证（大V）角色中按粉丝数取 top 10。"""
+async def speed_ip_roles() -> list[dict[str, Any]]:
+    """列出极速版可用的 IP 角色——从认证大V用户中按粉丝数取 top 10。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
-    roles = state.memory.list_ip_styles(status="active")
-    official_roles = [r for r in roles if r.is_official]
-    official_roles.sort(key=lambda r: r.follower_count, reverse=True)
-    return official_roles[:10]
+    users = state.memory.list_verified_users(limit=10)
+    users.sort(key=lambda u: u["follower_count"], reverse=True)
+    return [
+        {
+            "style_id": u["user_id"],
+            "actor_name": u["nickname"] or u["user_id"],
+            "avatar_url": u["avatar_url"],
+            "follower_count": u["follower_count"],
+        }
+        for u in users
+    ]
 
 
 @router.get("/speed/history")

@@ -1465,6 +1465,26 @@ class SQLMemoryStore(MemoryStore):
                 for r in rows
             ]
 
+    def list_verified_users(self, limit: int = 10) -> list[dict[str, Any]]:
+        """列出认证大V用户（含粉丝数），用于极速版 IP 角色选择。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(UserProfile)
+                .filter_by(is_verified=True)
+                .limit(limit)
+                .all()
+            )
+            return [
+                {
+                    "user_id": r.user_id,
+                    "nickname": r.nickname,
+                    "bio": r.bio,
+                    "avatar_url": r.avatar_url,
+                    "follower_count": session.query(Follow).filter_by(following_id=r.user_id).count(),
+                }
+                for r in rows
+            ]
+
     # ------------------------------------------------------------------ #
     # 认证申请 (Verification)
     # ------------------------------------------------------------------ #

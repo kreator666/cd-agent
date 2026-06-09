@@ -79,6 +79,7 @@
             <div class="tab" onclick="switchTab('ip')">IP 模型管理</div>
             <div class="tab" onclick="switchTab('words')">敏感词</div>
             <div class="tab" onclick="switchTab('verify')">认证审核</div>
+            <div class="tab" onclick="switchTab('knowledge')">知识库共享</div>
         </div>
 
         <div class="tab-panel active" id="panel-skills">
@@ -125,6 +126,17 @@
                 <table class="table">
                     <thead><tr><th>ID</th><th>用户ID</th><th>申请理由</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
                     <tbody id="verify-list"><tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-knowledge">
+            <div class="section">
+                <h3>大V知识库共享管理</h3>
+                <p style="color:#666;font-size:0.875rem;margin-bottom:0.75rem;">管理已认证大V的专属知识库是否对其他用户开放检索。</p>
+                <table class="table">
+                    <thead><tr><th>用户ID</th><th>昵称</th><th>认证状态</th><th>共享状态</th><th>操作</th></tr></thead>
+                    <tbody id="knowledge-share-list"><tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -316,11 +328,58 @@
             }
         }
 
+        async function loadKnowledgeShareUsers() {
+            const tbody = document.getElementById('knowledge-share-list');
+            try {
+                // 加载所有已通过认证的大V
+                const res = await apiFetch('/admin/verifications?status=approved');
+                const data = await res.json();
+                const apps = data.applications || [];
+                if (apps.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无已认证大V</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                for (const app of apps) {
+                    const uid = app.user_id;
+                    let shared = false;
+                    try {
+                        const r = await apiFetch(`/admin/users/${uid}/knowledge`);
+                        const d = await r.json();
+                        shared = d.knowledge_shared;
+                    } catch (e) {
+                        shared = false;
+                    }
+                    const tr = document.createElement('tr');
+                    const shareText = shared ? '✅ 已共享' : '🔒 未共享';
+                    const btnClass = shared ? 'btn-danger' : 'btn-success';
+                    const btnText = shared ? '关闭共享' : '开启共享';
+                    tr.innerHTML = `<td>${escapeHtml(uid)}</td><td>${escapeHtml(app.nickname || '--')}</td><td>✅ 已通过</td><td>${shareText}</td><td><button class="btn ${btnClass}" onclick="toggleKnowledgeShare('${uid}', ${!shared})">${btnText}</button></td>`;
+                    tbody.appendChild(tr);
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function toggleKnowledgeShare(userId, shared) {
+            try {
+                await apiFetch(`/admin/users/${userId}/knowledge-share`, {
+                    method: 'POST',
+                    body: JSON.stringify({ shared }),
+                });
+                loadKnowledgeShareUsers();
+            } catch (err) {
+                alert('切换失败: ' + err.message);
+            }
+        }
+
         loadOverview();
         loadPendingSkills();
         loadAdminIPStyles();
         loadBannedWords();
         loadVerifications('pending');
+        loadKnowledgeShareUsers();
     </script>
 </body>
 </html>

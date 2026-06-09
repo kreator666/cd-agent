@@ -79,9 +79,9 @@ class UnifiedMemory(MemoryStore):
     def update_user_profile(
         self, user_id: str, nickname: str | None = None, bio: str | None = None,
         tags: list[str] | None = None, avatar_url: str | None = None,
-        is_verified: bool | None = None,
+        is_verified: bool | None = None, knowledge_shared: bool | None = None,
     ) -> UserProfileData | None:
-        return self._store.update_user_profile(user_id, nickname, bio, tags, avatar_url, is_verified)
+        return self._store.update_user_profile(user_id, nickname, bio, tags, avatar_url, is_verified, knowledge_shared)
 
     def save_conversation(
         self,
@@ -269,6 +269,9 @@ class UnifiedMemory(MemoryStore):
 
     def list_verified_users(self, limit: int = 10) -> list[dict[str, Any]]:
         return self._store.list_verified_users(limit)
+
+    def list_shared_knowledge_users(self) -> list[UserProfileData]:
+        return self._store.list_shared_knowledge_users()
 
     # ------------------------------------------------------------------ #
     # 认证申请

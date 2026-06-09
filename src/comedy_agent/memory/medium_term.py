@@ -92,6 +92,12 @@ class SQLMemoryStore(MemoryStore):
                 )
                 conn.commit()
                 logger.info("Migrated user_profiles: added password_hash column")
+            if "knowledge_shared" not in columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE user_profiles ADD COLUMN knowledge_shared BOOLEAN DEFAULT 0"
+                )
+                conn.commit()
+                logger.info("Migrated user_profiles: added knowledge_shared column")
             # user_conversations.source / metadata
             conv_columns = [
                 row[1]
@@ -150,6 +156,8 @@ class SQLMemoryStore(MemoryStore):
                 bio=user.bio,
                 tags=user.tags,
                 avatar_url=user.avatar_url,
+                is_verified=user.is_verified,
+                knowledge_shared=user.knowledge_shared,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -172,6 +180,8 @@ class SQLMemoryStore(MemoryStore):
                 bio=user.bio,
                 tags=user.tags,
                 avatar_url=user.avatar_url,
+                is_verified=user.is_verified,
+                knowledge_shared=user.knowledge_shared,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -195,6 +205,7 @@ class SQLMemoryStore(MemoryStore):
                 tags=user.tags,
                 avatar_url=user.avatar_url,
                 is_verified=user.is_verified,
+                knowledge_shared=user.knowledge_shared,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -202,7 +213,7 @@ class SQLMemoryStore(MemoryStore):
     def update_user_profile(
         self, user_id: str, nickname: str | None = None, bio: str | None = None,
         tags: list[str] | None = None, avatar_url: str | None = None,
-        is_verified: bool | None = None,
+        is_verified: bool | None = None, knowledge_shared: bool | None = None,
     ) -> UserProfileData | None:
         """更新用户画像信息。"""
         with self._new_session() as session:
@@ -219,6 +230,8 @@ class SQLMemoryStore(MemoryStore):
                 user.avatar_url = avatar_url
             if is_verified is not None:
                 user.is_verified = is_verified
+            if knowledge_shared is not None:
+                user.knowledge_shared = knowledge_shared
             user.updated_at = self._now()
             session.commit()
             return UserProfileData(
@@ -228,6 +241,7 @@ class SQLMemoryStore(MemoryStore):
                 tags=user.tags,
                 avatar_url=user.avatar_url,
                 is_verified=user.is_verified,
+                knowledge_shared=user.knowledge_shared,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -1482,6 +1496,29 @@ class SQLMemoryStore(MemoryStore):
                     "avatar_url": r.avatar_url,
                     "follower_count": session.query(Follow).filter_by(following_id=r.user_id).count(),
                 }
+                for r in rows
+            ]
+
+    def list_shared_knowledge_users(self) -> list[UserProfileData]:
+        """列出知识库已共享的大V用户。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(UserProfile)
+                .filter_by(is_verified=True, knowledge_shared=True)
+                .all()
+            )
+            return [
+                UserProfileData(
+                    user_id=r.user_id,
+                    nickname=r.nickname,
+                    bio=r.bio,
+                    tags=r.tags,
+                    avatar_url=r.avatar_url,
+                    is_verified=r.is_verified,
+                    knowledge_shared=r.knowledge_shared,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                )
                 for r in rows
             ]
 

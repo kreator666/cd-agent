@@ -81,6 +81,8 @@ class AgentOrchestrator:
                 skill.model_name = self.model_name
             if self.retriever is not None:
                 skill.retriever = self.retriever
+            if self.memory is not None:
+                skill.memory = self.memory
         self.tools.append(skill)
         self._agent = None
         logger.info("Registered skill: %s", skill.name)
@@ -221,6 +223,41 @@ class AgentOrchestrator:
             logger.debug("用户个人知识库检索失败", exc_info=True)
             return []
 
+    def _retrieve_shared_knowledge(
+        self, query: str, top_k_per_user: int = 2, max_users: int = 5
+    ) -> list[Any]:
+        """检索所有已共享的大V知识库。
+
+        Args:
+            query: 检索查询。
+            top_k_per_user: 每个共享用户召回数量。
+            max_users: 最多检索的共享用户数量。
+
+        Returns:
+            合并去重后的文档列表。
+        """
+        if self.memory is None:
+            return []
+        try:
+            shared_users = self.memory.list_shared_knowledge_users()
+        except Exception:
+            logger.debug("获取共享知识库用户列表失败", exc_info=True)
+            return []
+
+        all_docs: list[Any] = []
+        for user in shared_users[:max_users]:
+            try:
+                store = self._get_user_vector_store(user.user_id)
+                docs = store.search(query, top_k=top_k_per_user)
+                # 标注来源为大V用户
+                for doc in docs:
+                    if hasattr(doc, "metadata") and doc.metadata is not None:
+                        doc.metadata["shared_from"] = user.nickname or user.user_id
+                all_docs.extend(docs)
+            except Exception:
+                logger.debug("共享知识库检索失败: %s", user.user_id, exc_info=True)
+        return all_docs
+
     def debug_retrieval(
         self, query: str, user_id: str | None = None
     ) -> dict[str, Any]:
@@ -314,6 +351,10 @@ class AgentOrchestrator:
                 all_docs.extend(default_docs)
             except Exception:
                 logger.debug("默认知识库检索失败，跳过注入", exc_info=True)
+
+        # 2.3 共享的大V知识库
+        shared_docs = self._retrieve_shared_knowledge(user_input, top_k_per_user=2, max_users=5)
+        all_docs.extend(shared_docs)
 
         # 去重并格式化
         if all_docs:

@@ -1212,6 +1212,176 @@ async def delete_document(
 
 
 # ------------------------------------------------------------------ #
+# 大V专属知识库路由
+# ------------------------------------------------------------------ #
+@app.post("/me/knowledge/upload", response_model=list[DocumentUploadResponse], tags=["knowledge"])
+async def upload_verified_knowledge(
+    files: list[UploadFile] = File(...),
+    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
+    style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
+    chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
+    topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
+    user_id: str = Depends(get_current_user),
+) -> list[DocumentUploadResponse]:
+    """大V用户上传专属知识库文档。仅认证大V（is_verified=True）可上传。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    # 检查是否为大V
+    user = state.memory.get_user(user_id)
+    if user is None or not user.is_verified:
+        raise HTTPException(status_code=403, detail="仅认证大V可上传专属知识库")
+
+    results: list[DocumentUploadResponse] = []
+    upload_dir = Path(settings.data_dir) / "uploads" / user_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    for file in files:
+        safe_name = Path(file.filename or "unknown").name
+        save_path = upload_dir / safe_name
+        counter = 1
+        original_save_path = save_path
+        while save_path.exists():
+            stem = original_save_path.stem
+            suffix = original_save_path.suffix
+            save_path = upload_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+        content = await file.read()
+        save_path.write_bytes(content)
+
+        doc = DocumentData(
+            user_id=user_id,
+            filename=safe_name,
+            kind=kind,
+            style=style,
+            chunk_strategy=chunk_strategy,
+            topic=topic,
+            status="pending",
+        )
+        doc = state.memory.save_document(doc)
+
+        try:
+            ingestor = KnowledgeIngestor(
+                retriever=None,
+                chunk_strategy=chunk_strategy,
+            )
+            user_vector_store = VectorStore(
+                collection_name=f"user_knowledge_{user_id}",
+                persist_path=str(settings.vector_db_path),
+            )
+            user_retriever = ComedyRetriever(vector_store=user_vector_store)
+            ingestor.retriever = user_retriever
+            result = ingestor.ingest_file(save_path, kind=kind, style=style)
+
+            doc.status = "ingested"
+            doc.chunk_count = result.get("chunks", 0)
+            state.memory.save_document(doc)
+
+            results.append(
+                DocumentUploadResponse(
+                    doc_id=doc.doc_id,
+                    filename=safe_name,
+                    kind=kind,
+                    style=style,
+                    chunk_strategy=chunk_strategy,
+                    topic=topic,
+                    status="ingested",
+                    chunks=result.get("chunks", 0),
+                )
+            )
+        except Exception as e:
+            err_text = str(e)
+            if "429" in err_text and "quota" in err_text.lower():
+                err_text = "OpenAI API 配额不足，请切换 Embedding 模型（如 hf-local）或充值"
+            elif "429" in err_text:
+                err_text = "API 请求过于频繁，请稍后再试"
+            elif "401" in err_text or "Unauthorized" in err_text:
+                err_text = "API Key 无效或未配置"
+            elif "Connection" in err_text or "Timeout" in err_text:
+                err_text = "网络连接超时，请检查网络或切换本地模型"
+            doc.status = "failed"
+            doc.error_msg = err_text
+            state.memory.save_document(doc)
+            results.append(
+                DocumentUploadResponse(
+                    doc_id=doc.doc_id,
+                    filename=safe_name,
+                    kind=kind,
+                    style=style,
+                    chunk_strategy=chunk_strategy,
+                    topic=topic,
+                    status="failed",
+                    chunks=0,
+                )
+            )
+    return results
+
+
+@app.get("/me/knowledge", response_model=DocumentListResponse, tags=["knowledge"])
+async def list_my_knowledge(
+    user_id: str = Depends(get_current_user),
+) -> DocumentListResponse:
+    """列出当前大V用户的专属知识库文档。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None or not user.is_verified:
+        raise HTTPException(status_code=403, detail="仅认证大V可查看专属知识库")
+    docs = state.memory.list_documents(user_id=user_id)
+    return DocumentListResponse(documents=docs)
+
+
+@app.delete("/me/knowledge/{doc_id}", response_model=SuccessResponse, tags=["knowledge"])
+async def delete_my_knowledge(
+    doc_id: str,
+    user_id: str = Depends(get_current_user),
+) -> SuccessResponse:
+    """大V用户删除自己的专属知识库文档。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None or not user.is_verified:
+        raise HTTPException(status_code=403, detail="仅认证大V可管理专属知识库")
+
+    doc = state.memory.get_document(user_id, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    # 清理向量库
+    try:
+        user_vector_store = VectorStore(
+            collection_name=f"user_knowledge_{user_id}",
+            persist_path=str(settings.vector_db_path),
+        )
+        filter_conditions = {
+            "$or": [
+                {"doc_id": doc_id},
+                {"source_doc_id": doc_id},
+            ]
+        }
+        matched = user_vector_store.get_by_filter(filter_conditions)
+        if matched:
+            ids_to_delete = [m.metadata.get("doc_id") for m in matched if m.metadata.get("doc_id")]
+            if ids_to_delete:
+                user_vector_store.delete(ids_to_delete)
+    except Exception:
+        logger.warning("清理向量库文档失败: %s", doc_id, exc_info=True)
+
+    # 删除本地文件
+    upload_dir = Path(settings.data_dir) / "uploads" / user_id
+    file_path = upload_dir / doc.filename
+    if file_path.exists():
+        file_path.unlink()
+
+    # 删除数据库记录
+    ok = state.memory.delete_document(user_id, doc_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    return SuccessResponse(success=True)
+
+
+# ------------------------------------------------------------------ #
 # 模型路由
 # ------------------------------------------------------------------ #
 @app.get("/models", tags=["models"])

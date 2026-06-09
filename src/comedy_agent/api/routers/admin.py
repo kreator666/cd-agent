@@ -223,3 +223,60 @@ async def admin_reject_verification(
     if result is None:
         raise HTTPException(status_code=404, detail="申请不存在")
     return result
+
+
+class KnowledgeShareRequest(BaseModel):
+    """知识库共享开关请求。"""
+
+    shared: bool = Field(description="是否共享知识库给其他用户")
+
+
+class KnowledgeShareResponse(BaseModel):
+    """知识库共享状态响应。"""
+
+    user_id: str = Field(description="用户ID")
+    knowledge_shared: bool = Field(description="当前共享状态")
+
+
+@router.get("/admin/users/{user_id}/knowledge", response_model=KnowledgeShareResponse)
+async def admin_get_user_knowledge(
+    user_id: str,
+    _admin: str = Depends(require_admin),
+) -> KnowledgeShareResponse:
+    """查看大V用户的知识库共享状态。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not user.is_verified:
+        raise HTTPException(status_code=400, detail="该用户不是认证大V")
+    return KnowledgeShareResponse(
+        user_id=user_id,
+        knowledge_shared=user.knowledge_shared,
+    )
+
+
+@router.post("/admin/users/{user_id}/knowledge-share", response_model=KnowledgeShareResponse)
+async def admin_set_knowledge_share(
+    user_id: str,
+    request: KnowledgeShareRequest,
+    _admin: str = Depends(require_admin),
+) -> KnowledgeShareResponse:
+    """设置大V用户的知识库共享开关。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not user.is_verified:
+        raise HTTPException(status_code=400, detail="该用户不是认证大V")
+    updated = state.memory.update_user_profile(
+        user_id, knowledge_shared=request.shared
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="更新失败")
+    return KnowledgeShareResponse(
+        user_id=user_id,
+        knowledge_shared=updated.knowledge_shared,
+    )

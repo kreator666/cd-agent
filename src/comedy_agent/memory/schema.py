@@ -37,6 +37,9 @@ class UserProfile(Base):
     is_verified: Mapped[bool] = mapped_column(
         default=False, nullable=False, comment="是否认证大V"
     )
+    knowledge_shared: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="知识库是否共享给其他用户"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

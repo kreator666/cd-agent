@@ -30,6 +30,9 @@ class ComedySkill(BaseTool, ABC):
     # 可选的知识库检索器（默认知识库）
     retriever: Any | None = None
 
+    # 可选的记忆系统引用（用于检索共享知识库等）
+    memory: Any | None = None
+
     # 用户个人知识库缓存
     _user_vector_stores: dict[str, VectorStore] = {}
 
@@ -81,6 +84,23 @@ class ComedySkill(BaseTool, ABC):
             try:
                 default_docs = self.retriever.retrieve(query, top_k=top_k, filter_dict=filter_dict)
                 all_docs.extend(default_docs)
+            except Exception:
+                pass
+
+        # 3. 共享的大V知识库
+        if self.memory is not None:
+            try:
+                shared_users = self.memory.list_shared_knowledge_users()
+                for user in shared_users[:5]:
+                    try:
+                        store = self._get_user_vector_store(user.user_id)
+                        docs = store.search(query, top_k=2, filter_dict=filter_dict)
+                        for doc in docs:
+                            if hasattr(doc, "metadata") and doc.metadata is not None:
+                                doc.metadata["shared_from"] = user.nickname or user.user_id
+                        all_docs.extend(docs)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 

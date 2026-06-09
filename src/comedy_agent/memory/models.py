@@ -23,6 +23,7 @@ class UserProfileData(BaseModel):
     tags: list[str] | None = Field(default=None, description="兴趣标签")
     avatar_url: str | None = Field(default=None, description="头像 URL")
     is_verified: bool = Field(default=False, description="是否认证大V")
+    knowledge_shared: bool = Field(default=False, description="知识库是否共享给其他用户")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
 

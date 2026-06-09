@@ -64,7 +64,7 @@
     <div class="container">
         <div class="page-title">我的</div>
         <div class="menu-grid">
-            <a href="/static/knowledge.html" class="menu-card">
+            <a href="/static/knowledge.html" class="menu-card" id="menu-knowledge-card" style="display:none;">
                 <span class="icon">📚</span>
                 <span class="title">系统知识库</span>
                 <span class="desc">查看系统共享的喜剧理论与案例文档（仅管理员可维护）</span>
@@ -355,9 +355,10 @@
             }
         }
 
-        // admin 显示认证审核
+        // admin 显示系统知识库和认证审核
         const currentUser = getCurrentUserId();
         if (currentUser === 'admin') {
+            document.getElementById('menu-knowledge-card').style.display = 'flex';
             document.getElementById('menu-verify-card').style.display = 'flex';
             document.getElementById('verify-section').style.display = 'block';
             loadVerifications('pending');

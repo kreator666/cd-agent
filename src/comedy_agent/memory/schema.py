@@ -40,6 +40,9 @@ class UserProfile(Base):
     knowledge_shared: Mapped[bool] = mapped_column(
         default=False, nullable=False, comment="知识库是否共享给其他用户"
     )
+    follower_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="粉丝数"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

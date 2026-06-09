@@ -98,6 +98,12 @@ class SQLMemoryStore(MemoryStore):
                 )
                 conn.commit()
                 logger.info("Migrated user_profiles: added knowledge_shared column")
+            if "follower_count" not in columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE user_profiles ADD COLUMN follower_count INTEGER DEFAULT 0"
+                )
+                conn.commit()
+                logger.info("Migrated user_profiles: added follower_count column")
             # user_conversations.source / metadata
             conv_columns = [
                 row[1]
@@ -158,6 +164,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
+                follower_count=user.follower_count,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -182,6 +189,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
+                follower_count=user.follower_count,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -206,6 +214,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
+                follower_count=user.follower_count,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -242,6 +251,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
+                follower_count=user.follower_count,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -1392,6 +1402,10 @@ class SQLMemoryStore(MemoryStore):
                 following_id=following_id,
             )
             session.add(follow)
+            # 更新被关注者的粉丝数
+            following_user = session.query(UserProfile).filter_by(user_id=following_id).first()
+            if following_user is not None:
+                following_user.follower_count = (following_user.follower_count or 0) + 1
             session.commit()
             logger.debug("Follow: %s -> %s", follower_id, following_id)
             return FollowData(
@@ -1410,6 +1424,10 @@ class SQLMemoryStore(MemoryStore):
             if row is None:
                 return False
             session.delete(row)
+            # 更新被关注者的粉丝数
+            following_user = session.query(UserProfile).filter_by(user_id=following_id).first()
+            if following_user is not None and (following_user.follower_count or 0) > 0:
+                following_user.follower_count = following_user.follower_count - 1
             session.commit()
             logger.debug("Unfollow: %s -> %s", follower_id, following_id)
             return True
@@ -1449,6 +1467,7 @@ class SQLMemoryStore(MemoryStore):
                     tags=r.tags,
                     avatar_url=r.avatar_url,
                     is_verified=r.is_verified,
+                    follower_count=r.follower_count,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )
@@ -1473,6 +1492,7 @@ class SQLMemoryStore(MemoryStore):
                     tags=r.tags,
                     avatar_url=r.avatar_url,
                     is_verified=r.is_verified,
+                    follower_count=r.follower_count,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )
@@ -1516,6 +1536,7 @@ class SQLMemoryStore(MemoryStore):
                     avatar_url=r.avatar_url,
                     is_verified=r.is_verified,
                     knowledge_shared=r.knowledge_shared,
+                    follower_count=r.follower_count,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )

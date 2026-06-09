@@ -108,17 +108,6 @@ async def speed_polish(
             # 更新使用次数
             role.usage_count = (role.usage_count or 0) + 1
             state.memory.save_ip_style(role)
-        else:
-            # 尝试查找大V用户作为 IP 角色
-            user = state.memory.get_user(request.ip_role_id)
-            if user and user.is_verified:
-                ip_role_prompt = user.bio or f"以{user.nickname or user.user_id}的风格进行创作"
-                ip_role_info = IPRoleInfo(
-                    role_id=user.user_id,
-                    actor_name=user.nickname or user.user_id,
-                    avatar_url=user.avatar_url,
-                    profile_url=f"/users/{user.user_id}",
-                )
 
     # 检索选中大V的知识库内容（若指定）
     ip_knowledge_lines: list[str] = []

@@ -122,6 +122,8 @@ class SQLMemoryStore(MemoryStore):
                 conn.commit()
                 logger.info("Migrated user_conversations: added extra_metadata column")
         self.Session = sessionmaker(bind=self.engine)
+        # 同步：为所有已认证大V创建缺失的 IP 风格记录
+        self._sync_verified_users_to_ip_styles()
         logger.info("SQLMemoryStore initialized: %s", db_url)
 
     # ------------------------------------------------------------------ #
@@ -130,6 +132,33 @@ class SQLMemoryStore(MemoryStore):
     def _new_session(self):
         """创建新 Session（支持上下文管理）。"""
         return self.Session()
+
+    def _sync_verified_users_to_ip_styles(self) -> None:
+        """为所有已认证大V创建缺失的 IP 风格记录。"""
+        try:
+            with self._new_session() as session:
+                verified_users = session.query(UserProfile).filter_by(is_verified=True).all()
+                synced = 0
+                for user in verified_users:
+                    existing = session.query(IPStyle).filter_by(style_id=user.user_id).first()
+                    if existing is None:
+                        session.add(IPStyle(
+                            style_id=user.user_id,
+                            actor_name=user.nickname or user.user_id,
+                            description=user.bio or "暂无描述",
+                            prompt_snippet=user.bio or f"以{user.nickname or user.user_id}的风格进行创作",
+                            avatar_url=user.avatar_url,
+                            follower_count=user.follower_count or 0,
+                            is_official=True,
+                            status="active",
+                            version="v1.0",
+                        ))
+                        synced += 1
+                if synced > 0:
+                    session.commit()
+                    logger.info("Synced %d verified users to ip_styles", synced)
+        except Exception:
+            logger.warning("Sync verified users to ip_styles failed", exc_info=True)
 
     @staticmethod
     def _now() -> datetime:
@@ -242,6 +271,18 @@ class SQLMemoryStore(MemoryStore):
             if knowledge_shared is not None:
                 user.knowledge_shared = knowledge_shared
             user.updated_at = self._now()
+            # 同步更新 IP 风格记录（若存在）
+            ip_style = session.query(IPStyle).filter_by(style_id=user_id).first()
+            if ip_style is not None:
+                if nickname is not None:
+                    ip_style.actor_name = nickname
+                if bio is not None:
+                    ip_style.description = bio
+                    ip_style.prompt_snippet = bio
+                if avatar_url is not None:
+                    ip_style.avatar_url = avatar_url
+                ip_style.follower_count = user.follower_count or 0
+                ip_style.updated_at = self._now()
             session.commit()
             return UserProfileData(
                 user_id=user.user_id,
@@ -1406,6 +1447,10 @@ class SQLMemoryStore(MemoryStore):
             following_user = session.query(UserProfile).filter_by(user_id=following_id).first()
             if following_user is not None:
                 following_user.follower_count = (following_user.follower_count or 0) + 1
+                # 同步更新 IP 风格记录
+                ip_style = session.query(IPStyle).filter_by(style_id=following_id).first()
+                if ip_style is not None:
+                    ip_style.follower_count = following_user.follower_count
             session.commit()
             logger.debug("Follow: %s -> %s", follower_id, following_id)
             return FollowData(
@@ -1428,6 +1473,10 @@ class SQLMemoryStore(MemoryStore):
             following_user = session.query(UserProfile).filter_by(user_id=following_id).first()
             if following_user is not None and (following_user.follower_count or 0) > 0:
                 following_user.follower_count = following_user.follower_count - 1
+                # 同步更新 IP 风格记录
+                ip_style = session.query(IPStyle).filter_by(style_id=following_id).first()
+                if ip_style is not None:
+                    ip_style.follower_count = following_user.follower_count
             session.commit()
             logger.debug("Unfollow: %s -> %s", follower_id, following_id)
             return True
@@ -1639,6 +1688,20 @@ class SQLMemoryStore(MemoryStore):
                 if user is not None:
                     user.is_verified = True
                     user.updated_at = self._now()
+                    # 同步创建/更新 IP 风格记录
+                    ip_style = session.query(IPStyle).filter_by(style_id=user.user_id).first()
+                    if ip_style is None:
+                        ip_style = IPStyle(style_id=user.user_id)
+                        session.add(ip_style)
+                    ip_style.actor_name = user.nickname or user.user_id
+                    ip_style.description = user.bio or "暂无描述"
+                    ip_style.prompt_snippet = user.bio or f"以{user.nickname or user.user_id}的风格进行创作"
+                    ip_style.avatar_url = user.avatar_url
+                    ip_style.follower_count = user.follower_count or 0
+                    ip_style.is_official = True
+                    ip_style.status = "active"
+                    ip_style.version = "v1.0"
+                    ip_style.updated_at = self._now()
             session.commit()
             return {
                 "id": app.id,

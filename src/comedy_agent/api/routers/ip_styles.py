@@ -48,33 +48,13 @@ async def get_ip_style(style_id: str) -> IPStyleData:
 
 @router.get("/ip-roles/{role_id}")
 async def get_ip_role(role_id: str) -> IPStyleData:
-    """获取 IP 角色详情（与 /ip-styles/{id} 同义）。
-
-    优先从 ip_styles 表查找；若未找到，则尝试从认证大V用户中转换。
-    """
+    """获取 IP 角色详情（与 /ip-styles/{id} 同义）。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
     style = state.memory.load_ip_style(role_id)
-    if style is not None:
-        return style
-    # 回退：从认证大V用户中查找并转换为 IPStyleData
-    user = state.memory.get_user(role_id)
-    if user and user.is_verified:
-        return IPStyleData(
-            style_id=user.user_id,
-            actor_name=user.nickname or user.user_id,
-            version="v1.0",
-            description=user.bio or "暂无描述",
-            prompt_snippet=user.bio or f"以{user.nickname or user.user_id}的风格进行创作",
-            status="active",
-            split_ratio=70,
-            usage_count=0,
-            avatar_url=user.avatar_url,
-            profile_url=f"/users/{user.user_id}",
-            follower_count=user.follower_count,
-            is_official=user.is_verified,
-        )
-    raise HTTPException(status_code=404, detail="IP 角色不存在")
+    if style is None:
+        raise HTTPException(status_code=404, detail="IP 角色不存在")
+    return style
 
 
 @router.post("/ip-roles/{role_id}/try")

@@ -34,6 +34,9 @@ class UserProfile(Base):
     bio: Mapped[str | None] = mapped_column(Text, nullable=True, comment="个人简介")
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, comment="兴趣标签")
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="头像 URL")
+    is_verified: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="是否认证大V"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -124,6 +127,32 @@ class Follow(Base):
     following_user: Mapped["UserProfile"] = relationship(
         foreign_keys=[following_id], back_populates="followers"
     )
+
+
+# ------------------------------------------------------------------ #
+# VerificationApplication —— 认证申请
+# ------------------------------------------------------------------ #
+class VerificationApplication(Base):
+    """用户认证（大V）申请表。"""
+
+    __tablename__ = "verification_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / approved / rejected"
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True, comment="申请理由")
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True, comment="审核备注")
+    applied_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 # ------------------------------------------------------------------ #

@@ -36,6 +36,7 @@ from comedy_agent.memory.schema import (
     Base,
     BannedWord,
     EarningRecord,
+    Follow,
     IPStyle,
     KnowledgeCard,
     SaltHistory,
@@ -47,6 +48,7 @@ from comedy_agent.memory.schema import (
     UserProject,
     UserScript,
     UserTokenAccount,
+    VerificationApplication,
     Persona,
 )
 from comedy_agent.memory.store import MemoryStore
@@ -192,13 +194,15 @@ class SQLMemoryStore(MemoryStore):
                 bio=user.bio,
                 tags=user.tags,
                 avatar_url=user.avatar_url,
+                is_verified=user.is_verified,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
 
     def update_user_profile(
         self, user_id: str, nickname: str | None = None, bio: str | None = None,
-        tags: list[str] | None = None, avatar_url: str | None = None
+        tags: list[str] | None = None, avatar_url: str | None = None,
+        is_verified: bool | None = None,
     ) -> UserProfileData | None:
         """更新用户画像信息。"""
         with self._new_session() as session:
@@ -213,6 +217,8 @@ class SQLMemoryStore(MemoryStore):
                 user.tags = tags
             if avatar_url is not None:
                 user.avatar_url = avatar_url
+            if is_verified is not None:
+                user.is_verified = is_verified
             user.updated_at = self._now()
             session.commit()
             return UserProfileData(
@@ -221,6 +227,7 @@ class SQLMemoryStore(MemoryStore):
                 bio=user.bio,
                 tags=user.tags,
                 avatar_url=user.avatar_url,
+                is_verified=user.is_verified,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -1427,6 +1434,7 @@ class SQLMemoryStore(MemoryStore):
                     bio=r.bio,
                     tags=r.tags,
                     avatar_url=r.avatar_url,
+                    is_verified=r.is_verified,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )
@@ -1450,8 +1458,117 @@ class SQLMemoryStore(MemoryStore):
                     bio=r.bio,
                     tags=r.tags,
                     avatar_url=r.avatar_url,
+                    is_verified=r.is_verified,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )
                 for r in rows
             ]
+
+    # ------------------------------------------------------------------ #
+    # 认证申请 (Verification)
+    # ------------------------------------------------------------------ #
+    def apply_verification(self, user_id: str, reason: str | None = None) -> dict[str, Any]:
+        """提交认证申请。若已有 pending 申请则返回已有记录。"""
+        with self._new_session() as session:
+            existing = (
+                session.query(VerificationApplication)
+                .filter_by(user_id=user_id, status="pending")
+                .first()
+            )
+            if existing is not None:
+                return {
+                    "id": existing.id,
+                    "user_id": existing.user_id,
+                    "status": existing.status,
+                    "reason": existing.reason,
+                    "applied_at": existing.applied_at.isoformat() if existing.applied_at else None,
+                }
+            app = VerificationApplication(
+                user_id=user_id,
+                status="pending",
+                reason=reason,
+            )
+            session.add(app)
+            session.commit()
+            return {
+                "id": app.id,
+                "user_id": app.user_id,
+                "status": app.status,
+                "reason": app.reason,
+                "applied_at": app.applied_at.isoformat() if app.applied_at else None,
+            }
+
+    def get_user_verification(self, user_id: str) -> dict[str, Any] | None:
+        """获取用户最新的认证申请记录。"""
+        with self._new_session() as session:
+            row = (
+                session.query(VerificationApplication)
+                .filter_by(user_id=user_id)
+                .order_by(VerificationApplication.applied_at.desc())
+                .first()
+            )
+            if row is None:
+                return None
+            return {
+                "id": row.id,
+                "user_id": row.user_id,
+                "status": row.status,
+                "reason": row.reason,
+                "review_note": row.review_note,
+                "applied_at": row.applied_at.isoformat() if row.applied_at else None,
+                "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+                "reviewer_id": row.reviewer_id,
+            }
+
+    def list_verification_applications(
+        self, status: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """列出认证申请（admin 用）。"""
+        with self._new_session() as session:
+            q = session.query(VerificationApplication)
+            if status is not None:
+                q = q.filter_by(status=status)
+            rows = q.order_by(VerificationApplication.applied_at.desc()).limit(limit).all()
+            return [
+                {
+                    "id": r.id,
+                    "user_id": r.user_id,
+                    "status": r.status,
+                    "reason": r.reason,
+                    "review_note": r.review_note,
+                    "applied_at": r.applied_at.isoformat() if r.applied_at else None,
+                    "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+                    "reviewer_id": r.reviewer_id,
+                }
+                for r in rows
+            ]
+
+    def review_verification_application(
+        self, app_id: int, approved: bool, reviewer_id: str, review_note: str | None = None
+    ) -> dict[str, Any] | None:
+        """审核认证申请。通过时同时设置用户的 is_verified=true。"""
+        with self._new_session() as session:
+            app = session.query(VerificationApplication).filter_by(id=app_id).first()
+            if app is None:
+                return None
+            app.status = "approved" if approved else "rejected"
+            app.reviewed_at = self._now()
+            app.reviewer_id = reviewer_id
+            app.review_note = review_note
+            if approved:
+                user = session.query(UserProfile).filter_by(user_id=app.user_id).first()
+                if user is not None:
+                    user.is_verified = True
+                    user.updated_at = self._now()
+            session.commit()
+            return {
+                "id": app.id,
+                "user_id": app.user_id,
+                "status": app.status,
+                "reason": app.reason,
+                "review_note": app.review_note,
+                "applied_at": app.applied_at.isoformat() if app.applied_at else None,
+                "reviewed_at": app.reviewed_at.isoformat() if app.reviewed_at else None,
+                "reviewer_id": app.reviewer_id,
+            }

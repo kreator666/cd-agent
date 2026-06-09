@@ -73,6 +73,16 @@ class UnifiedMemory(MemoryStore):
     ) -> UserProfileData:
         return self._store.get_or_create_user(user_id, nickname)
 
+    def get_user(self, user_id: str) -> UserProfileData | None:
+        return self._store.get_user(user_id)
+
+    def update_user_profile(
+        self, user_id: str, nickname: str | None = None, bio: str | None = None,
+        tags: list[str] | None = None, avatar_url: str | None = None,
+        is_verified: bool | None = None,
+    ) -> UserProfileData | None:
+        return self._store.update_user_profile(user_id, nickname, bio, tags, avatar_url, is_verified)
+
     def save_conversation(
         self,
         user_id: str,
@@ -256,6 +266,25 @@ class UnifiedMemory(MemoryStore):
 
     def list_following(self, user_id: str) -> list[UserProfileData]:
         return self._store.list_following(user_id)
+
+    # ------------------------------------------------------------------ #
+    # 认证申请
+    # ------------------------------------------------------------------ #
+    def apply_verification(self, user_id: str, reason: str | None = None) -> dict[str, Any]:
+        return self._store.apply_verification(user_id, reason)
+
+    def get_user_verification(self, user_id: str) -> dict[str, Any] | None:
+        return self._store.get_user_verification(user_id)
+
+    def list_verification_applications(
+        self, status: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        return self._store.list_verification_applications(status, limit)
+
+    def review_verification_application(
+        self, app_id: int, approved: bool, reviewer_id: str, review_note: str | None = None
+    ) -> dict[str, Any] | None:
+        return self._store.review_verification_application(app_id, approved, reviewer_id, review_note)
 
     # ------------------------------------------------------------------ #
     # 投稿

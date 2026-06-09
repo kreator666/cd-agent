@@ -89,6 +89,7 @@ async def get_user_profile(user_id: str) -> dict:
         "bio": user.bio,
         "tags": user.tags,
         "avatar_url": user.avatar_url,
+        "is_verified": user.is_verified,
         "follower_count": state.memory.count_followers(user_id),
         "following_count": state.memory.count_following(user_id),
         "created_at": user.created_at.isoformat() if user.created_at else None,

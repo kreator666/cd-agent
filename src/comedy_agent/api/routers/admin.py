@@ -161,3 +161,65 @@ async def admin_delete_banned_word(
     if not ok:
         raise HTTPException(status_code=404, detail="敏感词不存在")
     return {"success": True}
+
+
+# ------------------------------------------------------------------ #
+# 认证审核
+# ------------------------------------------------------------------ #
+class VerificationListResponse(BaseModel):
+    """认证申请列表响应。"""
+
+    applications: list[dict[str, Any]] = Field(description="申请列表")
+    count: int = Field(description="总数")
+
+
+class VerificationReviewRequest(BaseModel):
+    """认证审核请求。"""
+
+    review_note: str | None = Field(default=None, description="审核备注")
+
+
+@router.get("/admin/verifications", response_model=VerificationListResponse)
+async def admin_list_verifications(
+    status: str | None = None,
+    _admin: str = Depends(require_admin),
+) -> VerificationListResponse:
+    """获取认证申请列表（支持按状态过滤）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    apps = state.memory.list_verification_applications(status=status)
+    return VerificationListResponse(applications=apps, count=len(apps))
+
+
+@router.post("/admin/verifications/{app_id}/approve")
+async def admin_approve_verification(
+    app_id: int,
+    request: VerificationReviewRequest,
+    admin_id: str = Depends(require_admin),
+) -> dict[str, Any]:
+    """通过认证申请。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    result = state.memory.review_verification_application(
+        app_id, approved=True, reviewer_id=admin_id, review_note=request.review_note
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="申请不存在")
+    return result
+
+
+@router.post("/admin/verifications/{app_id}/reject")
+async def admin_reject_verification(
+    app_id: int,
+    request: VerificationReviewRequest,
+    admin_id: str = Depends(require_admin),
+) -> dict[str, Any]:
+    """拒绝认证申请。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    result = state.memory.review_verification_application(
+        app_id, approved=False, reviewer_id=admin_id, review_note=request.review_note
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="申请不存在")
+    return result

@@ -320,9 +320,16 @@
             <div class="profile-body">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                     <img class="profile-avatar" src="https://via.placeholder.com/90?text=👤" id="profile-avatar" alt="头像">
-                    <button class="btn" onclick="openEditModal()" style="background:#e0e0e0;color:#333;padding:6px 14px;font-size:0.8125rem;margin-top:8px;">✏️ 编辑资料</button>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-top:8px;">
+                        <button class="btn" onclick="openEditModal()" style="background:#e0e0e0;color:#333;padding:6px 14px;font-size:0.8125rem;">✏️ 编辑资料</button>
+                        <button id="btn-verify" class="btn" onclick="openVerifyModal()" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;padding:6px 14px;font-size:0.8125rem;display:none;">🏅 申请认证</button>
+                        <span id="verify-status" style="font-size:.75rem;color:#999;display:none;"></span>
+                    </div>
                 </div>
-                <div class="profile-name" id="profile-name">加载中...</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <div class="profile-name" id="profile-name" style="margin-bottom:0;">加载中...</div>
+                    <span id="verified-badge" style="display:none;background:linear-gradient(135deg,#f5af19,#f12711);color:#fff;font-size:.6875rem;padding:2px 8px;border-radius:12px;font-weight:600;">认证大V</span>
+                </div>
                 <div class="profile-id" id="profile-id">@--</div>
                 <div class="profile-bio" id="profile-bio">--</div>
 
@@ -367,6 +374,20 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- 申请认证 Modal -->
+<div class="modal-overlay" id="verify-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000;">
+    <div class="modal-box" style="background:#fff;padding:24px;border-radius:8px;width:480px;max-width:90vw;">
+        <h3 style="margin-top:0;">🏅 申请认证</h3>
+        <p style="font-size:.875rem;color:#666;margin-bottom:12px;">提交认证申请后，管理员将进行审核。通过后你的头像旁将显示"认证大V"标签。</p>
+        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">申请理由（可选）</label>
+        <textarea id="verify-reason" placeholder="简单说明你的创作背景或申请理由..." style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;height:80px;resize:vertical;font-family:inherit;"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+            <button onclick="closeVerifyModal()" style="padding:8px 16px;border:1px solid #ddd;border-radius:4px;background:#f0f0f0;cursor:pointer;">取消</button>
+            <button onclick="submitVerify()" style="padding:8px 16px;border:none;border-radius:4px;background:#d48806;color:#fff;cursor:pointer;">提交申请</button>
         </div>
     </div>
 </div>
@@ -432,6 +453,14 @@
             }
             document.getElementById('info-role').textContent = me.user_id === 'admin' ? '管理员' : '创作者';
 
+            // 认证大V标签
+            const verifiedBadge = document.getElementById('verified-badge');
+            if (me.is_verified) {
+                verifiedBadge.style.display = 'inline-block';
+            } else {
+                verifiedBadge.style.display = 'none';
+            }
+
             // 标签
             const tagsEl = document.getElementById('profile-tags');
             if (me.tags && me.tags.length) {
@@ -439,6 +468,9 @@
             } else {
                 tagsEl.innerHTML = '<span style="color:#999;font-size:.8125rem;">暂无标签</span>';
             }
+
+            // 认证按钮状态
+            loadVerificationStatus();
 
             // 粉丝/关注
             document.getElementById('stat-followers').textContent = (me.follower_count || 0).toLocaleString();
@@ -524,6 +556,63 @@
             loadUserProfile();
         } catch (err) {
             alert('保存失败：' + err.message);
+        }
+    }
+
+    async function loadVerificationStatus() {
+        const btn = document.getElementById('btn-verify');
+        const statusEl = document.getElementById('verify-status');
+        if (profileData.is_verified || profileData.user_id === 'admin') {
+            btn.style.display = 'none';
+            statusEl.style.display = 'none';
+            return;
+        }
+        try {
+            const res = await apiFetch('/me/verification');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'pending') {
+                    btn.style.display = 'none';
+                    statusEl.textContent = '⏳ 审核中';
+                    statusEl.style.display = 'inline-block';
+                } else if (data.status === 'rejected') {
+                    btn.style.display = 'inline-block';
+                    statusEl.textContent = '❌ 上次申请未通过';
+                    statusEl.style.display = 'inline-block';
+                } else {
+                    btn.style.display = 'none';
+                    statusEl.style.display = 'none';
+                }
+            } else {
+                // 404 表示没有申请记录
+                btn.style.display = 'inline-block';
+                statusEl.style.display = 'none';
+            }
+        } catch (err) {
+            btn.style.display = 'inline-block';
+            statusEl.style.display = 'none';
+        }
+    }
+
+    function openVerifyModal() {
+        document.getElementById('verify-reason').value = '';
+        document.getElementById('verify-modal').style.display = 'flex';
+    }
+    function closeVerifyModal() {
+        document.getElementById('verify-modal').style.display = 'none';
+    }
+    async function submitVerify() {
+        try {
+            const reason = document.getElementById('verify-reason').value.trim() || null;
+            await apiFetch('/me/verify-apply', {
+                method: 'POST',
+                body: JSON.stringify({ reason }),
+            });
+            closeVerifyModal();
+            alert('申请已提交，请等待管理员审核');
+            loadVerificationStatus();
+        } catch (err) {
+            alert('申请失败：' + err.message);
         }
     }
 

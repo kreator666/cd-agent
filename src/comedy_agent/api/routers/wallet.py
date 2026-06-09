@@ -15,6 +15,29 @@ from comedy_agent.core.config import settings
 router = APIRouter(tags=["wallet"])
 
 
+class UserDetailResponse(BaseModel):
+    """用户详情响应（含粉丝/关注数）。"""
+
+    user_id: str = Field(description="用户 ID")
+    nickname: str | None = Field(default=None, description="昵称")
+    bio: str | None = Field(default=None, description="个人简介")
+    tags: list[str] | None = Field(default=None, description="兴趣标签")
+    avatar_url: str | None = Field(default=None, description="头像 URL")
+    is_verified: bool = Field(default=False, description="是否认证大V")
+    follower_count: int = Field(default=0, description="粉丝数")
+    following_count: int = Field(default=0, description="关注数")
+    created_at: str | None = Field(default=None, description="创建时间")
+
+
+class UpdateProfileRequest(BaseModel):
+    """更新个人信息请求。"""
+
+    nickname: str | None = Field(default=None, description="昵称")
+    bio: str | None = Field(default=None, description="个人简介")
+    tags: list[str] | None = Field(default=None, description="兴趣标签")
+    avatar_url: str | None = Field(default=None, description="头像 URL")
+
+
 class WalletResponse(BaseModel):
     """钱包信息响应。"""
 
@@ -146,7 +169,7 @@ async def upload_avatar(
     user_id: str = Depends(get_current_user),
 ) -> AvatarResponse:
     """上传头像图片文件，保存到 static/avatars/ 目录。"""
-    frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
+    frontend_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "frontend"
     avatars_dir = frontend_dir / "avatars"
     avatars_dir.mkdir(parents=True, exist_ok=True)
 
@@ -171,3 +194,96 @@ async def upload_avatar(
         state.memory.update_user_profile(user_id, avatar_url=avatar_url)
 
     return AvatarResponse(avatar_url=avatar_url)
+
+
+@router.get("/me", response_model=UserDetailResponse)
+async def me(user_id: str = Depends(get_current_user)) -> UserDetailResponse:
+    """获取当前登录用户信息（含粉丝数、关注数）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return UserDetailResponse(
+        user_id=user.user_id,
+        nickname=user.nickname,
+        bio=user.bio,
+        tags=user.tags,
+        avatar_url=user.avatar_url,
+        is_verified=user.is_verified,
+        follower_count=state.memory.count_followers(user_id),
+        following_count=state.memory.count_following(user_id),
+        created_at=user.created_at.isoformat() if user.created_at else None,
+    )
+
+
+@router.put("/me", response_model=UserDetailResponse)
+async def update_me(
+    request: UpdateProfileRequest,
+    user_id: str = Depends(get_current_user),
+) -> UserDetailResponse:
+    """更新当前登录用户个人信息。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.update_user_profile(
+        user_id=user_id,
+        nickname=request.nickname,
+        bio=request.bio,
+        tags=request.tags,
+        avatar_url=request.avatar_url,
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return UserDetailResponse(
+        user_id=user.user_id,
+        nickname=user.nickname,
+        bio=user.bio,
+        tags=user.tags,
+        avatar_url=user.avatar_url,
+        is_verified=user.is_verified,
+        follower_count=state.memory.count_followers(user_id),
+        following_count=state.memory.count_following(user_id),
+        created_at=user.created_at.isoformat() if user.created_at else None,
+    )
+
+
+class VerifyApplyRequest(BaseModel):
+    """认证申请请求。"""
+
+    reason: str | None = Field(default=None, description="申请理由")
+
+
+class VerificationResponse(BaseModel):
+    """认证申请/状态响应。"""
+
+    id: int | None = Field(default=None, description="申请 ID")
+    user_id: str | None = Field(default=None, description="用户 ID")
+    status: str = Field(default="pending", description="pending / approved / rejected")
+    reason: str | None = Field(default=None, description="申请理由")
+    review_note: str | None = Field(default=None, description="审核备注")
+    applied_at: str | None = Field(default=None, description="申请时间")
+    reviewed_at: str | None = Field(default=None, description="审核时间")
+    reviewer_id: str | None = Field(default=None, description="审核人 ID")
+
+
+@router.post("/me/verify-apply", response_model=VerificationResponse)
+async def apply_verification(
+    request: VerifyApplyRequest,
+    user_id: str = Depends(get_current_user),
+) -> VerificationResponse:
+    """提交认证（大V）申请。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    result = state.memory.apply_verification(user_id, reason=request.reason)
+    return VerificationResponse(**result)
+
+
+@router.get("/me/verification", response_model=VerificationResponse)
+async def get_my_verification(user_id: str = Depends(get_current_user)) -> VerificationResponse:
+    """查询当前用户的认证申请状态。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    result = state.memory.get_user_verification(user_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="暂无认证申请记录")
+    return VerificationResponse(**result)

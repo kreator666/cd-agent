@@ -78,6 +78,7 @@
             <div class="tab active" onclick="switchTab('skills')">Skill 审核</div>
             <div class="tab" onclick="switchTab('ip')">IP 模型管理</div>
             <div class="tab" onclick="switchTab('words')">敏感词</div>
+            <div class="tab" onclick="switchTab('verify')">认证审核</div>
         </div>
 
         <div class="tab-panel active" id="panel-skills">
@@ -109,6 +110,22 @@
                     <button class="btn btn-primary" onclick="addBannedWord()">添加</button>
                 </div>
                 <div id="banned-words-list" style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.5rem;"></div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-verify">
+            <div class="section">
+                <h3>认证（大V）审核</h3>
+                <div style="margin-bottom:0.75rem;">
+                    <button class="btn" onclick="loadVerifications('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:0.5rem;">待审核</button>
+                    <button class="btn" onclick="loadVerifications('approved')" style="background:#e6fffb;color:#13c2c2;border:1px solid #87e8de;margin-right:0.5rem;">已通过</button>
+                    <button class="btn" onclick="loadVerifications('rejected')" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;">已拒绝</button>
+                    <button class="btn" onclick="loadVerifications()" style="background:#f5f5f5;color:#666;border:1px solid #d9d9d9;margin-left:0.5rem;">全部</button>
+                </div>
+                <table class="table">
+                    <thead><tr><th>ID</th><th>用户ID</th><th>申请理由</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
+                    <tbody id="verify-list"><tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -255,10 +272,55 @@
             }
         }
 
+        async function loadVerifications(status) {
+            const tbody = document.getElementById('verify-list');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>';
+            try {
+                const url = status ? `/admin/verifications?status=${status}` : '/admin/verifications';
+                const res = await apiFetch(url);
+                const data = await res.json();
+                const items = data.applications || [];
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                items.forEach(v => {
+                    const tr = document.createElement('tr');
+                    const statusMap = { pending: '⏳ 待审核', approved: '✅ 已通过', rejected: '❌ 已拒绝' };
+                    const statusText = statusMap[v.status] || v.status;
+                    const date = v.applied_at ? new Date(v.applied_at).toLocaleString('zh-CN') : '--';
+                    let actions = '';
+                    if (v.status === 'pending') {
+                        actions = `<button class="btn btn-success" onclick="reviewVerify(${v.id}, true)">通过</button> <button class="btn btn-danger" onclick="reviewVerify(${v.id}, false)">拒绝</button>`;
+                    }
+                    tr.innerHTML = `<td>${v.id}</td><td>${escapeHtml(v.user_id)}</td><td>${escapeHtml(v.reason || '--')}</td><td>${statusText}</td><td>${date}</td><td>${actions}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function reviewVerify(appId, approve) {
+            const note = approve ? null : prompt('请输入拒绝理由（可选）：');
+            if (note === null && !approve) return; // 用户点击取消
+            try {
+                await apiFetch(`/admin/verifications/${appId}/${approve ? 'approve' : 'reject'}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ review_note: note || null }),
+                });
+                loadVerifications('pending');
+            } catch (err) {
+                alert('审核失败: ' + err.message);
+            }
+        }
+
         loadOverview();
         loadPendingSkills();
         loadAdminIPStyles();
         loadBannedWords();
+        loadVerifications('pending');
     </script>
 </body>
 </html>

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
+from comedy_agent.core.config import settings
 
 router = APIRouter(tags=["wallet"])
 
@@ -130,3 +132,42 @@ async def save_model_config(
         speed_model=request.speed_model,
         pro_model=request.pro_model,
     )
+
+
+class AvatarResponse(BaseModel):
+    """头像上传响应。"""
+
+    avatar_url: str = Field(description="头像访问 URL")
+
+
+@router.post("/me/avatar", response_model=AvatarResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+) -> AvatarResponse:
+    """上传头像图片文件，保存到 static/avatars/ 目录。"""
+    frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
+    avatars_dir = frontend_dir / "avatars"
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+
+    # 安全检查：只允许图片
+    content_type = file.content_type or ""
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="只允许上传图片文件")
+
+    # 生成安全文件名：user_id + 扩展名
+    suffix = Path(file.filename or "avatar.jpg").suffix
+    if suffix.lower() not in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}:
+        suffix = ".jpg"
+    save_name = f"{user_id}{suffix}"
+    save_path = avatars_dir / save_name
+
+    content = await file.read()
+    save_path.write_bytes(content)
+
+    avatar_url = f"/static/avatars/{save_name}"
+    # 同时更新用户资料中的头像 URL
+    if state.memory is not None:
+        state.memory.update_user_profile(user_id, avatar_url=avatar_url)
+
+    return AvatarResponse(avatar_url=avatar_url)

@@ -375,8 +375,11 @@
 <div class="modal-overlay" id="edit-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000;">
     <div class="modal-box" style="background:#fff;padding:24px;border-radius:8px;width:480px;max-width:90vw;max-height:90vh;overflow-y:auto;">
         <h3 style="margin-top:0;">编辑个人资料</h3>
-        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">头像 URL</label>
-        <input type="text" id="edit-avatar" placeholder="头像图片链接" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;">
+        <div style="text-align:center;margin-bottom:16px;">
+            <img id="edit-avatar-preview" src="https://via.placeholder.com/90?text=👤" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid #eee;"><br>
+            <input type="file" id="edit-avatar-file" accept="image/*" style="display:none;" onchange="onAvatarSelected(event)">
+            <button onclick="document.getElementById('edit-avatar-file').click()" style="margin-top:8px;padding:6px 14px;border:1px solid #ddd;border-radius:4px;background:#f8f8f8;cursor:pointer;font-size:.8125rem;">📷 更换头像</button>
+        </div>
         <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">昵称</label>
         <input type="text" id="edit-nickname" placeholder="你的昵称" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-size:.875rem;box-sizing:border-box;">
         <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">个人简介</label>
@@ -467,9 +470,23 @@
         }
     }
 
+    let pendingAvatarFile = null;
+
+    function onAvatarSelected(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        pendingAvatarFile = file;
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('edit-avatar-preview').src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
     // 编辑 Modal
     function openEditModal() {
-        document.getElementById('edit-avatar').value = profileData.avatar_url || '';
+        pendingAvatarFile = null;
+        document.getElementById('edit-avatar-preview').src = profileData.avatar_url || 'https://via.placeholder.com/90?text=👤';
         document.getElementById('edit-nickname').value = profileData.nickname || '';
         document.getElementById('edit-bio').value = profileData.bio || '';
         document.getElementById('edit-tags').value = (profileData.tags || []).join(', ');
@@ -479,13 +496,29 @@
         document.getElementById('edit-modal').style.display = 'none';
     }
     async function saveProfile() {
-        const payload = {
-            avatar_url: document.getElementById('edit-avatar').value.trim() || null,
-            nickname: document.getElementById('edit-nickname').value.trim() || null,
-            bio: document.getElementById('edit-bio').value.trim() || null,
-            tags: document.getElementById('edit-tags').value.split(',').map(s => s.trim()).filter(Boolean),
-        };
         try {
+            // 1. 如果有新头像，先上传
+            let avatarUrl = profileData.avatar_url || null;
+            if (pendingAvatarFile) {
+                const formData = new FormData();
+                formData.append('file', pendingAvatarFile);
+                const res = await fetch(`${API_BASE}/me/avatar`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${getToken()}` },
+                    body: formData,
+                });
+                if (!res.ok) throw new Error('头像上传失败');
+                const data = await res.json();
+                avatarUrl = data.avatar_url;
+            }
+
+            // 2. 更新其他资料
+            const payload = {
+                avatar_url: avatarUrl,
+                nickname: document.getElementById('edit-nickname').value.trim() || null,
+                bio: document.getElementById('edit-bio').value.trim() || null,
+                tags: document.getElementById('edit-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+            };
             await apiFetch('/me', { method: 'PUT', body: JSON.stringify(payload) });
             closeEditModal();
             loadUserProfile();

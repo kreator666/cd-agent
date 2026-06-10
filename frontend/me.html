@@ -135,6 +135,44 @@
           <span class="title">认证审核</span>
           <span class="desc">审核用户提交的大V认证申请</span>
         </a>
+        <a href="#workflow-section" class="menu-card" id="menu-workflow-card" style="display:none;">
+          <span class="icon">🔄</span>
+          <span class="title">工作流配置</span>
+          <span class="desc">编辑专业版 Wizard 工作流步骤（仅管理员）</span>
+        </a>
+      </div>
+
+      <!-- 工作流配置面板（仅 admin 可见） -->
+      <div id="workflow-section" style="display:none;margin-top:1.5rem;">
+        <div class="page-title">🔄 工作流配置</div>
+        <div class="card">
+          <div style="margin-bottom:1rem;font-size:.875rem;color:#666;font-weight:600;">
+            拖拽或点击按钮调整专业版 Wizard 工作流步骤顺序与内容。
+          </div>
+          <div id="workflow-editor" style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:40px;">#</th>
+                  <th>id</th>
+                  <th>type</th>
+                  <th>skill / field / skill_type</th>
+                  <th>message</th>
+                  <th>requires_selection</th>
+                  <th>is_final</th>
+                  <th style="width:120px;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="workflow-list">
+                <tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="margin-top:1rem;display:flex;gap:.5rem;">
+            <button class="btn" onclick="addStep()">➕ 添加步骤</button>
+            <button class="btn" onclick="saveWorkflow()">💾 保存工作流</button>
+          </div>
+        </div>
       </div>
 
       <!-- 认证审核面板（仅 admin 可见） -->
@@ -369,8 +407,11 @@
         document.getElementById('menu-knowledge-card').style.display = 'flex';
         document.getElementById('menu-admin-console-card').style.display = 'flex';
         document.getElementById('menu-verify-card').style.display = 'flex';
+        document.getElementById('menu-workflow-card').style.display = 'flex';
         document.getElementById('verify-section').style.display = 'block';
+        document.getElementById('workflow-section').style.display = 'block';
         loadVerifications('pending');
+        loadWorkflow();
     }
 
     async function checkVerifiedStatus() {
@@ -390,6 +431,108 @@
     loadModels();
     loadModelConfig();
     loadTokenBalance();
+
+    // ========== 工作流配置 ==========
+    let workflowSteps = [];
+
+    async function loadWorkflow() {
+        const tbody = document.getElementById('workflow-list');
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr>';
+        try {
+            const res = await apiFetch('/admin/workflow');
+            const data = await res.json();
+            workflowSteps = data.steps || [];
+            renderWorkflow();
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#999;">加载失败：${err.message}</td></tr>`;
+        }
+    }
+
+    function renderWorkflow() {
+        const tbody = document.getElementById('workflow-list');
+        if (workflowSteps.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无步骤</td></tr>';
+            return;
+        }
+        tbody.innerHTML = '';
+        workflowSteps.forEach((step, idx) => {
+            const tr = document.createElement('tr');
+            const extraKey = step.skill || step.field || step.skill_type || '';
+            tr.innerHTML = `
+                <td style="font-weight:700;color:#999;">${idx + 1}</td>
+                <td><input type="text" value="${escapeHtml(step.id || '')}" onchange="updateStep(${idx}, 'id', this.value)" style="width:120px;padding:6px 8px;font-size:13px;"></td>
+                <td>
+                    <select onchange="updateStep(${idx}, 'type', this.value)" style="width:100px;padding:6px 8px;font-size:13px;">
+                        <option value="validation" ${step.type === 'validation' ? 'selected' : ''}>validation</option>
+                        <option value="selection" ${step.type === 'selection' ? 'selected' : ''}>selection</option>
+                        <option value="skill" ${step.type === 'skill' ? 'selected' : ''}>skill</option>
+                    </select>
+                </td>
+                <td><input type="text" value="${escapeHtml(extraKey)}" onchange="updateStepExtra(${idx}, this.value)" style="width:140px;padding:6px 8px;font-size:13px;"></td>
+                <td><input type="text" value="${escapeHtml(step.message || '')}" onchange="updateStep(${idx}, 'message', this.value)" style="width:260px;padding:6px 8px;font-size:13px;"></td>
+                <td><input type="checkbox" ${step.requires_selection ? 'checked' : ''} onchange="updateStep(${idx}, 'requires_selection', this.checked)" style="width:18px;height:18px;"></td>
+                <td><input type="checkbox" ${step.is_final ? 'checked' : ''} onchange="updateStep(${idx}, 'is_final', this.checked)" style="width:18px;height:18px;"></td>
+                <td>
+                    <button class="btn-sm" onclick="moveStep(${idx}, -1)" ${idx === 0 ? 'disabled style="opacity:.4"' : ''} title="上移">⬆️</button>
+                    <button class="btn-sm" onclick="moveStep(${idx}, 1)" ${idx === workflowSteps.length - 1 ? 'disabled style="opacity:.4"' : ''} title="下移">⬇️</button>
+                    <button class="btn-sm btn-danger" onclick="removeStep(${idx})" title="删除">🗑️</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function updateStep(index, key, value) {
+        workflowSteps[index][key] = value;
+    }
+
+    function updateStepExtra(index, value) {
+        const step = workflowSteps[index];
+        delete step.skill;
+        delete step.field;
+        delete step.skill_type;
+        if (step.type === 'skill' && value) step.skill = value;
+        else if (step.type === 'validation' && value) step.field = value;
+        else if (step.type === 'selection' && value) step.skill_type = value;
+    }
+
+    function moveStep(index, direction) {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= workflowSteps.length) return;
+        const temp = workflowSteps[index];
+        workflowSteps[index] = workflowSteps[newIndex];
+        workflowSteps[newIndex] = temp;
+        renderWorkflow();
+    }
+
+    function addStep() {
+        workflowSteps.push({
+            id: 'step_' + Date.now(),
+            type: 'skill',
+            message: '新步骤描述...',
+            skill: 'topic'
+        });
+        renderWorkflow();
+    }
+
+    function removeStep(index) {
+        if (!confirm('确定删除该步骤？')) return;
+        workflowSteps.splice(index, 1);
+        renderWorkflow();
+    }
+
+    async function saveWorkflow() {
+        try {
+            await apiFetch('/admin/workflow', {
+                method: 'PUT',
+                body: JSON.stringify({ steps: workflowSteps })
+            });
+            alert('工作流配置已保存');
+            loadWorkflow();
+        } catch (err) {
+            alert('保存失败：' + err.message);
+        }
+    }
 </script>
 </body>
 </html>

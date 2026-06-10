@@ -125,6 +125,8 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .skill-chip{display:inline-block;padding:4px 10px;background:#f0f1f4;border-radius:10px;font-size:12px;font-weight:650;color:#555;cursor:pointer;transition:.15s;}
 .skill-chip:hover{background:#ffe8e0;color:#ff764a;}
 .skill-chip.active{background:#ff764a;color:#fff;}
+.skill-mention-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:6px;background:#f0f1f4;color:#888;font-size:10px;font-weight:800;cursor:pointer;transition:.15s;}
+.skill-mention-btn:hover{background:var(--orange);color:#fff;}
 
 /* Persona badge */
 .persona-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#f0f1f4;border-radius:10px;font-size:13px;font-weight:700;color:#333;margin-left:auto;}
@@ -292,7 +294,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <div class="chat-input-area">
         <div class="chat-toolbar">
           <button class="toolbar-btn" onclick="toggleOutlineEdit()" title="编辑大纲">📝 大纲</button>
-          <button class="toolbar-btn" id="toolbarPersonaBtn" onclick="event.stopPropagation(); $('#teamBtn').click();" title="@团队成员/切换画像">@ 成员</button>
+          <button class="toolbar-btn" onclick="event.stopPropagation(); $('#teamBtn').click();" title="@团队成员">@ 成员</button>
           <button class="toolbar-btn" onclick="addMention('Get达人')" title="@Get达人">@Get达人</button>
           <span class="toolbar-info" id="chatBudgetHint"></span>
         </div>
@@ -601,25 +603,21 @@ function updatePersonaUI() {
   const menuName = $('#menuPersonaName');
   const personaPreview = $('#personaPreview');
   const configPersona = $('#configPersona');
-  const toolbarBtn = $('#toolbarPersonaBtn');
   if (p) {
     menuBadge.style.display = 'inline-flex';
     menuName.textContent = p.name;
     personaPreview.textContent = p.name;
     configPersona.classList.add('active');
-    if (toolbarBtn) { toolbarBtn.textContent = '🎭 ' + p.name; toolbarBtn.classList.add('active'); }
   } else if (personas.length > 0) {
     selectedPersonaId = personas[0].persona_id;
     menuBadge.style.display = 'inline-flex';
     menuName.textContent = personas[0].name;
     personaPreview.textContent = personas[0].name;
     configPersona.classList.add('active');
-    if (toolbarBtn) { toolbarBtn.textContent = '🎭 ' + personas[0].name; toolbarBtn.classList.add('active'); }
   } else {
     menuBadge.style.display = 'none';
     personaPreview.textContent = '未选择画像';
     configPersona.classList.remove('active');
-    if (toolbarBtn) { toolbarBtn.textContent = '@ 成员'; toolbarBtn.classList.remove('active'); }
   }
   updateTeamCount();
   // Render persona list in team menu
@@ -671,7 +669,10 @@ function renderTeamSkills() {
       html += `<div class="skill-chips">`;
       list.forEach(s => {
         const active = selectedSkills.has(s.name) ? ' active' : '';
-        html += `<span class="skill-chip${active}" data-skill="${escapeHtml(s.name)}" onclick="toggleSkillChip(this)">${escapeHtml(s.name)}</span>`;
+        html += `<div style="display:inline-flex;align-items:center;gap:2px;">
+          <span class="skill-chip${active}" data-skill="${escapeHtml(s.name)}" onclick="toggleSkillChip(this)">${escapeHtml(s.name)}</span>
+          <span class="skill-mention-btn" onclick="event.stopPropagation(); mentionSkill('${escapeHtml(s.name)}')" title="@${escapeHtml(s.name)}">@</span>
+        </div>`;
       });
       html += `</div></div>`;
     }

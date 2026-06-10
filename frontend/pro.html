@@ -287,7 +287,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <div class="chat-input-area">
         <div class="chat-toolbar">
           <button class="toolbar-btn" onclick="toggleOutlineEdit()" title="编辑大纲">📝 大纲</button>
-          <button class="toolbar-btn" onclick="$('#teamBtn').click()" title="@团队成员">@ 成员</button>
+          <button class="toolbar-btn" onclick="event.stopPropagation(); $('#teamBtn').click();" title="@团队成员">@ 成员</button>
           <button class="toolbar-btn" onclick="addMention('Get达人')" title="@Get达人">@Get达人</button>
           <span class="toolbar-info" id="chatBudgetHint"></span>
         </div>
@@ -326,6 +326,10 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <div style="padding:4px;">
       <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;">写作团队成员（Skill）</div>
       <div id="teamSkills"></div>
+    </div>
+    <div style="padding:4px;">
+      <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;">已有人物画像</div>
+      <div id="teamPersonas"></div>
     </div>
     <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;">
       <div class="menu-item" onclick="openPersonaModal()"><span class="mini-avatar" style="background:linear-gradient(135deg,#eee,#ccc);display:grid;place-items:center;font-size:16px;">+</span><div>新建人物画像</div></div>
@@ -597,6 +601,30 @@ function updatePersonaUI() {
     menuBadge.style.display = 'none';
     personaPreview.textContent = '未选择画像';
   }
+  // Render persona list in team menu
+  const teamPersonas = $('#teamPersonas');
+  if (teamPersonas) {
+    if (personas.length === 0) {
+      teamPersonas.innerHTML = '<div style="padding:8px;color:#999;font-size:13px;">暂无画像，点击"新建人物画像"创建</div>';
+    } else {
+      teamPersonas.innerHTML = personas.map(p => {
+        const active = p.persona_id === selectedPersonaId;
+        return `<div class="menu-item" onclick="selectPersona('${p.persona_id}')" style="${active ? 'background:#fff2ed;' : ''}">
+          <span class="mini-avatar" style="background:linear-gradient(135deg,#f1d6a4,#1e1e1e)"></span>
+          <div>${escapeHtml(p.name)}<div class="menu-sub">${escapeHtml(p.description || '暂无描述')}</div></div>
+          ${active ? '<span style="font-size:12px;color:#ff764a;font-weight:700;margin-left:auto;">✓ 当前</span>' : ''}
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+function selectPersona(personaId) {
+  selectedPersonaId = personaId;
+  updatePersonaUI();
+  const p = personas.find(x => x.persona_id === personaId);
+  toast('已切换画像：' + (p?.name || ''));
+  closeAll();
 }
 
 async function loadSkills() {

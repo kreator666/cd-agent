@@ -681,9 +681,16 @@ function renderTeamSkills() {
 function toggleSkillChip(el) {
   const name = el.dataset.skill;
   if (selectedSkills.has(name)) {
+    // 点击已选中的，取消选中
     selectedSkills.delete(name);
     el.classList.remove('active');
   } else {
+    // 单选逻辑：先清除所有已选中的团队成员
+    selectedSkills.clear();
+    const container = $('#teamSkills');
+    if (container) {
+      container.querySelectorAll('.skill-chip.active').forEach(chip => chip.classList.remove('active'));
+    }
     selectedSkills.add(name);
     el.classList.add('active');
   }

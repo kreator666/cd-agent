@@ -125,8 +125,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .skill-chip{display:inline-block;padding:4px 10px;background:#f0f1f4;border-radius:10px;font-size:12px;font-weight:650;color:#555;cursor:pointer;transition:.15s;}
 .skill-chip:hover{background:#ffe8e0;color:#ff764a;}
 .skill-chip.active{background:#ff764a;color:#fff;}
-.skill-mention-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:6px;background:#f0f1f4;color:#888;font-size:10px;font-weight:800;cursor:pointer;transition:.15s;}
-.skill-mention-btn:hover{background:var(--orange);color:#fff;}
 
 /* Persona badge */
 .persona-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#f0f1f4;border-radius:10px;font-size:13px;font-weight:700;color:#333;margin-left:auto;}
@@ -669,10 +667,7 @@ function renderTeamSkills() {
       html += `<div class="skill-chips">`;
       list.forEach(s => {
         const active = selectedSkills.has(s.name) ? ' active' : '';
-        html += `<div style="display:inline-flex;align-items:center;gap:2px;">
-          <span class="skill-chip${active}" data-skill="${escapeHtml(s.name)}" onclick="toggleSkillChip(this)">${escapeHtml(s.name)}</span>
-          <span class="skill-mention-btn" onclick="event.stopPropagation(); mentionSkill('${escapeHtml(s.name)}')" title="@${escapeHtml(s.name)}">@</span>
-        </div>`;
+        html += `<span class="skill-chip${active}" data-skill="${escapeHtml(s.name)}" onclick="mentionAndToggleSkill('${escapeHtml(s.name)}', this)">@${escapeHtml(s.name)}</span>`;
       });
       html += `</div></div>`;
     }
@@ -693,6 +688,11 @@ function toggleSkillChip(el) {
     el.classList.add('active');
   }
   updateEstimate();
+}
+
+function mentionAndToggleSkill(name, el) {
+  toggleSkillChip(el);
+  mentionSkill(name);
 }
 
 function updateEstimate() {

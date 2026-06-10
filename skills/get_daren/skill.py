@@ -81,11 +81,15 @@ class Skill(ComedySkill):
 
         # 如果用户输入不为空，收集该槽位
         if user_input.strip():
+            val = user_input.strip()
+            context_hint = ""
+            if slot == "outline":
+                context_hint = "\n\n接下来我将引导你选择剧本体裁，然后依次调度话题专家、态度导师、情绪设计师等专家为你创作。"
             return json.dumps(
                 {
-                    "reply": f"✅ 已记录：{user_input.strip()[:60]}{'...' if len(user_input.strip()) > 60 else ''}",
+                    "reply": f"✅ 已记录：{val[:60]}{'...' if len(val) > 60 else ''}" + context_hint,
                     "advance": True,
-                    "slots_update": {slot: user_input.strip()},
+                    "slots_update": {slot: val},
                     "outputs_update": {},
                 },
                 ensure_ascii=False,
@@ -103,10 +107,14 @@ class Skill(ComedySkill):
                 ensure_ascii=False,
             )
 
-        # 否则追问
+        # 否则追问，追加当前步骤说明
+        step_hint = ""
+        if slot == "outline":
+            step_hint = "\n\n📋 **当前步骤：确定创作主题**\n我需要了解你想写什么内容，才能为你匹配合适的专家团队。"
+        reply = f"{message}{step_hint}"
         return json.dumps(
             {
-                "reply": message,
+                "reply": reply,
                 "advance": False,
                 "slots_update": {},
                 "outputs_update": {},
@@ -127,6 +135,14 @@ class Skill(ComedySkill):
         message = step.get("message", "请选择一个选项：")
         slot = step.get("slot") or f"selected_{skill_type}"
 
+        # 步骤说明
+        step_desc = {
+            "genre": "📋 **当前步骤：选择剧本体裁**\n不同体裁决定了整体创作风格（如脱口秀、相声、小品等），影响后续专家的创作方向。",
+            "topic": "📋 **当前步骤：选择话题专家**\n话题专家负责扩写背景、冲突点和场景设定。",
+            "attitude": "📋 **当前步骤：选择态度导师**\n态度导师负责为剧本注入核心态度（如讽刺、自嘲、批判等）。",
+            "emotion": "📋 **当前步骤：选择情绪设计师**\n情绪设计师负责调整节奏起伏和情感曲线。",
+        }.get(skill_type, "")
+
         # 如果用户已选择过，直接推进
         if slots.get(slot):
             return json.dumps(
@@ -142,7 +158,6 @@ class Skill(ComedySkill):
         # 尝试从用户输入中匹配选择
         selected = ""
         if user_input.strip():
-            # 支持 @name 或直接名称
             import re
             mention = re.search(r"@(\S+)", user_input)
             if mention:
@@ -163,8 +178,8 @@ class Skill(ComedySkill):
 
         # 否则列出可选 skill
         options = self._list_skill_options(skill_type)
-        options_text = "\n".join([f"• {name} — {desc[:40]}" for name, desc in options])
-        reply = f"{message}\n\n{options_text}\n\n请直接回复选项名称，或 @专家名。"
+        options_text = "\n".join([f"• {name} — {desc[:60]}" for name, desc in options])
+        reply = f"{message}\n\n{step_desc}\n\n**可选专家：**\n{options_text}\n\n请直接回复选项名称，或 @专家名。"
 
         return json.dumps(
             {
@@ -242,14 +257,31 @@ class Skill(ComedySkill):
             persona_id = slots.get("persona_id", "")
             memory = getattr(self, "memory", None)
             rule_content = ""
+            persona_name = ""
             if memory and persona_id:
                 persona = memory.load_persona(persona_id)
-                rule_content = getattr(persona, "rule_content", {}) if persona else {}
+                if persona:
+                    rule_content = getattr(persona, "rule_content", {})
+                    persona_name = getattr(persona, "name", "")
+            if not persona_id:
+                return json.dumps(
+                    {
+                        "reply": "🎭 **当前步骤：应用人物画像规则**\n你尚未选择人物画像，请先点击下方「写作团队」按钮，选择一个已有人物画像，Get达人将自动应用其规则约束。",
+                        "advance": False,
+                        "slots_update": {},
+                        "outputs_update": {},
+                    },
+                    ensure_ascii=False,
+                )
             prompt = (
                 f"使用 rule_persona 技能。\n"
                 f"大纲：{current_text}\n"
                 f"规则：{rule_content}"
             )
+            if persona_name:
+                message = f"🎭 正在应用人物画像「{persona_name}」的规则约束..."
+            else:
+                message = "🎭 正在应用人物画像规则..."
         elif skill_name == "script_composer":
             context_parts = [f"大纲：{slots.get('outline', '')}"]
             for key, val in outputs.items():

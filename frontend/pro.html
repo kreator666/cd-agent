@@ -45,9 +45,9 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 
 /* Main layout */
 .main{flex:1;display:grid;grid-template-columns:48.5% 51.5%;min-height:0;}
-.left,.right{position:relative;min-width:0;height:100%;}
+.left,.right{position:relative;min-width:0;height:100%;overflow:hidden;}
 .left{padding:38px 42px 104px 70px;display:flex;flex-direction:column;}
-.right{padding:39px 54px 110px 53px;display:flex;flex-direction:column;}
+.right{padding:39px 54px 110px 53px;display:flex;flex-direction:column;overflow-y:auto;}
 
 /* Left panel - chat area */
 .chat-area{flex:1;overflow-y:auto;max-width:745px;}
@@ -871,10 +871,13 @@ function renderWorkflowResponse(data) {
       });
     });
   } else if (type === 'skill_output') {
-    const skillInfo = allSkills.find(s => s.name === skillName) || { name: skillName, skill_type: 'topic' };
+    const skillInfo = allSkills.find(s => s.name === skillName) || { name: skillName, skill_type: 'topic', description: '' };
     const gradient = getSkillGradient(skillInfo.skill_type);
     const label = getSkillTypeLabel(skillInfo.skill_type);
-    addChatMessage('agent', skillName, label, content, { gradient });
+    const desc = skillInfo.description || '';
+    const descHtml = desc ? `<p style="font-size:13px;color:#888;margin-bottom:8px;font-weight:600;">💡 ${escapeHtml(desc)}</p>` : '';
+    const fullContent = descHtml + (content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`);
+    addChatMessage('agent', skillName, label, fullContent, { gradient });
   } else if (type === 'final_script') {
     typewriteScript(content);
     addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });

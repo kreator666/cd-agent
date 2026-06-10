@@ -1017,12 +1017,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (a === 'new') { newConversation(); }
   }));
 
-  // Expand/collapse progress
-  $('#expandBtn').addEventListener('click', () => {
-    $('#progressBox').classList.toggle('collapsed');
-    $('#expandBtn').firstChild.textContent = $('#progressBox').classList.contains('collapsed') ? '收起' : '展开';
-  });
-
   // Chat input
   const chatInput = $('#chatInput');
   chatInput.addEventListener('input', () => {

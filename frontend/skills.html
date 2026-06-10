@@ -4,292 +4,254 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skill 管理 — Comedy Agent</title>
-    <link rel="stylesheet" href="/static/common.css">
     <style>
-        header .nav-links {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        header .nav-links a {
-            color: #fff;
-            text-decoration: none;
-            font-size: 0.875rem;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-        header .nav-links a:hover { opacity: 1; }
-        header .nav-links a.active { font-weight: 600; opacity: 1; }
-        .main {
-            flex: 1;
-            max-width: 900px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 1.5rem;
-            overflow-y: auto;
-        }
-        .page-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-        .toolbar {
-            display: flex;
-            gap: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-        .toolbar button {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-        .toolbar .btn-primary {
-            background: #1a1a2e;
-            color: #fff;
-        }
-        .toolbar .btn-secondary {
-            background: #16c79a;
-            color: #fff;
-        }
-        .skill-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .skill-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            padding: 0.75rem 1rem;
-            border-radius: 0.5rem;
-            background: #fff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            font-size: 0.875rem;
-        }
-        .skill-item .skill-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-            flex: 1;
-            min-width: 0;
-        }
-        .skill-item .skill-name {
-            font-weight: 600;
-            font-size: 0.9375rem;
-        }
-        .skill-item .skill-desc {
-            color: #666;
-            font-size: 0.8125rem;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .skill-item .skill-meta {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            flex-shrink: 0;
-        }
-        .skill-item .skill-source {
-            font-size: 0.75rem;
-            padding: 0.125rem 0.5rem;
-            border-radius: 0.25rem;
-            color: #fff;
-            white-space: nowrap;
-        }
-        .skill-item .skill-source.builtin { background: #16c79a; }
-        .skill-item .skill-source.plugin { background: #f5a623; }
-        .skill-item .skill-type {
-            font-size: 0.75rem;
-            color: #888;
-        }
-        .skill-item button {
-            font-size: 0.75rem;
-            padding: 0.25rem 0.625rem;
-            border: none;
-            border-radius: 0.25rem;
-            cursor: pointer;
-            background: #e94560;
-            color: #fff;
-        }
-        .skill-empty {
-            color: #999;
-            font-size: 0.875rem;
-            text-align: center;
-            padding: 2rem;
-            background: #fff;
-            border-radius: 0.5rem;
-        }
+    /* ===== Common layout (from pro.html) ===== */
+    :root{
+      --bg:#ffffff;--ink:#343434;--muted:#888b92;--light:#f5f6f8;--line:#eceef2;--line-dark:#dfe2e7;
+      --orange:#ff764a;--green:#18a058;--icon:#5f6368;--shadow:0 18px 50px rgba(20,26,38,.10);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+      font-size:16px;letter-spacing:.02em;
+    }
+    .app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+    button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
 
+    /* Topbar */
+    .topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+    .topbar .back{display:flex;align-items:center;gap:8px;color:#333;font-weight:650;border-radius:16px;padding:9px 10px;transition:.24s ease;}
+    .topbar .back:hover{background:#f7f8fa;transform:translateY(-1px)}
+    .title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+    .actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+    .action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
+    .action:hover{background:#f7f8fa;transform:translateY(-1px)}
+    .action svg{width:20px;height:20px;stroke:#41454b;stroke-width:2;fill:none;transition:.24s}.action:hover svg{stroke:#ff764a;transform:scale(1.05)}
+
+    /* Nav sidebar */
+    .nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+    .nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+    .nav-sidebar a:hover{background:#f0f1f4;}
+    .nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+    /* Main */
+    .main{flex:1;min-height:0;padding-left:56px;overflow-y:auto;}
+    .main-inner{max-width:900px;margin:0 auto;padding:24px 20px;}
+
+    /* ===== Skills page specific ===== */
+    .page-title{font-size:1.25rem;font-weight:700;color:#232323;margin-bottom:1rem;}
+    .toolbar{display:flex;gap:0.75rem;margin-bottom:1.5rem;}
+    .toolbar button{padding:0.5rem 1rem;border:none;border-radius:8px;cursor:pointer;font-size:0.875rem;font-weight:600;}
+    .toolbar .btn-primary{background:#1a1a2e;color:#fff;}
+    .toolbar .btn-primary:hover{background:#333;}
+    .toolbar .btn-secondary{background:#16c79a;color:#fff;}
+    .toolbar .btn-secondary:hover{background:#13a883;}
+    .skill-list{display:flex;flex-direction:column;gap:0.5rem;}
+    .skill-item{display:flex;align-items:center;justify-content:space-between;gap:0.5rem;padding:0.75rem 1rem;border-radius:8px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid var(--line);font-size:0.875rem;}
+    .skill-item .skill-info{display:flex;flex-direction:column;gap:0.25rem;flex:1;min-width:0;}
+    .skill-item .skill-name{font-weight:700;font-size:0.9375rem;color:#232323;}
+    .skill-item .skill-desc{color:#666;font-size:0.8125rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .skill-item .skill-meta{display:flex;align-items:center;gap:0.5rem;flex-shrink:0;}
+    .skill-item .skill-source{font-size:0.75rem;padding:0.125rem 0.5rem;border-radius:4px;color:#fff;white-space:nowrap;}
+    .skill-item .skill-source.builtin{background:#16c79a;}
+    .skill-item .skill-source.plugin{background:#f5a623;}
+    .skill-item .skill-type{font-size:0.75rem;color:#888;}
+    .skill-item button{font-size:0.75rem;padding:0.25rem 0.625rem;border:none;border-radius:4px;cursor:pointer;background:#e94560;color:#fff;}
+    .skill-item button:hover{background:#c73850;}
+    .skill-empty{color:#999;font-size:0.875rem;text-align:center;padding:2rem;background:#fff;border-radius:8px;border:1px solid var(--line);}
+
+    /* Modal overlay & box */
+    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;}
+    .modal-overlay.active{display:flex;}
+    .modal-box{background:#fff;padding:24px;border-radius:12px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+    .modal-box h3{margin:0;font-size:17px;font-weight:800;color:#232323;}
+    .modal-box input,.modal-box textarea{padding:10px 12px;border:1px solid var(--line-dark);border-radius:10px;font-size:14px;font-family:inherit;outline:none;width:100%;}
+    .modal-box input:focus,.modal-box textarea:focus{border-color:#ff764a;}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+    .btn-cancel{padding:8px 16px;border:none;border-radius:10px;background:#f0f1f4;color:#555;font-size:14px;font-weight:700;cursor:pointer;}
+    .btn-cancel:hover{background:#e5e7eb;}
+    .btn-save{padding:8px 16px;border:none;border-radius:10px;background:#15171a;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
+    .btn-save:hover{background:#333;}
+
+    /* Responsive */
+    @media(max-width:768px){.main{padding-left:0;}}
     </style>
 </head>
 <body>
-    <header>
-        <h1>🎤 Comedy Agent</h1>
-        <div class="nav-links">
-            <a href="/static/index.html">聊天</a>
-            <a href="/static/skills.html" class="active">Skill 管理</a>
-            <a href="/static/me.html">我的</a>
-            <span id="current-user" style="font-size:0.875rem;"></span>
-            <button onclick="logout()" style="font-size:0.75rem;padding:0.25rem 0.75rem;background:#e94560;color:#fff;border:none;border-radius:0.375rem;cursor:pointer;">退出</button>
-            <span id="status" class="status">检查中...</span>
-        </div>
-    </header>
-    <main class="main">
-        <div class="page-title">Skill 管理</div>
-        <div class="toolbar">
-            <button class="btn-primary" onclick="openInstallSkillModal()">➕ 安装 Skill</button>
-            <button class="btn-secondary" onclick="reloadSkills()">🔄 热重载</button>
-        </div>
-        <div class="skill-list" id="skill-list">
-            <div class="skill-empty">加载中...</div>
-        </div>
-    </main>
-
-    <!-- 安装 Skill Modal -->
-    <div class="modal-overlay" id="install-skill-modal">
-        <div class="modal-box">
-            <h3>安装 Skill</h3>
-            <input type="text" id="install-skill-name" placeholder="Skill 名称（只允许字母、数字、下划线、连字符）" />
-            <textarea id="install-skill-md" placeholder="SKILL.md 内容"></textarea>
-            <textarea id="install-skill-prompt" placeholder="prompt.txt 内容"></textarea>
-            <textarea id="install-skill-py" placeholder="skill.py 代码内容（可选）"></textarea>
-            <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeInstallSkillModal()">取消</button>
-                <button class="btn-save" onclick="confirmInstallSkill()">安装</button>
-            </div>
-        </div>
+<div class="app">
+  <header class="topbar">
+    <button class="back" onclick="goHome()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      <span>首页</span>
+    </button>
+    <div class="title">🧩 Skill 管理</div>
+    <div class="actions">
+      <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
     </div>
+  </header>
 
-    <script src="/static/common.js"></script>
-    <script>
-        requireAuth();
-        document.getElementById('current-user').textContent = getCurrentUserId() || '';
-        checkHealth('status');
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro.html" title="专业版">🎬</a>
+    <a href="/static/skills.html" class="active" title="Skill市场">🧩</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
 
-        async function loadSkills() {
-            const listEl = document.getElementById('skill-list');
-            try {
-                const res = await fetch(`${API_BASE}/skills`, { headers: authHeaders() });
-                if (!res.ok) throw new Error('加载失败');
-                const data = await res.json();
-                window._skills = data.skills || [];
-                renderSkillList();
-            } catch (err) {
-                console.error('加载 Skill 失败:', err);
-                listEl.innerHTML = '<div class="skill-empty">加载失败</div>';
-            }
+  <main class="main">
+    <div class="main-inner">
+      <div class="page-title">Skill 管理</div>
+      <div class="toolbar">
+        <button class="btn-primary" onclick="openInstallSkillModal()">➕ 安装 Skill</button>
+        <button class="btn-secondary" onclick="reloadSkills()">🔄 热重载</button>
+      </div>
+      <div class="skill-list" id="skill-list">
+        <div class="skill-empty">加载中...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 安装 Skill Modal -->
+  <div class="modal-overlay" id="install-skill-modal">
+    <div class="modal-box">
+      <h3>安装 Skill</h3>
+      <input type="text" id="install-skill-name" placeholder="Skill 名称（只允许字母、数字、下划线、连字符）" />
+      <textarea id="install-skill-md" placeholder="SKILL.md 内容" style="min-height:80px;"></textarea>
+      <textarea id="install-skill-prompt" placeholder="prompt.txt 内容" style="min-height:80px;"></textarea>
+      <textarea id="install-skill-py" placeholder="skill.py 代码内容（可选）" style="min-height:80px;"></textarea>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeInstallSkillModal()">取消</button>
+        <button class="btn-save" onclick="confirmInstallSkill()">安装</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+    requireAuth();
+    document.getElementById('current-user') && (document.getElementById('current-user').textContent = getCurrentUserId() || '');
+
+    async function loadSkills() {
+        const listEl = document.getElementById('skill-list');
+        try {
+            const res = await fetch(`${API_BASE}/skills`, { headers: authHeaders() });
+            if (!res.ok) throw new Error('加载失败');
+            const data = await res.json();
+            window._skills = data.skills || [];
+            renderSkillList();
+        } catch (err) {
+            console.error('加载 Skill 失败:', err);
+            listEl.innerHTML = '<div class="skill-empty">加载失败</div>';
         }
+    }
 
-        function renderSkillList() {
-            const listEl = document.getElementById('skill-list');
-            const skills = window._skills || [];
-            if (skills.length === 0) {
-                listEl.innerHTML = '<div class="skill-empty">暂无 Skill</div>';
-                return;
-            }
-            listEl.innerHTML = '';
-            skills.forEach(s => {
-                const item = document.createElement('div');
-                item.className = 'skill-item';
-                const sourceClass = s.source === 'builtin' ? 'builtin' : 'plugin';
-                const sourceLabel = s.source === 'builtin' ? '内置' : '插件';
-                const uninstallBtn = s.source === 'builtin'
-                    ? ''
-                    : `<button onclick="uninstallSkill('${s.name}')">卸载</button>`;
-                item.innerHTML = `
-                    <div class="skill-info">
-                        <span class="skill-name">${s.name}</span>
-                        <span class="skill-desc" title="${s.description || ''}">${s.description || '暂无描述'}</span>
-                    </div>
-                    <span class="skill-meta">
-                        <span class="skill-type">${s.task_type || ''}</span>
-                        <span class="skill-source ${sourceClass}">${sourceLabel}</span>
-                        ${uninstallBtn}
-                    </span>
-                `;
-                listEl.appendChild(item);
+    function renderSkillList() {
+        const listEl = document.getElementById('skill-list');
+        const skills = window._skills || [];
+        if (skills.length === 0) {
+            listEl.innerHTML = '<div class="skill-empty">暂无 Skill</div>';
+            return;
+        }
+        listEl.innerHTML = '';
+        skills.forEach(s => {
+            const item = document.createElement('div');
+            item.className = 'skill-item';
+            const sourceClass = s.source === 'builtin' ? 'builtin' : 'plugin';
+            const sourceLabel = s.source === 'builtin' ? '内置' : '插件';
+            const uninstallBtn = s.source === 'builtin'
+                ? ''
+                : `<button onclick="uninstallSkill('${s.name}')">卸载</button>`;
+            item.innerHTML = `
+                <div class="skill-info">
+                    <span class="skill-name">${s.name}</span>
+                    <span class="skill-desc" title="${s.description || ''}">${s.description || '暂无描述'}</span>
+                </div>
+                <span class="skill-meta">
+                    <span class="skill-type">${s.task_type || ''}</span>
+                    <span class="skill-source ${sourceClass}">${sourceLabel}</span>
+                    ${uninstallBtn}
+                </span>
+            `;
+            listEl.appendChild(item);
+        });
+    }
+
+    function openInstallSkillModal() {
+        document.getElementById('install-skill-name').value = '';
+        document.getElementById('install-skill-md').value = '';
+        document.getElementById('install-skill-prompt').value = '';
+        document.getElementById('install-skill-py').value = '';
+        document.getElementById('install-skill-modal').classList.add('active');
+    }
+
+    function closeInstallSkillModal() {
+        document.getElementById('install-skill-modal').classList.remove('active');
+    }
+
+    async function confirmInstallSkill() {
+        const name = document.getElementById('install-skill-name').value.trim();
+        const skillMd = document.getElementById('install-skill-md').value.trim();
+        const promptTxt = document.getElementById('install-skill-prompt').value.trim();
+        const skillPy = document.getElementById('install-skill-py').value.trim() || null;
+
+        if (!name) { alert('请输入 Skill 名称'); return; }
+        if (!skillMd) { alert('请输入 SKILL.md 内容'); return; }
+        if (!promptTxt) { alert('请输入 prompt.txt 内容'); return; }
+
+        try {
+            const res = await fetch(`${API_BASE}/skills/install`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ name, skill_md: skillMd, prompt_txt: promptTxt, skill_py: skillPy }),
             });
-        }
-
-        function openInstallSkillModal() {
-            document.getElementById('install-skill-name').value = '';
-            document.getElementById('install-skill-md').value = '';
-            document.getElementById('install-skill-prompt').value = '';
-            document.getElementById('install-skill-py').value = '';
-            document.getElementById('install-skill-modal').classList.add('active');
-        }
-
-        function closeInstallSkillModal() {
-            document.getElementById('install-skill-modal').classList.remove('active');
-        }
-
-        async function confirmInstallSkill() {
-            const name = document.getElementById('install-skill-name').value.trim();
-            const skillMd = document.getElementById('install-skill-md').value.trim();
-            const promptTxt = document.getElementById('install-skill-prompt').value.trim();
-            const skillPy = document.getElementById('install-skill-py').value.trim() || null;
-
-            if (!name) { alert('请输入 Skill 名称'); return; }
-            if (!skillMd) { alert('请输入 SKILL.md 内容'); return; }
-            if (!promptTxt) { alert('请输入 prompt.txt 内容'); return; }
-
-            try {
-                const res = await fetch(`${API_BASE}/skills/install`, {
-                    method: 'POST',
-                    headers: authHeaders(),
-                    body: JSON.stringify({ name, skill_md: skillMd, prompt_txt: promptTxt, skill_py: skillPy }),
-                });
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.detail || '安装失败');
-                }
-                closeInstallSkillModal();
-                loadSkills();
-                alert('Skill 安装成功');
-            } catch (err) {
-                alert('安装失败: ' + err.message);
-            }
-        }
-
-        async function uninstallSkill(name) {
-            if (!confirm(`确定卸载 Skill「${name}」？`)) return;
-            try {
-                const res = await fetch(`${API_BASE}/skills/${encodeURIComponent(name)}`, {
-                    method: 'DELETE',
-                    headers: authHeaders(),
-                });
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.detail || '卸载失败');
-                }
-                loadSkills();
-                alert('Skill 已卸载');
-            } catch (err) {
-                alert('卸载失败: ' + err.message);
-            }
-        }
-
-        async function reloadSkills() {
-            try {
-                const res = await fetch(`${API_BASE}/skills/reload`, {
-                    method: 'POST',
-                    headers: authHeaders(),
-                });
-                if (!res.ok) throw new Error('热重载失败');
+            if (!res.ok) {
                 const data = await res.json();
-                loadSkills();
-                alert(`热重载完成：新增 ${data.added} 个，移除 ${data.removed} 个，未变更 ${data.unchanged} 个`);
-            } catch (err) {
-                alert('热重载失败: ' + err.message);
+                throw new Error(data.detail || '安装失败');
             }
+            closeInstallSkillModal();
+            loadSkills();
+            alert('Skill 安装成功');
+        } catch (err) {
+            alert('安装失败: ' + err.message);
         }
+    }
 
-        loadSkills();
-    </script>
+    async function uninstallSkill(name) {
+        if (!confirm(`确定卸载 Skill「${name}」？`)) return;
+        try {
+            const res = await fetch(`${API_BASE}/skills/${encodeURIComponent(name)}`, {
+                method: 'DELETE',
+                headers: authHeaders(),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.detail || '卸载失败');
+            }
+            loadSkills();
+            alert('Skill 已卸载');
+        } catch (err) {
+            alert('卸载失败: ' + err.message);
+        }
+    }
+
+    async function reloadSkills() {
+        try {
+            const res = await fetch(`${API_BASE}/skills/reload`, {
+                method: 'POST',
+                headers: authHeaders(),
+            });
+            if (!res.ok) throw new Error('热重载失败');
+            const data = await res.json();
+            loadSkills();
+            alert(`热重载完成：新增 ${data.added} 个，移除 ${data.removed} 个，未变更 ${data.unchanged} 个`);
+        } catch (err) {
+            alert('热重载失败: ' + err.message);
+        }
+    }
+
+    loadSkills();
+</script>
 </body>
 </html>

@@ -4,23 +4,51 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>极速版｜趣味表达引擎</title>
-<link rel="stylesheet" href="/static/common.css">
 <style>
-body{font-family:'Segoe UI',sans-serif;margin:0;background:#f5f6f8;min-height:100vh;}
-header{background:#0f3b5c;color:#fff;text-align:center;padding:16px;}
-header h1{margin:0;font-size:1.25rem;}
-.container{display:flex;max-width:1400px;margin:20px auto;gap:20px;padding:0 20px;}
-.sidebar{width:200px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);height:fit-content;}
-.sidebar a{display:block;padding:10px 12px;margin-bottom:6px;color:#333;text-decoration:none;border-radius:4px;font-size:.875rem;cursor:pointer;}
-.sidebar a:hover{background:#f0f0f0;}
-.sidebar a.active{background:#2c7da0;color:#fff;}
-.main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;}
-.card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+/* ===== Common layout (from pro.html) ===== */
+:root{
+  --bg:#ffffff;--ink:#343434;--muted:#888b92;--light:#f5f6f8;--line:#eceef2;--line-dark:#dfe2e7;
+  --orange:#ff764a;--green:#18a058;--icon:#5f6368;--shadow:0 18px 50px rgba(20,26,38,.10);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+  font-size:16px;letter-spacing:.02em;
+}
+.app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+/* Topbar */
+.topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+.topbar .back{display:flex;align-items:center;gap:8px;color:#333;font-weight:650;border-radius:16px;padding:9px 10px;transition:.24s ease;}
+.topbar .back:hover{background:#f7f8fa;transform:translateY(-1px)}
+.title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+.actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+.action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
+.action:hover{background:#f7f8fa;transform:translateY(-1px)}
+.action svg{width:20px;height:20px;stroke:#41454b;stroke-width:2;fill:none;transition:.24s}.action:hover svg{stroke:#ff764a;transform:scale(1.05)}
+
+/* Nav sidebar */
+.nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+.nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+.nav-sidebar a:hover{background:#f0f1f4;}
+.nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+/* Main */
+.main{flex:1;min-height:0;padding-left:56px;overflow-y:auto;}
+.main-inner{max-width:1400px;margin:0 auto;padding:20px;}
+
+/* ===== Speed page specific ===== */
+.content-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-content:start;}
+.card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border:1px solid var(--line);}
 .card h3{color:#0f3b5c;margin-top:0;font-size:1rem;}
-textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid #ccc;font-family:inherit;font-size:.9375rem;resize:vertical;}
-.btn{background:#2c7da0;color:#fff;padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.875rem;}
+textarea{width:100%;height:120px;padding:10px;border-radius:10px;border:1px solid var(--line-dark);font-family:inherit;font-size:.9375rem;resize:vertical;outline:none;}
+textarea:focus{border-color:#ff764a;}
+.btn{background:#2c7da0;color:#fff;padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:.875rem;font-weight:650;transition:.15s;}
 .btn:hover{background:#1f5a75;}
-.btn-secondary{background:#e0e0e0;color:#333;}
+.btn-secondary{background:var(--light);color:#333;}
+.btn-secondary:hover{background:#e5e7eb;}
 .avatar-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;}
 .avatar{width:80px;text-align:center;cursor:pointer;transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
 .avatar img{width:60px;height:60px;border-radius:50%;border:2px solid #ccc;object-fit:cover;transition:all .25s cubic-bezier(.34,1.56,.64,1);}
@@ -28,81 +56,98 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
 .avatar.selected img{border-color:#2c7da0;box-shadow:0 0 0 4px rgba(44,125,160,.25),0 4px 12px rgba(44,125,160,.35);}
 .avatar .name{font-size:.75rem;color:#333;margin-top:4px;}
 .intensity-row{display:flex;gap:8px;margin:8px 0;}
-.intensity-row label{flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:6px;text-align:center;font-size:.8125rem;cursor:pointer;transition:all .15s;}
+.intensity-row label{flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:8px;text-align:center;font-size:.8125rem;cursor:pointer;transition:all .15s;}
 .intensity-row input{display:none;}
 .intensity-row input:checked+label{border-color:#2c7da0;background:#2c7da0;color:#fff;}
-.output{background:#f4f6f8;padding:12px;border-radius:4px;min-height:160px;max-height:calc(100vh - 380px);margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:.9375rem;overflow-y:auto;}
-.tabs{display:flex;margin-bottom:8px;border-bottom:1px solid #e0e0e0;}
-.tab{padding:8px 16px;cursor:pointer;font-size:.875rem;color:#666;}
-.tab.active{border-bottom:2px solid #2c7da0;font-weight:bold;color:#0f3b5c;}
+.output{background:#f4f6f8;padding:12px;border-radius:8px;min-height:160px;max-height:calc(100vh - 380px);margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:.9375rem;overflow-y:auto;}
+.tabs{display:flex;margin-bottom:8px;border-bottom:1px solid var(--line);}
+.tab{padding:8px 16px;cursor:pointer;font-size:.875rem;color:#666;transition:.15s;}
+.tab.active{border-bottom:2px solid #2c7da0;font-weight:700;color:#0f3b5c;}
 .token-estimate{font-size:.75rem;color:#888;margin-top:4px;}
-.ip-result{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px;background:#f8f8f8;border-radius:6px;}
+.ip-result{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px;background:#f8f8f8;border-radius:8px;}
 .ip-result img{width:36px;height:36px;border-radius:50%;object-fit:cover;}
 .ip-result a{color:#2c7da0;text-decoration:none;font-size:.8125rem;}
 .fullwidth{grid-column:1 / -1;}
-@media(max-width:768px){.container{flex-direction:column;}.sidebar{width:auto;}.main{grid-template-columns:1fr;}}
+
+/* Responsive */
+@media(max-width:768px){.content-grid{grid-template-columns:1fr;}.main{padding-left:0;}}
 </style>
 </head>
 <body>
-<header><h1>⚡ 极速版｜趣味表达引擎</h1></header>
-<div class="container">
-  <div class="sidebar">
-    <a onclick="goHome()">🏠 首页</a>
-    <a class="active" onclick="goSpeed()">⚡ 极速版</a>
-    <a onclick="goPro()">🎬 专业版</a>
-    <a onclick="goSkills()">🧩 Skill市场</a>
-    <a onclick="goMe()">👤 我的</a>
-  </div>
-  <div class="main">
-    <!-- 文本输入 -->
-    <div class="card">
-      <h3>📝 原始文本输入</h3>
-      <textarea id="input-text" placeholder="输入需要润色的文本...">这款防晒霜防水效果很好，夏天出去玩也不怕。</textarea>
-      <div class="intensity-row">
-        <input type="radio" name="intensity" id="int-light" value="light" checked><label for="int-light">轻度 🧂</label>
-        <input type="radio" name="intensity" id="int-medium" value="medium"><label for="int-medium">中度 🧂🧂</label>
-        <input type="radio" name="intensity" id="int-heavy" value="heavy"><label for="int-heavy">重度 🧂🧂🧂</label>
-      </div>
-      <div style="margin-top:8px;">
-        <label style="font-size:.8125rem;color:#666;">模型选择：</label>
-        <select id="model-select" style="padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:.8125rem;">
-          <option value="">使用默认配置</option>
-        </select>
-      </div>
-      <div class="token-estimate" id="token-estimate">预计消耗约 0 tokens，约 ¥0.00</div>
-      <button class="btn" onclick="generate()" id="gen-btn">一键生成</button>
+<div class="app">
+  <header class="topbar">
+    <button class="back" onclick="goHome()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      <span>首页</span>
+    </button>
+    <div class="title">⚡ 极速版｜趣味表达引擎</div>
+    <div class="actions">
+      <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
     </div>
-    <!-- IP 角色选择 -->
-    <div class="card">
-      <h3>🎭 大V角色风格选择 <span style="font-size:.75rem;color:#999;font-weight:400;">Top 10</span></h3>
-      <div class="avatar-grid" id="avatar-grid">
-        <!-- 大V列表由 JS 动态加载，默认不选中任何风格 -->
+  </header>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" class="active" title="极速版">⚡</a>
+    <a href="/static/pro.html" title="专业版">🎬</a>
+    <a href="/static/skills.html" title="Skill市场">🧩</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="main-inner">
+      <div class="content-grid">
+        <!-- 文本输入 -->
+        <div class="card">
+          <h3>📝 原始文本输入</h3>
+          <textarea id="input-text" placeholder="输入需要润色的文本...">这款防晒霜防水效果很好，夏天出去玩也不怕。</textarea>
+          <div class="intensity-row">
+            <input type="radio" name="intensity" id="int-light" value="light" checked><label for="int-light">轻度 🧂</label>
+            <input type="radio" name="intensity" id="int-medium" value="medium"><label for="int-medium">中度 🧂🧂</label>
+            <input type="radio" name="intensity" id="int-heavy" value="heavy"><label for="int-heavy">重度 🧂🧂🧂</label>
+          </div>
+          <div style="margin-top:8px;">
+            <label style="font-size:.8125rem;color:#666;">模型选择：</label>
+            <select id="model-select" style="padding:6px 10px;border:1px solid var(--line-dark);border-radius:8px;font-size:.8125rem;">
+              <option value="">使用默认配置</option>
+            </select>
+          </div>
+          <div class="token-estimate" id="token-estimate">预计消耗约 0 tokens，约 ¥0.00</div>
+          <button class="btn" onclick="generate()" id="gen-btn">一键生成</button>
+        </div>
+        <!-- IP 角色选择 -->
+        <div class="card">
+          <h3>🎭 大V角色风格选择 <span style="font-size:.75rem;color:#999;font-weight:400;">Top 10</span></h3>
+          <div class="avatar-grid" id="avatar-grid">
+            <!-- 大V列表由 JS 动态加载，默认不选中任何风格 -->
+          </div>
+        </div>
+        <!-- 生成结果 -->
+        <div class="card fullwidth">
+          <h3>✨ 生成结果</h3>
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab(this,'result-polished')">风格版</div>
+            <div class="tab" onclick="switchTab(this,'result-compare')">原文对比</div>
+          </div>
+          <div id="result-polished" class="output" style="display:block;">点击"一键生成"查看结果...</div>
+          <div id="result-compare" class="output" style="display:none;"></div>
+          <div id="ip-result-info"></div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="copyResult()">📋 复制</button>
+            <button class="btn btn-secondary" onclick="shareResult()">🔗 分享</button>
+          </div>
+        </div>
       </div>
     </div>
-    <!-- 生成结果 -->
-    <div class="card fullwidth">
-      <h3>✨ 生成结果</h3>
-      <div class="tabs">
-        <div class="tab active" onclick="switchTab(this,'result-polished')">风格版</div>
-        <div class="tab" onclick="switchTab(this,'result-compare')">原文对比</div>
-      </div>
-      <div id="result-polished" class="output" style="display:block;">点击"一键生成"查看结果...</div>
-      <div id="result-compare" class="output" style="display:none;"></div>
-      <div id="ip-result-info"></div>
-      <div style="margin-top:8px;display:flex;gap:8px;">
-        <button class="btn btn-secondary" onclick="copyResult()">📋 复制</button>
-        <button class="btn btn-secondary" onclick="shareResult()">🔗 分享</button>
-      </div>
-    </div>
-  </div>
+  </main>
 </div>
+
 <script src="/static/common.js"></script>
 <script>
   requireAuth();
   let selectedRoleId = '';
   let lastResult = {original:'',polished:'',ip_role:null};
 
-  // 加载可用模型列表
   async function loadModels() {
     try {
       const res = await apiFetch('/models');
@@ -116,7 +161,6 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
     }
   }
 
-  // 加载 IP 角色列表（从大V用户中读取，无默认风格）
   async function loadIPRoles() {
     try {
       const res = await apiFetch('/speed/ip-roles');
@@ -136,7 +180,6 @@ textarea{width:100%;height:120px;padding:8px;border-radius:4px;border:1px solid 
         div.innerHTML = `<img src="${imgUrl}"><div class="name">${escapeHtml(r.actor_name)}</div>`;
         grid.appendChild(div);
       });
-      // 默认不选中任何风格
       selectedRoleId = '';
     } catch (err) {
       console.error('加载 IP 角色失败', err);

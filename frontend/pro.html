@@ -699,7 +699,8 @@ function toggleSkillChip(el) {
 
 function mentionAndToggleSkill(name, el) {
   toggleSkillChip(el);
-  mentionSkill(name);
+  replaceMention(name);
+  closeAll();
 }
 
 function updateEstimate() {
@@ -1033,6 +1034,29 @@ async function createPersona() {
 }
 
 /* ========== @ Skill ========== */
+function replaceMention(newName) {
+  const input = $('#chatInput');
+  let current = input.value;
+  const coreTypes = ['topic', 'attitude', 'emotion', 'genre'];
+  const coreSkills = allSkills.filter(s => coreTypes.includes(s.skill_type));
+  let replaced = false;
+  for (const s of coreSkills) {
+    const pattern = '@' + s.name;
+    if (current.includes(pattern)) {
+      current = current.replace(pattern, '@' + newName);
+      replaced = true;
+      break;
+    }
+  }
+  if (!replaced) {
+    current = current + (current && !current.endsWith(' ') ? ' ' : '') + '@' + newName + ' ';
+  }
+  input.value = current;
+  input.focus();
+  input.style.height = 'auto';
+  input.style.height = input.scrollHeight + 'px';
+}
+
 function mentionSkill(name) {
   addMention(name);
   closeAll();

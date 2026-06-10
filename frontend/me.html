@@ -147,29 +147,31 @@
         <div class="page-title">🔄 工作流配置</div>
         <div class="card">
           <div style="margin-bottom:1rem;font-size:.875rem;color:#666;font-weight:600;">
-            拖拽或点击按钮调整专业版 Wizard 工作流步骤顺序与内容。
+            状态机驱动的专业版 Wizard 工作流。每个状态定义一个动作（collect/select/call/aggregate），由 Get达人统一调度执行。
+          </div>
+          <div style="margin-bottom:1rem;">
+            <label style="font-size:13px;font-weight:650;color:#666;display:block;margin-bottom:6px;">初始状态</label>
+            <input type="text" id="workflow-initial-state" style="width:260px;padding:8px 12px;font-size:14px;" placeholder="initial_state">
           </div>
           <div id="workflow-editor" style="overflow-x:auto;">
             <table>
               <thead>
                 <tr>
-                  <th style="width:40px;">#</th>
-                  <th>id</th>
-                  <th>type</th>
-                  <th>skill / field / skill_type</th>
+                  <th>state id</th>
+                  <th style="width:110px;">action</th>
+                  <th style="width:150px;">slot / skill</th>
                   <th>message</th>
-                  <th>requires_selection</th>
-                  <th>is_final</th>
-                  <th style="width:120px;">操作</th>
+                  <th style="width:160px;">next state</th>
+                  <th style="width:80px;">操作</th>
                 </tr>
               </thead>
               <tbody id="workflow-list">
-                <tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr>
+                <tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>
               </tbody>
             </table>
           </div>
           <div style="margin-top:1rem;display:flex;gap:.5rem;">
-            <button class="btn" onclick="addStep()">➕ 添加步骤</button>
+            <button class="btn" onclick="addState()">➕ 添加状态</button>
             <button class="btn" onclick="saveWorkflow()">💾 保存工作流</button>
           </div>
         </div>
@@ -432,100 +434,138 @@
     loadModelConfig();
     loadTokenBalance();
 
-    // ========== 工作流配置 ==========
-    let workflowSteps = [];
+    // ========== 工作流配置（状态机）==========
+    let workflowConfig = { initial_state: '', states: {}, transitions: {} };
 
     async function loadWorkflow() {
         const tbody = document.getElementById('workflow-list');
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>';
         try {
             const res = await apiFetch('/admin/workflow');
             const data = await res.json();
-            workflowSteps = data.steps || [];
+            workflowConfig = {
+                initial_state: data.initial_state || '',
+                states: data.states || {},
+                transitions: data.transitions || {}
+            };
+            document.getElementById('workflow-initial-state').value = workflowConfig.initial_state;
             renderWorkflow();
         } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#999;">加载失败：${err.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#999;">加载失败：${err.message}</td></tr>`;
         }
     }
 
     function renderWorkflow() {
         const tbody = document.getElementById('workflow-list');
-        if (workflowSteps.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无步骤</td></tr>';
+        const stateIds = Object.keys(workflowConfig.states || {});
+        if (stateIds.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无状态</td></tr>';
             return;
         }
         tbody.innerHTML = '';
-        workflowSteps.forEach((step, idx) => {
+        stateIds.forEach((stateId) => {
+            const s = workflowConfig.states[stateId] || {};
+            const action = s.action || 'collect';
+            const next = (workflowConfig.transitions[stateId] || {}).next || '';
+            let extraKey = '';
+            let extraPlaceholder = '';
+            if (action === 'collect') { extraKey = s.slot || ''; extraPlaceholder = 'slot name'; }
+            else if (action === 'select') { extraKey = s.skill_type || ''; extraPlaceholder = 'skill_type'; }
+            else if (action === 'call') { extraKey = s.skill || ''; extraPlaceholder = 'skill name'; }
+
             const tr = document.createElement('tr');
-            const extraKey = step.skill || step.field || step.skill_type || '';
             tr.innerHTML = `
-                <td style="font-weight:700;color:#999;">${idx + 1}</td>
-                <td><input type="text" value="${escapeHtml(step.id || '')}" onchange="updateStep(${idx}, 'id', this.value)" style="width:120px;padding:6px 8px;font-size:13px;"></td>
+                <td><input type="text" value="${escapeHtml(stateId)}" onchange="renameState('${escapeHtml(stateId)}', this.value)" style="width:140px;padding:6px 8px;font-size:13px;"></td>
                 <td>
-                    <select onchange="updateStep(${idx}, 'type', this.value)" style="width:100px;padding:6px 8px;font-size:13px;">
-                        <option value="validation" ${step.type === 'validation' ? 'selected' : ''}>validation</option>
-                        <option value="selection" ${step.type === 'selection' ? 'selected' : ''}>selection</option>
-                        <option value="skill" ${step.type === 'skill' ? 'selected' : ''}>skill</option>
+                    <select onchange="updateStateAction('${escapeHtml(stateId)}', this.value)" style="width:100px;padding:6px 8px;font-size:13px;">
+                        <option value="collect" ${action === 'collect' ? 'selected' : ''}>collect</option>
+                        <option value="select" ${action === 'select' ? 'selected' : ''}>select</option>
+                        <option value="call" ${action === 'call' ? 'selected' : ''}>call</option>
+                        <option value="aggregate" ${action === 'aggregate' ? 'selected' : ''}>aggregate</option>
                     </select>
                 </td>
-                <td><input type="text" value="${escapeHtml(extraKey)}" onchange="updateStepExtra(${idx}, this.value)" style="width:140px;padding:6px 8px;font-size:13px;"></td>
-                <td><input type="text" value="${escapeHtml(step.message || '')}" onchange="updateStep(${idx}, 'message', this.value)" style="width:260px;padding:6px 8px;font-size:13px;"></td>
-                <td><input type="checkbox" ${step.requires_selection ? 'checked' : ''} onchange="updateStep(${idx}, 'requires_selection', this.checked)" style="width:18px;height:18px;"></td>
-                <td><input type="checkbox" ${step.is_final ? 'checked' : ''} onchange="updateStep(${idx}, 'is_final', this.checked)" style="width:18px;height:18px;"></td>
-                <td>
-                    <button class="btn-sm" onclick="moveStep(${idx}, -1)" ${idx === 0 ? 'disabled style="opacity:.4"' : ''} title="上移">⬆️</button>
-                    <button class="btn-sm" onclick="moveStep(${idx}, 1)" ${idx === workflowSteps.length - 1 ? 'disabled style="opacity:.4"' : ''} title="下移">⬇️</button>
-                    <button class="btn-sm btn-danger" onclick="removeStep(${idx})" title="删除">🗑️</button>
-                </td>
+                <td><input type="text" id="extra-${stateId}" value="${escapeHtml(extraKey)}" placeholder="${extraPlaceholder}" onchange="updateStateExtra('${escapeHtml(stateId)}', this.value)" style="width:130px;padding:6px 8px;font-size:13px;"></td>
+                <td><input type="text" value="${escapeHtml(s.message || '')}" onchange="updateStateField('${escapeHtml(stateId)}', 'message', this.value)" style="width:220px;padding:6px 8px;font-size:13px;"></td>
+                <td><input type="text" value="${escapeHtml(next)}" onchange="updateTransition('${escapeHtml(stateId)}', this.value)" style="width:130px;padding:6px 8px;font-size:13px;" placeholder="结束则留空"></td>
+                <td><button class="btn-sm btn-danger" onclick="removeState('${escapeHtml(stateId)}')" title="删除">🗑️</button></td>
             `;
             tbody.appendChild(tr);
         });
     }
 
-    function updateStep(index, key, value) {
-        workflowSteps[index][key] = value;
-    }
-
-    function updateStepExtra(index, value) {
-        const step = workflowSteps[index];
-        delete step.skill;
-        delete step.field;
-        delete step.skill_type;
-        if (step.type === 'skill' && value) step.skill = value;
-        else if (step.type === 'validation' && value) step.field = value;
-        else if (step.type === 'selection' && value) step.skill_type = value;
-    }
-
-    function moveStep(index, direction) {
-        const newIndex = index + direction;
-        if (newIndex < 0 || newIndex >= workflowSteps.length) return;
-        const temp = workflowSteps[index];
-        workflowSteps[index] = workflowSteps[newIndex];
-        workflowSteps[newIndex] = temp;
-        renderWorkflow();
-    }
-
-    function addStep() {
-        workflowSteps.push({
-            id: 'step_' + Date.now(),
-            type: 'skill',
-            message: '新步骤描述...',
-            skill: 'topic'
+    function renameState(oldId, newId) {
+        if (!newId || newId === oldId) return;
+        workflowConfig.states[newId] = workflowConfig.states[oldId];
+        delete workflowConfig.states[oldId];
+        workflowConfig.transitions[newId] = workflowConfig.transitions[oldId];
+        delete workflowConfig.transitions[oldId];
+        // 更新其他 transition 中指向 oldId 的 next
+        Object.keys(workflowConfig.transitions).forEach(k => {
+            if (workflowConfig.transitions[k].next === oldId) {
+                workflowConfig.transitions[k].next = newId;
+            }
         });
+        if (workflowConfig.initial_state === oldId) workflowConfig.initial_state = newId;
+        document.getElementById('workflow-initial-state').value = workflowConfig.initial_state;
         renderWorkflow();
     }
 
-    function removeStep(index) {
-        if (!confirm('确定删除该步骤？')) return;
-        workflowSteps.splice(index, 1);
+    function updateStateAction(stateId, action) {
+        if (!workflowConfig.states[stateId]) return;
+        workflowConfig.states[stateId].action = action;
+        // 清除不相关的字段
+        const s = workflowConfig.states[stateId];
+        delete s.slot; delete s.skill_type; delete s.skill;
+        renderWorkflow();
+    }
+
+    function updateStateExtra(stateId, value) {
+        if (!workflowConfig.states[stateId]) return;
+        const s = workflowConfig.states[stateId];
+        delete s.slot; delete s.skill_type; delete s.skill;
+        if (s.action === 'collect') s.slot = value;
+        else if (s.action === 'select') s.skill_type = value;
+        else if (s.action === 'call') s.skill = value;
+    }
+
+    function updateStateField(stateId, key, value) {
+        if (workflowConfig.states[stateId]) workflowConfig.states[stateId][key] = value;
+    }
+
+    function updateTransition(stateId, next) {
+        if (!workflowConfig.transitions[stateId]) workflowConfig.transitions[stateId] = {};
+        workflowConfig.transitions[stateId].next = next || null;
+    }
+
+    function addState() {
+        const id = 'state_' + Date.now();
+        workflowConfig.states[id] = {
+            action: 'collect',
+            slot: 'outline',
+            message: '新状态描述...'
+        };
+        workflowConfig.transitions[id] = { next: null };
+        renderWorkflow();
+    }
+
+    function removeState(stateId) {
+        if (!confirm(`确定删除状态 ${stateId}？`)) return;
+        delete workflowConfig.states[stateId];
+        delete workflowConfig.transitions[stateId];
+        if (workflowConfig.initial_state === stateId) {
+            const remaining = Object.keys(workflowConfig.states);
+            workflowConfig.initial_state = remaining[0] || '';
+            document.getElementById('workflow-initial-state').value = workflowConfig.initial_state;
+        }
         renderWorkflow();
     }
 
     async function saveWorkflow() {
+        workflowConfig.initial_state = document.getElementById('workflow-initial-state').value.trim();
         try {
             await apiFetch('/admin/workflow', {
                 method: 'PUT',
-                body: JSON.stringify({ steps: workflowSteps })
+                body: JSON.stringify(workflowConfig)
             });
             alert('工作流配置已保存');
             loadWorkflow();

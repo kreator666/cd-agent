@@ -33,6 +33,9 @@ class ComedySkill(BaseTool, ABC):
     # 可选的记忆系统引用（用于检索共享知识库等）
     memory: Any | None = None
 
+    # 可选的编排器引用（用于调度其他 Skill）
+    orchestrator: Any | None = None
+
     # 用户个人知识库缓存
     _user_vector_stores: dict[str, VectorStore] = {}
 

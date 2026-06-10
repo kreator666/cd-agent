@@ -223,15 +223,10 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .chat-send:hover{transform:scale(1.08);filter:brightness(1.1);}
 .chat-send:disabled{opacity:.4;cursor:not-allowed;}
 
-/* Outline inline edit */
-.outline-inline{display:none;background:#f8f9fb;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px;}
-.outline-inline.show{display:block;}
-.outline-inline textarea{width:100%;min-height:70px;padding:10px;border-radius:10px;border:1px solid var(--line-dark);font-family:inherit;font-size:14px;resize:vertical;outline:none;}
-.outline-inline textarea:focus{border-color:#ff764a;}
-.outline-inline .inline-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
-.inline-btn{padding:6px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;}
-.inline-btn.save{background:var(--orange);color:#fff;}
-.inline-btn.cancel{background:var(--light);color:#666;}
+/* Workflow action buttons */
+.wf-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.wf-action-btn{padding:6px 14px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--line-dark);background:#fff;color:#444;transition:.2s;}
+.wf-action-btn:hover{background:var(--orange);color:#fff;border-color:var(--orange);}
 </style>
 </head>
 <body>
@@ -262,18 +257,9 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <section class="left">
       <!-- 顶部配置摘要 -->
       <div class="chat-config-bar">
-        <div class="config-item" id="configOutline" onclick="toggleOutlineEdit()"><span class="config-label">📋</span><span id="outlinePreview">点击设置选题大纲</span></div>
+        <div class="config-item" id="configOutline"><span class="config-label">📋</span><span id="outlinePreview">等待 Get达人 收集...</span></div>
         <div class="config-item" id="configPersona" onclick="$('#teamBtn').click()"><span class="config-label">🎭</span><span id="personaPreview">未选择画像</span></div>
         <div class="config-item" id="configModel" onclick="toggleModelSelect()"><span class="config-label">🤖</span><span id="modelPreview">默认模型</span></div>
-      </div>
-
-      <!-- 大纲快速编辑（展开时显示） -->
-      <div class="outline-inline" id="outlineInline">
-        <textarea id="outline" placeholder="输入创意大纲，例如：实习生被领导刁难后逆袭..."></textarea>
-        <div class="inline-actions">
-          <button class="inline-btn cancel" onclick="toggleOutlineEdit()">取消</button>
-          <button class="inline-btn save" onclick="saveOutline()">保存</button>
-        </div>
       </div>
 
       <!-- 消息列表 -->
@@ -282,8 +268,8 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
           <div class="welcome-avatar"></div>
           <div class="welcome-content">
             <h3>👋 你好，我是 Get达人</h3>
-            <p>我和我的写作团队随时准备协助你创作剧本。</p>
-            <p>请先设置<strong>选题大纲</strong>和<strong>人物画像</strong>，然后告诉我你的创作需求。</p>
+            <p>我是你的专业版创作助手，会一步步引导你完成剧本创作。</p>
+            <p>请直接在下方输入框告诉我你想创作什么内容，我会帮你确定选题、选择体裁、调度专家团队，最终生成完整剧本。</p>
           </div>
         </div>
       </div>
@@ -291,7 +277,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <!-- 底部输入 -->
       <div class="chat-input-area">
         <div class="chat-toolbar">
-          <button class="toolbar-btn" onclick="toggleOutlineEdit()" title="编辑大纲">📝 大纲</button>
           <button class="toolbar-btn" onclick="event.stopPropagation(); $('#teamBtn').click();" title="@团队成员">@ 成员</button>
           <button class="toolbar-btn" onclick="addMention('Get达人')" title="@Get达人">@Get达人</button>
           <span class="toolbar-info" id="chatBudgetHint"></span>
@@ -407,6 +392,7 @@ let selectedPersonaId = '';
 let currentConversationId = null;
 let conversations = [];
 let isGenerating = false;
+let workflowSessionId = null;
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -504,18 +490,6 @@ function addChatMessage(role, name, roleLabel, content, options = {}) {
 }
 
 /* ========== Chat UI helpers ========== */
-function toggleOutlineEdit() {
-  $('#outlineInline').classList.toggle('show');
-}
-
-function saveOutline() {
-  const val = $('#outline').value.trim();
-  $('#outlinePreview').textContent = val ? val.slice(0, 24) + (val.length > 24 ? '…' : '') : '点击设置选题大纲';
-  $('#outlineInline').classList.remove('show');
-  updateEstimate();
-  toast('大纲已保存');
-}
-
 function addMention(name) {
   const input = $('#chatInput');
   const current = input.value;
@@ -704,26 +678,22 @@ function mentionAndToggleSkill(name, el) {
 }
 
 function updateEstimate() {
-  const outline = $('#outline').value;
-  const base = Math.round(outline.length * 0.8);
   const skillCost = { topic: 15, attitude: 10, emotion: 10, genre: 15, rule_persona: 20, script_composer: 25 };
   let skillTokens = 0;
   selectedSkills.forEach(s => {
     const info = allSkills.find(x => x.name === s);
     if (info) skillTokens += skillCost[info.skill_type] || 10;
   });
-  const total = base + skillTokens;
   const hint = $('#chatBudgetHint');
   if (hint) {
-    hint.textContent = total > 800 ? `预计约 ${total} tokens` : '';
+    hint.textContent = skillTokens > 30 ? `预计约 ${skillTokens} tokens` : '';
   }
 }
 
 /* ========== Conversation Management ========== */
 function newConversation() {
   currentConversationId = Date.now().toString();
-  const title = $('#outline').value.trim().slice(0, 20) || '新对话';
-  $('#pageTitle').textContent = title;
+  $('#pageTitle').textContent = '新对话';
   $('#pageTitle').classList.add('editing');
 
   // Reset chat messages
@@ -733,14 +703,14 @@ function newConversation() {
       <div class="welcome-avatar"></div>
       <div class="welcome-content">
         <h3>👋 你好，我是 Get达人</h3>
-        <p>我和我的写作团队随时准备协助你创作剧本。</p>
-        <p>请先设置<strong>选题大纲</strong>和<strong>人物画像</strong>，然后告诉我你的创作需求。</p>
+        <p>我是你的专业版创作助手，会一步步引导你完成剧本创作。</p>
+        <p>请直接在下方输入框告诉我你想创作什么内容，我会帮你确定选题、选择体裁、调度专家团队，最终生成完整剧本。</p>
       </div>
     </div>
   `;
 
   // Reset outline preview
-  $('#outlinePreview').textContent = '点击设置选题大纲';
+  $('#outlinePreview').textContent = '等待 Get达人 收集...';
 
   // Clear editor
   $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
@@ -761,7 +731,7 @@ function saveCurrentConversation() {
     title,
     updatedAt: Date.now(),
     editorHtml,
-    outline: $('#outline').value,
+    outline: '',
     personaId: selectedPersonaId,
     skillIds: Array.from(selectedSkills),
   };
@@ -793,7 +763,7 @@ function loadConversation(id) {
   if (!c) return;
   currentConversationId = c.id;
   $('#pageTitle').textContent = c.title;
-  $('#outline').value = c.outline || '';
+  // 大纲由 Get达人在对话中收集，不通过独立输入框保存
   selectedPersonaId = c.personaId || '';
   selectedSkills = new Set(c.skillIds || []);
   if (c.editorHtml) {
@@ -814,18 +784,6 @@ async function sendPrompt() {
   const text = input.value.trim();
   if (!text) { input.focus(); return; }
 
-  const outline = $('#outline').value.trim();
-  if (!outline) {
-    toast('请先设置选题大纲');
-    toggleOutlineEdit();
-    return;
-  }
-  if (!selectedPersonaId) {
-    toast('请先选择人物画像（点击顶部 🎭 配置条）');
-    $('#teamBtn').click();
-    return;
-  }
-
   // Hide welcome on first message
   const welcome = $('#msgWelcome');
   if (welcome) welcome.style.display = 'none';
@@ -835,29 +793,13 @@ async function sendPrompt() {
   input.value = '';
   input.style.height = 'auto';
 
-  // Determine if mentioning a skill
-  let mentionedSkill = null;
-  const mentionMatch = text.match(/^@(\S+)\s*/);
-  if (mentionMatch) {
-    mentionedSkill = mentionMatch[1];
-  }
-
-  // Show skill response in left panel
-  const skillInfo = mentionedSkill
-    ? (allSkills.find(s => s.name === mentionedSkill) || { name: mentionedSkill, skill_type: 'topic' })
-    : { name: 'Get达人', skill_type: 'system' };
-
-  const skillLabel = skillInfo.name === 'Get达人' ? '资料与结构助手' : getSkillTypeLabel(skillInfo.skill_type);
-  const skillGradient = skillInfo.name === 'Get达人'
-    ? 'background:linear-gradient(135deg,#ddd,#9b7)'
-    : getSkillGradient(skillInfo.skill_type);
-
-  const agentMsg = addChatMessage('agent', skillInfo.name, skillLabel, '收到，正在处理您的需求…', { gradient: skillGradient });
+  // Show agent typing indicator
+  const agentMsg = addChatMessage('agent', 'Get达人', '资料与结构助手', '收到，正在处理您的需求…', { gradient: 'background:linear-gradient(135deg,#ddd,#9b7)' });
   agentMsg.classList.add('typing');
 
   // Update title if new
   if ($('#pageTitle').textContent === '新对话') {
-    $('#pageTitle').textContent = outline.slice(0, 20) || '剧本创作';
+    $('#pageTitle').textContent = text.slice(0, 20) || '剧本创作';
   }
 
   // Disable send
@@ -867,24 +809,26 @@ async function sendPrompt() {
 
   try {
     const model = $('#model-select').value || undefined;
-    const skillIds = Array.from(selectedSkills);
-    const res = await apiFetch('/pro/generate', {
+    const res = await apiFetch('/pro/chat', {
       method: 'POST',
-      body: JSON.stringify({ outline, persona_id: selectedPersonaId, skill_ids: skillIds, confirm_budget: true, model })
+      body: JSON.stringify({
+        session_id: workflowSessionId,
+        message: text,
+        persona_id: selectedPersonaId || undefined,
+        model
+      })
     });
     const data = await res.json();
+    workflowSessionId = data.session_id;
 
-    // Typewriter effect on right panel
-    const script = data.script || '';
-    typewriteScript(script);
-
-    // Update agent response
+    // Remove typing indicator
     agentMsg.classList.remove('typing');
-    const bubble = agentMsg.querySelector('.msg-bubble');
-    bubble.textContent = `已生成剧本内容，请查看右侧面板。${mentionedSkill ? `【${mentionedSkill}】已参与创作。` : ''}`;
+    agentMsg.remove();
+
+    // Render workflow response
+    renderWorkflowResponse(data);
 
     saveCurrentConversation();
-    toast('剧本生成完成');
   } catch (err) {
     toast('生成失败：' + err.message);
     agentMsg.classList.remove('typing');
@@ -894,6 +838,49 @@ async function sendPrompt() {
     isGenerating = false;
     $('#pageTitle').classList.remove('editing');
     $('#chatSendBtn').disabled = false;
+  }
+}
+
+function renderWorkflowResponse(data) {
+  const type = data.type;
+  const content = data.content;
+  const skillName = data.skill_name || 'Get达人';
+
+  if (type === 'guide') {
+    // 引导消息 + 快捷操作
+    const actionsHtml = (data.next_actions || []).map(a =>
+      `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
+    ).join('');
+    const html = `<p>${escapeHtml(content)}</p>${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const msgDiv = addChatMessage('agent', 'Get达人', '创作向导', html);
+    // 绑定快捷按钮点击事件
+    msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        const value = btn.dataset.value;
+        if (action === 'select_skill' && value) {
+          $('#chatInput').value = value;
+          sendPrompt();
+        } else if (action === 'set_outline') {
+          // 大纲由 Get达人在对话中收集，不再弹出编辑框
+          $('#chatInput').focus();
+        } else {
+          $('#chatInput').value = value || btn.textContent;
+          sendPrompt();
+        }
+      });
+    });
+  } else if (type === 'skill_output') {
+    const skillInfo = allSkills.find(s => s.name === skillName) || { name: skillName, skill_type: 'topic' };
+    const gradient = getSkillGradient(skillInfo.skill_type);
+    const label = getSkillTypeLabel(skillInfo.skill_type);
+    addChatMessage('agent', skillName, label, content, { gradient });
+  } else if (type === 'final_script') {
+    typewriteScript(content);
+    addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });
+    toast('剧本生成完成');
+  } else if (type === 'error') {
+    addChatMessage('agent', 'Get达人', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
   }
 }
 
@@ -1131,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#copyShare').addEventListener('click', () => toast('分享链接已复制'));
 
   // Outline input
-  $('#outline').addEventListener('input', updateEstimate);
+  // 大纲由 Get达人在对话中收集，不再监听独立输入框
 
   // Model select change
   $('#model-select').addEventListener('change', function() {

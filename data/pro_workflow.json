@@ -1,52 +1,77 @@
-[
-  {
-    "id": "outline_check",
-    "type": "validation",
-    "message": "📋 请先设置选题大纲。请描述你想要创作的核心内容，例如：实习生被领导刁难后逆袭的职场段子。",
-    "field": "outline"
+{
+  "initial_state": "awaiting_outline",
+  "states": {
+    "awaiting_outline": {
+      "action": "collect",
+      "message": "请告诉我你想创作什么内容？",
+      "slot": "outline",
+      "skill_type": null,
+      "skill": null
+    },
+    "awaiting_genre": {
+      "action": "select",
+      "message": "请选择剧本体裁",
+      "slot": null,
+      "skill_type": "genre",
+      "skill": null
+    },
+    "calling_topic": {
+      "action": "call",
+      "message": "调用话题专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "topic"
+    },
+    "calling_attitude": {
+      "action": "call",
+      "message": "调用态度专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "attitude"
+    },
+    "calling_emotion": {
+      "action": "call",
+      "message": "调用情绪专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "emotion"
+    },
+    "calling_rule_persona": {
+      "action": "call",
+      "message": "应用人物画像",
+      "slot": null,
+      "skill_type": null,
+      "skill": "rule_persona"
+    },
+    "aggregating": {
+      "action": "aggregate",
+      "message": "生成最终剧本",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
+    }
   },
-  {
-    "id": "genre_select",
-    "type": "selection",
-    "message": "🎭 请选择剧本体裁，这将决定整体的创作风格。",
-    "skill_type": "genre"
-  },
-  {
-    "id": "step_topic",
-    "type": "skill",
-    "message": "🔍 正在调用话题专家扩写话题背景与冲突点...",
-    "skill": "topic",
-    "requires_selection": true,
-    "selection_skill_type": "topic"
-  },
-  {
-    "id": "step_attitude",
-    "type": "skill",
-    "message": "🎯 正在调用态度专家注入态度...",
-    "skill": "attitude",
-    "requires_selection": true,
-    "selection_skill_type": "attitude"
-  },
-  {
-    "id": "step_emotion",
-    "type": "skill",
-    "message": "💫 正在调用情绪专家调整情绪节奏...",
-    "skill": "emotion",
-    "requires_selection": true,
-    "selection_skill_type": "emotion"
-  },
-  {
-    "id": "step_rule_persona",
-    "type": "skill",
-    "message": "🎭 正在应用人物画像规则...",
-    "skill": "rule_persona",
-    "requires_selection": false
-  },
-  {
-    "id": "step_composer",
-    "type": "skill",
-    "message": "📝 正在调用剧本编排专家生成最终剧本...",
-    "skill": "script_composer",
-    "is_final": true
+  "transitions": {
+    "awaiting_outline": {
+      "next": "awaiting_genre"
+    },
+    "awaiting_genre": {
+      "next": "calling_topic"
+    },
+    "calling_topic": {
+      "next": "calling_attitude"
+    },
+    "calling_attitude": {
+      "next": "calling_emotion"
+    },
+    "calling_emotion": {
+      "next": "calling_rule_persona"
+    },
+    "calling_rule_persona": {
+      "next": "aggregating"
+    },
+    "aggregating": {
+      "next": null
+    }
   }
-]
+}

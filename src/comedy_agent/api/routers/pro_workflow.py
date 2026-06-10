@@ -1,7 +1,10 @@
-"""专业版 Wizard 工作流引擎 —— 对话式分步生成。
+"""专业版 Wizard 工作流引擎 —— 状态机驱动的对话式分步生成。
 
-把一次性串行 Pipeline 改造为渐进式 Wizard 交互，每步引导用户选择或调用 Skill，
-在聊天中展示中间结果，最终生成剧本。
+基于 multi-prompt.md 建议，采用"状态机 + 单一路径"模式：
+- 全局状态（current_state、slots、outputs）持久化在 Conversation.metadata
+- Get达人 skill 担任中央调度器，负责 collect / select / call / aggregate 四种动作
+- 支持挂起等待用户输入，然后自动恢复
+- 所有状态转移和 Skill 调用记录到 workflow_log 用于调试
 """
 
 from __future__ import annotations
@@ -27,86 +30,136 @@ router = APIRouter(tags=["pro"])
 # ------------------------------------------------------------------ #
 _WORKFLOW_FILE = Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / "pro_workflow.json"
 
-_DEFAULT_WORKFLOW: list[dict[str, Any]] = [
-    {
-        "id": "outline_check",
-        "type": "validation",
-        "field": "outline",
-        "message": "📋 请先设置选题大纲。请描述你想要创作的核心内容，例如：实习生被领导刁难后逆袭的职场段子。",
+_DEFAULT_WORKFLOW: dict[str, Any] = {
+    "initial_state": "awaiting_outline",
+    "states": {
+        "awaiting_outline": {
+            "action": "collect",
+            "slot": "outline",
+            "message": "📋 你好，我是 Get达人。请告诉我你想创作什么内容？一句话描述主题即可，例如：实习生被领导刁难后逆袭的职场段子。",
+        },
+        "awaiting_genre": {
+            "action": "select",
+            "skill_type": "genre",
+            "message": "🎭 请选择剧本体裁，这将决定整体的创作风格。",
+        },
+        "calling_topic": {
+            "action": "call",
+            "skill": "topic",
+            "message": "🔍 正在调用话题专家扩写话题背景与冲突点...",
+        },
+        "calling_attitude": {
+            "action": "call",
+            "skill": "attitude",
+            "message": "🎯 正在调用态度专家注入态度...",
+        },
+        "calling_emotion": {
+            "action": "call",
+            "skill": "emotion",
+            "message": "💫 正在调用情绪专家调整情绪节奏...",
+        },
+        "calling_rule_persona": {
+            "action": "call",
+            "skill": "rule_persona",
+            "message": "🎭 正在应用人物画像规则...",
+        },
+        "aggregating": {
+            "action": "aggregate",
+            "message": "📝 正在汇总各专家意见，生成最终剧本...",
+        },
     },
-    {
-        "id": "genre_select",
-        "type": "selection",
-        "skill_type": "genre",
-        "message": "🎭 请选择剧本体裁，这将决定整体的创作风格。",
+    "transitions": {
+        "awaiting_outline": {"next": "awaiting_genre"},
+        "awaiting_genre": {"next": "calling_topic"},
+        "calling_topic": {"next": "calling_attitude"},
+        "calling_attitude": {"next": "calling_emotion"},
+        "calling_emotion": {"next": "calling_rule_persona"},
+        "calling_rule_persona": {"next": "aggregating"},
+        "aggregating": {"next": None},
     },
-    {
-        "id": "step_topic",
-        "type": "skill",
-        "skill": "topic",
-        "message": "🔍 正在调用话题专家扩写话题背景与冲突点...",
-        "requires_selection": True,
-        "selection_skill_type": "topic",
-    },
-    {
-        "id": "step_attitude",
-        "type": "skill",
-        "skill": "attitude",
-        "message": "🎯 正在调用态度专家注入态度...",
-        "requires_selection": True,
-        "selection_skill_type": "attitude",
-    },
-    {
-        "id": "step_emotion",
-        "type": "skill",
-        "skill": "emotion",
-        "message": "💫 正在调用情绪专家调整情绪节奏...",
-        "requires_selection": True,
-        "selection_skill_type": "emotion",
-    },
-    {
-        "id": "step_rule_persona",
-        "type": "skill",
-        "skill": "rule_persona",
-        "message": "🎭 正在应用人物画像规则...",
-        "requires_selection": False,
-    },
-    {
-        "id": "step_composer",
-        "type": "skill",
-        "skill": "script_composer",
-        "message": "📝 正在调用剧本编排专家生成最终剧本...",
-        "is_final": True,
-    },
-]
+}
 
 
-def _load_workflow() -> list[dict[str, Any]]:
+# ------------------------------------------------------------------ #
+# 兼容旧版工作流（线性步骤列表 -> 状态机）
+# ------------------------------------------------------------------ #
+def _migrate_legacy_workflow(data: Any) -> dict[str, Any]:
+    """将旧版步骤列表迁移为状态机结构。"""
+    if isinstance(data, dict) and "states" in data and "transitions" in data:
+        return data
+
+    if not isinstance(data, list) or len(data) == 0:
+        return dict(_DEFAULT_WORKFLOW)
+
+    states: dict[str, Any] = {}
+    transitions: dict[str, Any] = {}
+
+    for i, step in enumerate(data):
+        step_id = step.get("id", f"step_{i}")
+        step_type = step.get("type", "skill")
+        state_cfg: dict[str, Any] = {"message": step.get("message", "")}
+
+        if step_type == "validation":
+            state_cfg["action"] = "collect"
+            state_cfg["slot"] = step.get("field", "outline")
+        elif step_type == "selection":
+            state_cfg["action"] = "select"
+            state_cfg["skill_type"] = step.get("skill_type", "")
+        elif step_type == "skill":
+            if step.get("is_final"):
+                state_cfg["action"] = "aggregate"
+            else:
+                state_cfg["action"] = "call"
+                state_cfg["skill"] = step.get("skill", "")
+        else:
+            state_cfg["action"] = "collect"
+            state_cfg["slot"] = "outline"
+
+        states[step_id] = state_cfg
+
+        # 构建 transitions
+        if i + 1 < len(data):
+            next_id = data[i + 1].get("id", f"step_{i + 1}")
+            transitions[step_id] = {"next": next_id}
+        else:
+            transitions[step_id] = {"next": None}
+
+    return {
+        "initial_state": data[0].get("id", "step_0") if data else "step_0",
+        "states": states,
+        "transitions": transitions,
+    }
+
+
+# ------------------------------------------------------------------ #
+# 加载 / 保存工作流
+# ------------------------------------------------------------------ #
+def _load_workflow() -> dict[str, Any]:
     """从 JSON 文件加载工作流配置，不存在则写入默认配置。"""
     if _WORKFLOW_FILE.exists():
         try:
             with _WORKFLOW_FILE.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, list) and len(data) > 0:
-                return data
+                raw = json.load(f)
+            return _migrate_legacy_workflow(raw)
         except Exception as e:
             logger.warning("工作流配置文件读取失败，使用默认配置: %s", e)
-    # 写入默认配置
+
     try:
         _WORKFLOW_FILE.parent.mkdir(parents=True, exist_ok=True)
         with _WORKFLOW_FILE.open("w", encoding="utf-8") as f:
             json.dump(_DEFAULT_WORKFLOW, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.warning("工作流配置文件写入失败: %s", e)
-    return list(_DEFAULT_WORKFLOW)
+
+    return dict(_DEFAULT_WORKFLOW)
 
 
-def _save_workflow(steps: list[dict[str, Any]]) -> None:
+def _save_workflow(config: dict[str, Any]) -> None:
     """保存工作流配置到 JSON 文件。"""
     try:
         _WORKFLOW_FILE.parent.mkdir(parents=True, exist_ok=True)
         with _WORKFLOW_FILE.open("w", encoding="utf-8") as f:
-            json.dump(steps, f, ensure_ascii=False, indent=2)
+            json.dump(config, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error("工作流配置文件保存失败: %s", e)
         raise HTTPException(status_code=500, detail="工作流保存失败")
@@ -120,7 +173,7 @@ class ProChatRequest(BaseModel):
 
     session_id: str | None = Field(default=None, description="会话 ID，为空则新建")
     message: str = Field(description="用户消息")
-    outline: str | None = Field(default=None, description="选题大纲")
+    outline: str | None = Field(default=None, description="选题大纲（兼容旧字段）")
     persona_id: str | None = Field(default=None, description="人物画像 ID")
     model: str | None = Field(default=None, description="使用的模型名称")
 
@@ -139,23 +192,20 @@ class ProChatResponse(BaseModel):
 
 
 # ------------------------------------------------------------------ #
-# 工作流引擎
+# 工作流引擎（状态机）
 # ------------------------------------------------------------------ #
 class ProWorkflowEngine:
-    """专业版 Wizard 工作流引擎。
+    """专业版状态机工作流引擎。
 
-    维护工作流状态，根据当前步骤和用户输入决定下一步操作。
-    状态持久化在 Conversation.extra_metadata 中。
+    维护状态：current_state、slots、outputs、log
+    每次用户消息触发 Get达人调度器，执行当前状态对应的动作。
     """
 
-    def __init__(self, orch: Any, memory: Any, workflow_steps: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, orch: Any, memory: Any, workflow: dict[str, Any] | None = None) -> None:
         self.orch = orch
         self.memory = memory
-        self.workflow_steps = workflow_steps or list(_DEFAULT_WORKFLOW)
+        self.workflow = workflow or dict(_DEFAULT_WORKFLOW)
 
-    # ------------------------------------------------------------------ #
-    # 公共入口
-    # ------------------------------------------------------------------ #
     def process(
         self,
         session_id: str | None,
@@ -165,7 +215,7 @@ class ProWorkflowEngine:
         persona_id: str | None,
         model: str | None,
     ) -> dict[str, Any]:
-        """处理用户消息，推进工作流，返回响应。"""
+        """处理用户消息，推进状态机，返回响应。"""
         # 1. 加载或创建会话
         conv = None
         if session_id:
@@ -173,38 +223,60 @@ class ProWorkflowEngine:
 
         if conv is None:
             session_id = uuid.uuid4().hex[:16]
-            wf_state = self._init_state(outline, persona_id, model)
+            wf_state = self._init_state()
             messages: list[dict[str, Any]] = []
+            if outline:
+                wf_state["slots"]["outline"] = outline
+            if persona_id:
+                wf_state["slots"]["persona_id"] = persona_id
         else:
             session_id = conv.session_id
             wf_state = (conv.metadata or {}).get("workflow", {}) if conv.metadata else {}
             if not wf_state:
-                wf_state = self._init_state(outline, persona_id, model)
+                wf_state = self._init_state()
+                if outline:
+                    wf_state["slots"]["outline"] = outline
+                if persona_id:
+                    wf_state["slots"]["persona_id"] = persona_id
             messages = list(conv.messages) if conv.messages else []
 
-        # 2. 解析用户意图（设置大纲 / 选择 skill / 普通消息）
-        self._parse_user_intent(message, wf_state)
-
-        # 3. 添加用户消息到会话
+        # 2. 添加用户消息到会话
         messages.append({"role": "human", "content": message})
 
-        # 4. 执行当前步骤
-        current_step_id = wf_state.get("current_step", "outline_check")
-        step = self._find_step(current_step_id)
-        result = self._execute_step(step, wf_state, user_id)
+        # 3. 获取当前状态配置
+        current_state = wf_state.get("current_state", self.workflow.get("initial_state", ""))
+        state_cfg = self.workflow.get("states", {}).get(current_state)
+
+        if state_cfg is None:
+            return self._error_response(session_id, current_state, f"未知工作流状态：{current_state}")
+
+        # 4. 调用 Get达人 skill 执行当前状态动作
+        result = self._execute_state(state_cfg, wf_state, message, user_id)
 
         # 5. 推进状态
         if result.get("advance", False):
-            next_step = self._get_next_step(current_step_id)
-            wf_state["current_step"] = next_step["id"] if next_step else "done"
-            completed = wf_state.setdefault("completed_steps", [])
-            if step["id"] not in completed:
-                completed.append(step["id"])
+            transitions = self.workflow.get("transitions", {})
+            next_state = transitions.get(current_state, {}).get("next")
+            if next_state:
+                wf_state["current_state"] = next_state
+            else:
+                wf_state["current_state"] = "done"
 
-        # 6. 添加 AI 回复到会话
-        messages.append({"role": "ai", "content": result["content"]})
+        # 6. 记录日志
+        log_entry = {
+            "state": current_state,
+            "action": state_cfg.get("action"),
+            "input": message,
+            "output": result.get("reply", "")[:200],
+            "next": wf_state.get("current_state"),
+        }
+        wf_state.setdefault("log", []).append(log_entry)
 
-        # 7. 保存会话
+        # 7. 添加 AI 回复到会话
+        reply = result.get("reply", "")
+        messages.append({"role": "ai", "content": reply})
+
+        # 8. 保存会话
         metadata = {"workflow": wf_state}
         if persona_id:
             metadata["persona_id"] = persona_id
@@ -217,14 +289,33 @@ class ProWorkflowEngine:
             metadata=metadata,
         )
 
-        # 8. 返回
+        # 9. 确定响应类型
+        action = state_cfg.get("action", "")
+        response_type = "guide"
+        skill_name = None
+
+        if action == "call":
+            response_type = "skill_output"
+            skill_name = state_cfg.get("skill")
+        elif action == "aggregate":
+            response_type = "final_script"
+            skill_name = "get_daren"
+        elif action == "select":
+            response_type = "guide"
+            skill_name = "get_daren"
+
+        # select 动作返回选项按钮
+        next_actions = None
+        if action == "select" and not result.get("advance"):
+            next_actions = self._build_select_actions(state_cfg)
+
         return {
             "session_id": session_id,
-            "type": result["type"],
-            "content": result["content"],
-            "workflow_state": wf_state["current_step"],
-            "skill_name": result.get("skill_name"),
-            "next_actions": result.get("next_actions"),
+            "type": response_type,
+            "content": reply,
+            "workflow_state": wf_state["current_state"],
+            "skill_name": skill_name,
+            "next_actions": next_actions,
         }
 
     def load_session(self, user_id: str, session_id: str) -> dict[str, Any] | None:
@@ -236,268 +327,127 @@ class ProWorkflowEngine:
         return {
             "session_id": conv.session_id,
             "messages": conv.messages,
-            "workflow_state": wf_state.get("current_step", "outline_check"),
+            "workflow_state": wf_state.get("current_state", self.workflow.get("initial_state", "")),
             "metadata": conv.metadata,
         }
 
     # ------------------------------------------------------------------ #
-    # 状态管理
+    # 内部方法
     # ------------------------------------------------------------------ #
-    @staticmethod
-    def _init_state(
-        outline: str | None,
-        persona_id: str | None,
-        model: str | None,
-    ) -> dict[str, Any]:
+    def _init_state(self) -> dict[str, Any]:
         return {
-            "current_step": "outline_check",
-            "completed_steps": [],
-            "outline": outline or "",
-            "persona_id": persona_id or "",
-            "model": model or "",
-            "selected_skills": {},
-            "intermediate_outputs": {},
-            "current_text": outline or "",
+            "current_state": self.workflow.get("initial_state", ""),
+            "slots": {},
+            "outputs": {},
+            "log": [],
         }
 
-    def _parse_user_intent(self, message: str, state: dict[str, Any]) -> None:
-        """从用户消息中提取设置/选择意图，更新状态。"""
-        msg = message.strip()
-
-        # 设置大纲：支持多种格式
-        if msg.startswith("大纲：") or msg.startswith("大纲:"):
-            state["outline"] = msg.split("：", 1)[1] if "：" in msg else msg.split(":", 1)[1]
-            state["current_text"] = state["outline"]
-        elif msg.startswith("设置大纲 "):
-            state["outline"] = msg[len("设置大纲 "):]
-            state["current_text"] = state["outline"]
-        elif msg.lower().startswith("outline:"):
-            state["outline"] = msg.split(":", 1)[1].strip()
-            state["current_text"] = state["outline"]
-        elif msg.lower().startswith("set outline "):
-            state["outline"] = msg[len("set outline "):]
-            state["current_text"] = state["outline"]
-
-        # 选择 skill：解析 "@xxx" 或直接的 skill 名
-        import re
-        mention = re.search(r"@(\S+)", msg)
-        if mention:
-            selected_name = mention.group(1)
-            current_step = state.get("current_step", "")
-            step = self._find_step(current_step)
-            if step and step.get("type") == "selection":
-                skill_type = step.get("skill_type")
-                if skill_type:
-                    state.setdefault("selected_skills", {})[skill_type] = selected_name
-            elif step and step.get("requires_selection"):
-                sel_type = step.get("selection_skill_type")
-                if sel_type:
-                    state.setdefault("selected_skills", {})[sel_type] = selected_name
-            return
-
-        # 在 selection 步骤中，如果用户直接发送 skill 名（不是 @ 格式），也视为选择
-        current_step_id = state.get("current_step", "")
-        step = self._find_step(current_step_id)
-        if step and step.get("type") == "selection":
-            skill_type = step.get("skill_type")
-            skills = self._list_skills_by_type(skill_type)
-            for s in skills:
-                if s["name"].lower() in msg.lower():
-                    state.setdefault("selected_skills", {})[skill_type] = s["name"]
-                    return
-        elif step and step.get("requires_selection"):
-            sel_type = step.get("selection_skill_type")
-            skills = self._list_skills_by_type(sel_type)
-            for s in skills:
-                if s["name"].lower() in msg.lower():
-                    state.setdefault("selected_skills", {})[sel_type] = s["name"]
-                    return
-
-    # ------------------------------------------------------------------ #
-    # 步骤执行
-    # ------------------------------------------------------------------ #
-    def _execute_step(
-        self, step: dict[str, Any], state: dict[str, Any], user_id: str
+    def _execute_state(
+        self,
+        state_cfg: dict[str, Any],
+        wf_state: dict[str, Any],
+        user_input: str,
+        user_id: str,
     ) -> dict[str, Any]:
-        step_type = step["type"]
+        """调用 Get达人 skill 执行当前状态动作。"""
+        if self.orch is None:
+            return {"reply": "服务未就绪", "advance": False}
 
-        if step_type == "validation":
-            return self._exec_validation(step, state)
-
-        if step_type == "selection":
-            return self._exec_selection(step, state)
-
-        if step_type == "skill":
-            return self._exec_skill(step, state, user_id)
-
-        return {"type": "guide", "content": "未知步骤类型", "advance": True}
-
-    def _exec_validation(
-        self, step: dict[str, Any], state: dict[str, Any]
-    ) -> dict[str, Any]:
-        field = step.get("field", "outline")
-        value = state.get(field, "")
-        if not value or not str(value).strip():
-            return {
-                "type": "guide",
-                "content": step["message"],
-                "advance": False,
-                "next_actions": [
-                    {"action": f"set_{field}", "label": f"设置{field}", "hint": f"直接输入：{field}：你的内容"}
-                ],
-            }
-        return {
-            "type": "guide",
-            "content": f"✅ {field}已确认：{value[:60]}{'...' if len(str(value)) > 60 else ''}",
-            "advance": True,
-        }
-
-    def _exec_selection(
-        self, step: dict[str, Any], state: dict[str, Any]
-    ) -> dict[str, Any]:
-        skill_type = step.get("skill_type")
-        selected = state.setdefault("selected_skills", {}).get(skill_type)
-
-        if selected:
-            return {
-                "type": "guide",
-                "content": f"✅ 已选择 {skill_type}：{selected}",
-                "advance": True,
-            }
-
-        # 列出可选 skills
-        skills = self._list_skills_by_type(skill_type)
-        actions = [
-            {"action": "select_skill", "label": s.get("name", ""), "value": s.get("name", "")}
-            for s in skills
-        ]
-        return {
-            "type": "guide",
-            "content": step["message"],
-            "advance": False,
-            "next_actions": actions,
-        }
-
-    def _exec_skill(
-        self, step: dict[str, Any], state: dict[str, Any], user_id: str
-    ) -> dict[str, Any]:
-        skill_name = step["skill"]
-
-        # 如果需要选择但还没选，先引导选择
-        if step.get("requires_selection"):
-            sel_type = step.get("selection_skill_type")
-            selected = state.setdefault("selected_skills", {}).get(sel_type)
-            if not selected:
-                skills = self._list_skills_by_type(sel_type)
-                return {
-                    "type": "guide",
-                    "content": f"请先选择一位{sel_type}专家：",
-                    "advance": False,
-                    "next_actions": [
-                        {"action": "select_skill", "label": s.get("name", ""), "value": s.get("name", "")}
-                        for s in skills
-                    ],
-                }
-
-        # 构建 prompt
-        current_text = state.get("current_text", state.get("outline", ""))
-        outline = state.get("outline", "")
-        persona_id = state.get("persona_id", "")
-
-        if skill_name == "rule_persona":
-            # 需要注入人物画像规则
-            persona = self.memory.load_persona(persona_id) if persona_id else None
-            rule_content = persona.rule_content if persona else {}
-            prompt = (
-                f"使用 rule_persona 技能。\n"
-                f"大纲：{current_text}\n"
-                f"规则：{rule_content}"
-            )
-        elif skill_name == "script_composer":
-            # 最终编排：传入原始大纲 + 所有中间结果
-            context_parts = []
-            for key, val in state.get("intermediate_outputs", {}).items():
-                context_parts.append(f"【{key} 输出】\n{val}")
-            context_text = "\n\n".join(context_parts)
-            prompt = (
-                f"使用 script_composer 技能。\n"
-                f"大纲：{outline}\n"
-                f"上下文：{context_text}"
-            )
-        else:
-            prompt = f"使用 {skill_name} 技能。\n文本：{current_text}"
-
-        # 调用模型
         try:
-            result = self.orch.run(prompt, user_id=user_id)
-            output = result.get("output", "")
+            skill = self.orch._find_skill("get_daren")
+            if skill is None:
+                return {"reply": "❌ Get达人 skill 未注册", "advance": False}
         except Exception as e:
-            logger.error("Skill %s 调用失败: %s", skill_name, e, exc_info=True)
-            return {
-                "type": "error",
-                "content": f"❌ {skill_name} 调用失败：{e}",
-                "advance": False,
-                "skill_name": skill_name,
-            }
+            return {"reply": f"❌ 查找 Get达人 skill 失败：{e}", "advance": False}
 
-        # 保存中间输出
-        state.setdefault("intermediate_outputs", {})[skill_name] = output
-        state["current_text"] = output
+        try:
+            result = skill.invoke(
+                {
+                    "workflow_step": state_cfg,
+                    "slots": wf_state.get("slots", {}),
+                    "outputs": wf_state.get("outputs", {}),
+                    "user_input": user_input,
+                    "conversation_history": wf_state.get("log", [])[-10:],
+                    "user_id": user_id,
+                }
+            )
+        except Exception as e:
+            logger.error("Get达人执行失败: %s", e, exc_info=True)
+            return {"reply": f"❌ 调度失败：{e}", "advance": False}
 
-        if step.get("is_final"):
-            return {
-                "type": "final_script",
-                "content": output,
-                "advance": True,
-                "skill_name": skill_name,
-            }
+        # 解析 Get达人返回的 JSON
+        parsed = self._parse_daren_result(result)
+
+        # 更新 slots 和 outputs
+        if parsed.get("slots_update"):
+            wf_state.setdefault("slots", {}).update(parsed["slots_update"])
+        if parsed.get("outputs_update"):
+            wf_state.setdefault("outputs", {}).update(parsed["outputs_update"])
+
+        return parsed
+
+    def _parse_daren_result(self, result: Any) -> dict[str, Any]:
+        """解析 Get达人 skill 返回的结果。"""
+        raw = ""
+        if isinstance(result, dict):
+            raw = result.get("output", "")
+        elif isinstance(result, str):
+            raw = result
+        else:
+            raw = str(result)
+
+        # 先尝试作为 JSON 解析
+        if raw.strip().startswith("{"):
+            try:
+                data = json.loads(raw)
+                return {
+                    "reply": data.get("reply", raw),
+                    "advance": bool(data.get("advance", False)),
+                    "slots_update": data.get("slots_update", {}),
+                    "outputs_update": data.get("outputs_update", {}),
+                }
+            except json.JSONDecodeError:
+                pass
+
+        return {"reply": raw, "advance": False, "slots_update": {}, "outputs_update": {}}
+
+    def _build_select_actions(self, state_cfg: dict[str, Any]) -> list[dict[str, Any]]:
+        """为 select 动作构建选项按钮。"""
+        skill_type = state_cfg.get("skill_type", "")
+        actions = []
+        if self.orch:
+            for info in self.orch.list_skills():
+                name = info.get("name", "")
+                inferred = "other"
+                if "topic" in name:
+                    inferred = "topic"
+                elif "attitude" in name:
+                    inferred = "attitude"
+                elif "emotion" in name:
+                    inferred = "emotion"
+                elif "genre" in name:
+                    inferred = "genre"
+                elif "rule_persona" in name:
+                    inferred = "rule_persona"
+                elif "script_composer" in name:
+                    inferred = "script_composer"
+
+                if inferred == skill_type:
+                    actions.append(
+                        {"action": "select_skill", "label": name, "value": name}
+                    )
+        return actions
+
+    @staticmethod
+    def _error_response(session_id: str, state: str, content: str) -> dict[str, Any]:
         return {
-            "type": "skill_output",
-            "content": output,
-            "advance": True,
-            "skill_name": skill_name,
+            "session_id": session_id,
+            "type": "error",
+            "content": content,
+            "workflow_state": state,
+            "skill_name": None,
+            "next_actions": None,
         }
-
-    # ------------------------------------------------------------------ #
-    # 辅助方法
-    # ------------------------------------------------------------------ #
-    def _find_step(self, step_id: str) -> dict[str, Any]:
-        for s in self.workflow_steps:
-            if s["id"] == step_id:
-                return s
-        return self.workflow_steps[0]
-
-    def _get_next_step(self, current_id: str) -> dict[str, Any] | None:
-        for i, s in enumerate(self.workflow_steps):
-            if s["id"] == current_id and i + 1 < len(self.workflow_steps):
-                return self.workflow_steps[i + 1]
-        return None
-
-    def _list_skills_by_type(self, skill_type: str | None) -> list[dict[str, Any]]:
-        """列出指定类型的可用 skills。"""
-        if self.orch is None or skill_type is None:
-            return []
-        skills = self.orch.list_skills()
-        result = []
-        for s in skills:
-            info = {"name": s.get("name", ""), "description": s.get("description", "")}
-            name = info["name"]
-            inferred_type = "other"
-            if "topic" in name:
-                inferred_type = "topic"
-            elif "attitude" in name:
-                inferred_type = "attitude"
-            elif "emotion" in name:
-                inferred_type = "emotion"
-            elif "genre" in name:
-                inferred_type = "genre"
-            elif "rule_persona" in name:
-                inferred_type = "rule_persona"
-            elif "script_composer" in name:
-                inferred_type = "script_composer"
-            if inferred_type == skill_type:
-                result.append(info)
-        return result
 
 
 # ------------------------------------------------------------------ #
@@ -511,8 +461,10 @@ def _get_engine() -> ProWorkflowEngine:
     if _workflow_engine is None:
         if state.orch is None or state.memory is None:
             raise HTTPException(status_code=503, detail="服务未就绪")
-        steps = _load_workflow()
-        _workflow_engine = ProWorkflowEngine(orch=state.orch, memory=state.memory, workflow_steps=steps)
+        workflow = _load_workflow()
+        _workflow_engine = ProWorkflowEngine(
+            orch=state.orch, memory=state.memory, workflow=workflow
+        )
     return _workflow_engine
 
 
@@ -526,7 +478,7 @@ async def pro_chat(
 ) -> ProChatResponse:
     """专业版 Wizard 对话入口。
 
-    接收用户消息，推进工作流，返回引导消息或 Skill 输出。
+    接收用户消息，推进工作流状态机，返回引导消息或 Skill 输出。
     """
     engine = _get_engine()
 
@@ -561,53 +513,76 @@ async def pro_chat_load(
 # ------------------------------------------------------------------ #
 # Admin 工作流管理 API
 # ------------------------------------------------------------------ #
-class WorkflowStep(BaseModel):
-    """工作流步骤模型。"""
+class WorkflowState(BaseModel):
+    """状态机中的单个状态。"""
 
-    id: str = Field(description="步骤唯一标识")
-    type: str = Field(description="步骤类型：validation / selection / skill")
-    message: str = Field(description="引导消息")
-    field: str | None = Field(default=None, description="validation 类型对应的字段名")
-    skill_type: str | None = Field(default=None, description="selection 类型对应的 skill 分类")
-    skill: str | None = Field(default=None, description="skill 类型调用的 skill 名称")
-    requires_selection: bool | None = Field(default=None, description="skill 步骤是否需要先选择")
-    selection_skill_type: str | None = Field(default=None, description="需要选择时的 skill 分类")
-    is_final: bool | None = Field(default=None, description="是否为最终步骤")
+    action: str = Field(description="动作类型：collect / select / call / aggregate")
+    message: str = Field(description="该状态下的引导/提示消息")
+    slot: str | None = Field(default=None, description="collect 动作对应的槽位名")
+    skill_type: str | None = Field(default=None, description="select 动作对应的 skill 分类")
+    skill: str | None = Field(default=None, description="call 动作调用的 skill 名称")
 
 
-class WorkflowConfigResponse(BaseModel):
-    """工作流配置响应。"""
+class WorkflowTransition(BaseModel):
+    """状态转移配置。"""
 
-    steps: list[WorkflowStep] = Field(description="工作流步骤列表")
+    next: str | None = Field(default=None, description="下一个状态 id，null 表示结束")
 
 
-@router.get("/admin/workflow", response_model=WorkflowConfigResponse)
+class WorkflowConfig(BaseModel):
+    """完整工作流配置。"""
+
+    initial_state: str = Field(description="初始状态 id")
+    states: dict[str, WorkflowState] = Field(description="所有状态定义")
+    transitions: dict[str, WorkflowTransition] = Field(description="状态转移表")
+
+
+@router.get("/admin/workflow", response_model=WorkflowConfig)
 async def admin_get_workflow(
     _admin: str = Depends(require_admin),
-) -> WorkflowConfigResponse:
+) -> WorkflowConfig:
     """获取当前专业版工作流配置（仅管理员）。"""
-    steps = _load_workflow()
-    return WorkflowConfigResponse(steps=[WorkflowStep(**s) for s in steps])
+    config = _load_workflow()
+    return WorkflowConfig(**config)
 
 
 @router.put("/admin/workflow")
 async def admin_update_workflow(
-    request: WorkflowConfigResponse,
+    request: WorkflowConfig,
     _admin: str = Depends(require_admin),
 ) -> dict[str, bool]:
     """更新专业版工作流配置（仅管理员）。"""
-    steps = []
-    for i, s in enumerate(request.steps):
-        step = s.model_dump(exclude_none=True)
-        if not step.get("id"):
-            raise HTTPException(status_code=400, detail=f"第 {i + 1} 步缺少 id")
-        if step.get("type") not in {"validation", "selection", "skill"}:
-            raise HTTPException(status_code=400, detail=f"第 {i + 1} 步 type 非法")
-        steps.append(step)
+    config = request.model_dump()
 
-    _save_workflow(steps)
+    # 校验
+    states = config.get("states", {})
+    transitions = config.get("transitions", {})
+    initial_state = config.get("initial_state", "")
 
-    # 刷新引擎实例使新配置生效
+    if not states:
+        raise HTTPException(status_code=400, detail="states 不能为空")
+    if initial_state not in states:
+        raise HTTPException(status_code=400, detail="initial_state 必须存在于 states")
+
+    valid_actions = {"collect", "select", "call", "aggregate"}
+    for state_id, s in states.items():
+        action = s.get("action", "")
+        if action not in valid_actions:
+            raise HTTPException(status_code=400, detail=f"状态 {state_id} 的 action 非法")
+        if action == "collect" and not s.get("slot"):
+            raise HTTPException(status_code=400, detail=f"状态 {state_id} 为 collect 但缺少 slot")
+        if action == "select" and not s.get("skill_type"):
+            raise HTTPException(status_code=400, detail=f"状态 {state_id} 为 select 但缺少 skill_type")
+        if action == "call" and not s.get("skill"):
+            raise HTTPException(status_code=400, detail=f"状态 {state_id} 为 call 但缺少 skill")
+
+    for state_id in states:
+        if state_id not in transitions:
+            raise HTTPException(status_code=400, detail=f"状态 {state_id} 缺少 transition")
+
+    _save_workflow(config)
+
+    # 刷新引擎实例
     global _workflow_engine
     _workflow_engine = None
 

@@ -83,6 +83,7 @@ class AgentOrchestrator:
                 skill.retriever = self.retriever
             if self.memory is not None:
                 skill.memory = self.memory
+            skill.orchestrator = self
         self.tools.append(skill)
         self._agent = None
         logger.info("Registered skill: %s", skill.name)

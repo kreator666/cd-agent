@@ -574,6 +574,13 @@ async function loadPersonas() {
   }
 }
 
+function updateTeamCount() {
+  const coreSkillTypes = ['topic', 'attitude', 'emotion', 'genre'];
+  const coreMembers = allSkills.filter(s => coreSkillTypes.includes(s.skill_type)).length;
+  const totalMembers = 1 + coreMembers + personas.length; // 1=Get达人
+  $('#teamCount').textContent = `（${totalMembers}）`;
+}
+
 function updatePersonaUI() {
   const sel = $('#persona-select');
   if (sel) {
@@ -601,6 +608,7 @@ function updatePersonaUI() {
     menuBadge.style.display = 'none';
     personaPreview.textContent = '未选择画像';
   }
+  updateTeamCount();
   // Render persona list in team menu
   const teamPersonas = $('#teamPersonas');
   if (teamPersonas) {
@@ -657,9 +665,8 @@ function renderTeamSkills() {
   });
   container.innerHTML = html || '<div style="padding:8px;color:#999;font-size:13px;">暂无可用 Skill</div>';
 
-  // Update team count
-  const totalMembers = 1 + 1 + allSkills.length; // user + get达人 + skills
-  $('#teamCount').textContent = `（${totalMembers}）`;
+  // Update team count: 1(Get达人) + 核心写作专家(topic/attitude/emotion/genre) + 人物画像数
+  updateTeamCount();
 }
 
 function toggleSkillChip(el) {

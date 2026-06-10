@@ -198,10 +198,12 @@ class PersonaData(BaseModel):
     org_id: str | None = Field(default=None, description="组织 ID")
     creator_id: str = Field(description="创建者用户 ID")
     name: str = Field(description="画像名称")
+    description: str | None = Field(default=None, description="画像描述")
     rule_content: dict[str, Any] = Field(
         default_factory=dict, description="结构化写作约束"
     )
     skill_id: str | None = Field(default=None, description="关联的 rule 类型 Skill ID")
+    reference_files: list[dict[str, Any]] | None = Field(default=None, description="参考文件列表")
     is_active: bool = Field(default=True, description="是否启用")
     usage_count: int = Field(default=0, description="累计使用次数")
     created_at: datetime | None = Field(default=None, description="创建时间")

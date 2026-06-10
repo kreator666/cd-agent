@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
+from comedy_agent.core.config import settings
 from comedy_agent.memory.models import PersonaData
 
 router = APIRouter(tags=["pro"])
@@ -34,16 +36,20 @@ class PersonaCreateRequest(BaseModel):
     """创建人物画像请求。"""
 
     name: str = Field(description="画像名称")
-    rule_content: dict = Field(description="结构化写作规则约束")
+    description: str | None = Field(default=None, description="画像描述")
+    rule_content: dict = Field(default_factory=dict, description="结构化写作规则约束")
     skill_id: str | None = Field(default=None, description="关联的 rule 类型 Skill ID")
+    reference_files: list[dict] | None = Field(default=None, description="参考文件列表")
 
 
 class PersonaUpdateRequest(BaseModel):
     """更新人物画像请求。"""
 
     name: str | None = Field(default=None, description="画像名称")
+    description: str | None = Field(default=None, description="画像描述")
     rule_content: dict | None = Field(default=None, description="结构化写作规则约束")
     skill_id: str | None = Field(default=None, description="关联的 rule 类型 Skill ID")
+    reference_files: list[dict] | None = Field(default=None, description="参考文件列表")
     is_active: bool | None = Field(default=None, description="是否启用")
 
 
@@ -98,14 +104,16 @@ async def list_personas(user_id: str = Depends(get_current_user)) -> list[Person
 async def create_persona(
     request: PersonaCreateRequest, user_id: str = Depends(get_current_user)
 ) -> PersonaData:
-    """创建人物画像。"""
+    """创建人物画像。仅当前用户自用。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
     persona = PersonaData(
         creator_id=user_id,
         name=request.name,
+        description=request.description,
         rule_content=request.rule_content,
         skill_id=request.skill_id,
+        reference_files=request.reference_files,
     )
     return state.memory.save_persona(persona)
 
@@ -142,13 +150,50 @@ async def update_persona(
         raise HTTPException(status_code=403, detail="无权修改该人物画像")
     if request.name is not None:
         existing.name = request.name
+    if request.description is not None:
+        existing.description = request.description
     if request.rule_content is not None:
         existing.rule_content = request.rule_content
     if request.skill_id is not None:
         existing.skill_id = request.skill_id
+    if request.reference_files is not None:
+        existing.reference_files = request.reference_files
     if request.is_active is not None:
         existing.is_active = request.is_active
     return state.memory.save_persona(existing)
+
+
+@router.post("/pro/upload")
+async def upload_reference_file(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+) -> dict[str, str]:
+    """上传画像参考文件。文件保存在用户私有目录下，仅该用户可访问。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    upload_dir = Path(settings.data_dir) / "references" / user_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(file.filename or "unknown").name
+    save_path = upload_dir / safe_name
+    counter = 1
+    original_save_path = save_path
+    while save_path.exists():
+        stem = original_save_path.stem
+        suffix = original_save_path.suffix
+        save_path = upload_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    content = await file.read()
+    save_path.write_bytes(content)
+
+    return {
+        "filename": safe_name,
+        "saved_name": save_path.name,
+        "path": str(save_path),
+        "size": str(len(content)),
+    }
 
 
 @router.delete("/pro/personas/{persona_id}")

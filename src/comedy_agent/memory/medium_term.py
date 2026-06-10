@@ -121,6 +121,23 @@ class SQLMemoryStore(MemoryStore):
                 )
                 conn.commit()
                 logger.info("Migrated user_conversations: added extra_metadata column")
+            # personas 表缺失列迁移
+            persona_columns = [
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(personas)")
+            ]
+            if "description" not in persona_columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE personas ADD COLUMN description VARCHAR(512)"
+                )
+                conn.commit()
+                logger.info("Migrated personas: added description column")
+            if "reference_files" not in persona_columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE personas ADD COLUMN reference_files JSON"
+                )
+                conn.commit()
+                logger.info("Migrated personas: added reference_files column")
         self.Session = sessionmaker(bind=self.engine)
         # 同步：为所有已认证大V创建缺失的 IP 风格记录
         self._sync_verified_users_to_ip_styles()
@@ -1336,8 +1353,10 @@ class SQLMemoryStore(MemoryStore):
                     org_id=persona.org_id,
                     creator_id=persona.creator_id,
                     name=persona.name,
+                    description=persona.description,
                     rule_content=persona.rule_content,
                     skill_id=persona.skill_id,
+                    reference_files=persona.reference_files,
                     is_active=persona.is_active if persona.is_active is not None else True,
                     usage_count=persona.usage_count or 0,
                 )
@@ -1345,8 +1364,10 @@ class SQLMemoryStore(MemoryStore):
             else:
                 row.org_id = persona.org_id
                 row.name = persona.name
+                row.description = persona.description
                 row.rule_content = persona.rule_content
                 row.skill_id = persona.skill_id
+                row.reference_files = persona.reference_files
                 row.is_active = persona.is_active if persona.is_active is not None else True
                 row.usage_count = persona.usage_count or 0
                 row.updated_at = self._now()
@@ -1357,8 +1378,10 @@ class SQLMemoryStore(MemoryStore):
                 org_id=row.org_id,
                 creator_id=row.creator_id,
                 name=row.name,
+                description=row.description,
                 rule_content=row.rule_content,
                 skill_id=row.skill_id,
+                reference_files=row.reference_files,
                 is_active=row.is_active,
                 usage_count=row.usage_count,
                 created_at=row.created_at,
@@ -1375,8 +1398,10 @@ class SQLMemoryStore(MemoryStore):
                 org_id=row.org_id,
                 creator_id=row.creator_id,
                 name=row.name,
+                description=row.description,
                 rule_content=row.rule_content,
                 skill_id=row.skill_id,
+                reference_files=row.reference_files,
                 is_active=row.is_active,
                 usage_count=row.usage_count,
                 created_at=row.created_at,
@@ -1401,8 +1426,10 @@ class SQLMemoryStore(MemoryStore):
                     org_id=r.org_id,
                     creator_id=r.creator_id,
                     name=r.name,
+                    description=r.description,
                     rule_content=r.rule_content,
                     skill_id=r.skill_id,
+                    reference_files=r.reference_files,
                     is_active=r.is_active,
                     usage_count=r.usage_count,
                     created_at=r.created_at,

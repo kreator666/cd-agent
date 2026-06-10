@@ -482,11 +482,17 @@ class Persona(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False, comment="画像名称")
+    description: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="画像描述"
+    )
     rule_content: Mapped[dict[str, Any]] = mapped_column(
         JSON, default=dict, nullable=False, comment="结构化写作约束 JSON"
     )
     skill_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, comment="关联的 rule 类型 Skill ID"
+    )
+    reference_files: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True, comment="参考文件列表"
     )
     is_active: Mapped[bool] = mapped_column(
         default=True, nullable=False, comment="是否启用"

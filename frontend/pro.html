@@ -154,6 +154,19 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .nav-sidebar a:hover{background:#f0f1f4;}
 .nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
 
+/* File upload in persona modal */
+.upload-area{margin-top:4px;}
+.upload-drop{border:2px dashed var(--line-dark);border-radius:14px;padding:18px;text-align:center;cursor:pointer;transition:.2s;background:#fafbfc;}
+.upload-drop:hover{border-color:var(--orange);background:#fff8f5;}
+.upload-drop svg{display:block;margin:0 auto;}
+.file-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+.file-tag{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:#f5f6f8;border-radius:10px;font-size:13px;font-weight:600;color:#444;}
+.file-tag .file-remove{color:#999;cursor:pointer;font-size:16px;padding:0 4px;border-radius:4px;}
+.file-tag .file-remove:hover{color:#e94560;background:#ffeaea;}
+.file-tag .file-status{font-size:11px;color:#18a058;font-weight:700;}
+.file-tag .file-status.pending{color:#ff764a;}
+.file-tag .file-status.error{color:#e94560;}
+
 /* ========== Traditional Chat Interface (Left Panel) ========== */
 .chat-config-bar{display:flex;gap:10px;padding:0 0 10px;border-bottom:1px solid var(--line);margin-bottom:6px;flex-shrink:0;}
 .config-item{font-size:12px;font-weight:650;color:var(--muted);background:var(--light);padding:5px 12px;border-radius:10px;cursor:pointer;transition:.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%;}
@@ -286,7 +299,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       </div>
       <button class="history" data-action="history"><svg viewBox="0 0 24 24"><path d="M7 7a7 7 0 1 1-1.4 8"/><path d="M7 3v4h4"/><path d="M12 8v5l3 2"/></svg>查看历史记录</button>
       <article class="editor" id="editor">
-        <div class="editor-empty">选择人物画像和 Skill 后，在左侧描述需求并发送，生成的剧本将显示在这里。</div>
+        <div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>
       </article>
       <div class="face"></div>
     </section>
@@ -336,17 +349,21 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
   <!-- Create persona modal -->
   <div class="modal-overlay" id="persona-modal">
     <div class="modal-box">
-      <h3>新建人物画像</h3>
+      <h3>新建人物画像 <span style="font-size:12px;color:#999;font-weight:600;">（仅自己可用）</span></h3>
       <input type="text" id="p-name" placeholder="画像名称，如：毒舌职场侠">
-      <label style="font-size:.8125rem;color:#666;"><input type="checkbox" id="p-short"> 偏好短句（每句不超过15字）</label>
-      <input type="text" id="p-forbidden" placeholder="禁用词，用逗号分隔">
-      <select id="p-pace">
-        <option value="fast">快节奏</option>
-        <option value="medium" selected>中节奏</option>
-        <option value="slow">慢节奏</option>
-      </select>
-      <label style="font-size:.8125rem;color:#666;"><input type="checkbox" id="p-hook"> 开头必须有钩子</label>
-      <textarea id="p-example" placeholder="风格示例（可选）" style="height:60px;"></textarea>
+      <textarea id="p-description" placeholder="画像描述：描述这个画像的特点、风格或用途…" style="min-height:80px;"></textarea>
+
+      <!-- 参考文件上传 -->
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="p-files" multiple style="display:none;" onchange="handleFileSelect(this)">
+        <div class="upload-drop" onclick="$('#p-files').click()" ondragover="event.preventDefault();" ondrop="handleFileDrop(event)">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div style="font-size:13px;color:#888;font-weight:600;margin-top:6px;">点击或拖拽上传参考文件</div>
+          <div style="font-size:11px;color:#aaa;margin-top:2px;">支持 PDF、Word、TXT、Markdown</div>
+        </div>
+      </div>
+      <div class="file-list" id="fileList"></div>
+
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closePersonaModal()">取消</button>
         <button class="btn-save" onclick="createPersona()">保存</button>
@@ -657,7 +674,7 @@ function newConversation() {
   $('#outlinePreview').textContent = '点击设置选题大纲';
 
   // Clear editor
-  $('#editor').innerHTML = '<div class="editor-empty">选择人物画像和 Skill 后，在左侧描述需求并发送，生成的剧本将显示在这里。</div>';
+  $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
 
   setTimeout(() => {
     $('#pageTitle').classList.remove('editing');
@@ -713,7 +730,7 @@ function loadConversation(id) {
   if (c.editorHtml) {
     $('#editor').innerHTML = c.editorHtml;
   } else {
-    $('#editor').innerHTML = '<div class="editor-empty">选择人物画像和 Skill 后，在左侧描述需求并发送，生成的剧本将显示在这里。</div>';
+    $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
   }
   updatePersonaUI();
   renderTeamSkills();
@@ -735,7 +752,7 @@ async function sendPrompt() {
     return;
   }
   if (!selectedPersonaId) {
-    toast('请先选择人物画像');
+    toast('请先选择人物画像（点击顶部 🎭 配置条）');
     $('#teamBtn').click();
     return;
   }
@@ -855,26 +872,89 @@ function typewriteScript(text) {
 }
 
 /* ========== Persona Modal ========== */
+let pendingFiles = [];
+
 function openPersonaModal() {
   $('#persona-modal').classList.add('active');
   closeAll();
 }
-function closePersonaModal() { $('#persona-modal').classList.remove('active'); }
+function closePersonaModal() {
+  $('#persona-modal').classList.remove('active');
+  // Reset form
+  $('#p-name').value = '';
+  $('#p-description').value = '';
+  pendingFiles = [];
+  renderFileList();
+}
+
+function handleFileSelect(input) {
+  if (!input.files) return;
+  Array.from(input.files).forEach(file => addPendingFile(file));
+  input.value = '';
+}
+
+function handleFileDrop(e) {
+  e.preventDefault();
+  if (!e.dataTransfer) return;
+  Array.from(e.dataTransfer.files).forEach(file => addPendingFile(file));
+}
+
+function addPendingFile(file) {
+  const item = { file, status: 'pending', result: null };
+  pendingFiles.push(item);
+  renderFileList();
+  uploadFile(item);
+}
+
+async function uploadFile(item) {
+  const formData = new FormData();
+  formData.append('file', item.file);
+  try {
+    const res = await apiFetch('/pro/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    item.status = 'done';
+    item.result = data;
+    renderFileList();
+    toast('文件上传成功：' + data.filename);
+  } catch (err) {
+    item.status = 'error';
+    renderFileList();
+    toast('文件上传失败：' + err.message);
+  }
+}
+
+function removeFile(index) {
+  pendingFiles.splice(index, 1);
+  renderFileList();
+}
+
+function renderFileList() {
+  const container = $('#fileList');
+  if (!pendingFiles.length) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = pendingFiles.map((f, i) => {
+    const statusClass = f.status;
+    const statusText = f.status === 'done' ? '已上传' : (f.status === 'error' ? '失败' : '上传中…');
+    return `<div class="file-tag"><span>${escapeHtml(f.file.name)}</span><span class="file-status ${statusClass}">${statusText}</span><span class="file-remove" onclick="removeFile(${i})">×</span></div>`;
+  }).join('');
+}
 
 async function createPersona() {
   const name = $('#p-name').value.trim();
   if (!name) { toast('请输入画像名称'); return; }
-  const rule_content = {
-    prefer_short_sentence: $('#p-short').checked,
-    forbidden_words: $('#p-forbidden').value.split(',').map(s => s.trim()).filter(Boolean),
-    sentence_pace: $('#p-pace').value,
-    opening_hook: $('#p-hook').checked,
-    example_style: $('#p-example').value.trim(),
-  };
+  const description = $('#p-description').value.trim();
+  const reference_files = pendingFiles
+    .filter(f => f.status === 'done' && f.result)
+    .map(f => ({ filename: f.result.filename, path: f.result.path, size: f.result.size }));
   try {
     await apiFetch('/pro/personas', {
       method: 'POST',
-      body: JSON.stringify({ name, rule_content })
+      body: JSON.stringify({ name, description, reference_files })
     });
     closePersonaModal();
     loadPersonas();
@@ -950,7 +1030,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tool = b.dataset.tool;
     if (tool === 'copy') {
       const text = $('#editor').innerText;
-      if (!text || text.includes('选择人物画像')) return;
+      if (!text || text.includes('在左侧与写作团队对话')) return;
       navigator.clipboard && navigator.clipboard.writeText(text);
       toast('正文已复制');
     }

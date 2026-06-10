@@ -20,9 +20,10 @@
     button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
 
     /* Topbar */
-    .topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
-    .topbar .back{display:flex;align-items:center;gap:8px;color:#333;font-weight:650;border-radius:16px;padding:9px 10px;transition:.24s ease;}
-    .topbar .back:hover{background:#f7f8fa;transform:translateY(-1px)}
+    .topbar{height:76px;display:grid;grid-template-columns:420px 1fr 420px;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+    .brand{display:flex;align-items:center;gap:10px;color:#333;font-weight:650;border-radius:18px;padding:8px 10px;margin-left:-10px;transition:.24s ease;}
+    .brand:hover{background:#f7f8fa;transform:translateY(-1px)}
+    .brand-avatar{width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:linear-gradient(135deg,#f1d6a4,#1e1e1e);box-shadow:0 2px 7px rgba(0,0,0,.14);}
     .title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
     .actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
     .action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
@@ -40,37 +41,60 @@
     .main-inner{max-width:900px;margin:0 auto;padding:24px 20px;}
 
     /* ===== Me page specific ===== */
-    .page-title{font-size:1.25rem;font-weight:700;color:#232323;margin-bottom:1.25rem;}
-    .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem;}
-    .menu-card{background:#fff;border-radius:12px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid var(--line);text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:0.5rem;}
-    .menu-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+    .page-title{font-size:18px;font-weight:780;color:#232323;margin-bottom:16px;}
+    .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
+    .menu-card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:all .2s;border:1px solid var(--line);text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:6px;}
+    .menu-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:transparent;}
     .menu-card .icon{font-size:2rem;}
-    .menu-card .title{font-size:1.125rem;font-weight:700;color:#232323;}
-    .menu-card .desc{font-size:0.875rem;color:#666;}
-    .card{background:#fff;border-radius:12px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);border:1px solid var(--line);}
-    .card label{font-size:.875rem;color:#666;display:block;margin-bottom:.25rem;}
-    .card select,.card input{width:100%;padding:.5rem;border:1px solid var(--line-dark);border-radius:8px;font-size:.875rem;outline:none;}
-    .card select:focus,.card input:focus{border-color:#ff764a;}
-    .btn{background:#2c7da0;color:#fff;padding:.5rem 1rem;border:none;border-radius:8px;cursor:pointer;font-size:.875rem;font-weight:650;}
-    .btn:hover{background:#1f5a75;}
-    table{width:100%;border-collapse:collapse;font-size:.875rem;}
-    th,td{padding:.5rem;text-align:left;}
-    th{color:#666;font-weight:600;border-bottom:1px solid var(--line);}
-    td{border-bottom:1px solid #f0f0f0;}
+    .menu-card .title{font-size:15px;font-weight:760;color:#232323;}
+    .menu-card .desc{font-size:13px;font-weight:600;color:var(--muted);line-height:1.5;}
+    .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid var(--line);}
+    .card label{font-size:13px;font-weight:650;color:#666;display:block;margin-bottom:6px;}
+    .card select,.card input{width:100%;padding:10px 12px;border:1.5px solid var(--line-dark);border-radius:10px;font-size:14px;font-weight:600;font-family:inherit;outline:none;color:var(--ink);background:var(--light);}
+    .card select:focus,.card input:focus{border-color:var(--orange);}
+    .btn{background:#15171a;color:#fff;padding:10px 18px;border:none;border-radius:12px;cursor:pointer;font-size:14px;font-weight:750;transition:.15s;}
+    .btn:hover{background:#333;}
+    .btn-sm{background:var(--light);color:#555;padding:6px 14px;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;transition:.15s;}
+    .btn-sm:hover{background:#e5e7eb;}
+    .btn-warn{background:#fff7e6;color:#d48806;border:1px solid #ffd591;}
+    .btn-warn:hover{background:#fff0d1;}
+    .btn-success{background:#e6fffb;color:#13c2c2;border:1px solid #87e8de;}
+    .btn-success:hover{background:#d8f9f5;}
+    .btn-danger{background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;}
+    .btn-danger:hover{background:#ffe8e6;}
+    table{width:100%;border-collapse:collapse;font-size:14px;}
+    th,td{padding:10px 8px;text-align:left;}
+    th{color:#666;font-weight:700;border-bottom:1.5px solid var(--line);font-size:13px;}
+    td{border-bottom:1px solid #f0f0f0;font-weight:600;color:#444;}
+    .token-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:#fff2ed;border-radius:20px;font-size:13px;font-weight:700;color:#ff764a;}
+
+    /* Modal overlay & box */
+    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;}
+    .modal-overlay.active{display:flex;}
+    .modal-box{background:#fff;padding:24px;border-radius:14px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
+    .modal-box h3{margin:0;font-size:17px;font-weight:800;color:#232323;}
+    .modal-box input,.modal-box textarea,.modal-box select{padding:10px 12px;border:1.5px solid var(--line-dark);border-radius:10px;font-size:14px;font-weight:600;font-family:inherit;outline:none;width:100%;background:var(--light);}
+    .modal-box input:focus,.modal-box textarea:focus,.modal-box select:focus{border-color:var(--orange);}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+    .btn-cancel{padding:8px 16px;border:none;border-radius:10px;background:#f0f1f4;color:#555;font-size:14px;font-weight:700;cursor:pointer;}
+    .btn-cancel:hover{background:#e5e7eb;}
+    .btn-save{padding:8px 16px;border:none;border-radius:10px;background:#15171a;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
+    .btn-save:hover{background:#333;}
 
     /* Responsive */
-    @media(max-width:768px){.main{padding-left:0;}.menu-grid{grid-template-columns:1fr;}}
+    @media(max-width:1100px){.topbar{grid-template-columns:1fr;gap:16px;height:auto;padding:24px}.main{padding-left:0;}.menu-grid{grid-template-columns:1fr;}}
     </style>
 </head>
 <body>
 <div class="app">
   <header class="topbar">
-    <button class="back" onclick="goHome()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-      <span>首页</span>
+    <button class="brand" onclick="goHome()">
+      <span class="brand-avatar"></span>
+      <span>Comedy Agent</span>
     </button>
     <div class="title">👤 我的</div>
     <div class="actions">
+      <span class="token-pill" id="token-balance-pill">💰 --</span>
       <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
     </div>
   </header>
@@ -119,10 +143,10 @@
         <div class="page-title">🏅 认证审核</div>
         <div class="card">
           <div style="margin-bottom:1rem;">
-            <button class="btn" onclick="loadVerifications('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:.5rem;">待审核</button>
-            <button class="btn" onclick="loadVerifications('approved')" style="background:#e6fffb;color:#13c2c2;border:1px solid #87e8de;margin-right:.5rem;">已通过</button>
-            <button class="btn" onclick="loadVerifications('rejected')" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;margin-right:.5rem;">已拒绝</button>
-            <button class="btn" onclick="loadVerifications()" style="background:var(--light);color:#666;border:1px solid var(--line-dark);">全部</button>
+            <button class="btn-sm btn-warn" onclick="loadVerifications('pending')" style="margin-right:.5rem;">待审核</button>
+            <button class="btn-sm btn-success" onclick="loadVerifications('approved')" style="margin-right:.5rem;">已通过</button>
+            <button class="btn-sm btn-danger" onclick="loadVerifications('rejected')" style="margin-right:.5rem;">已拒绝</button>
+            <button class="btn-sm" onclick="loadVerifications()">全部</button>
           </div>
           <table>
             <thead><tr><th>ID</th><th>用户ID</th><th>申请理由</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
@@ -135,26 +159,22 @@
       <div id="verified-knowledge-section" style="display:none;margin-top:1.5rem;">
         <div class="page-title">📚 我的专属知识库</div>
         <div class="card">
-          <div style="margin-bottom:1rem;padding:.75rem;background:#f6ffed;border:1px solid #b7eb8f;border-radius:8px;color:#389e0d;font-size:.875rem;">
+          <div style="margin-bottom:1rem;padding:.75rem;background:#f6ffed;border:1px solid #b7eb8f;border-radius:10px;color:#389e0d;font-size:.875rem;font-weight:600;">
             ✅ 你已是认证大V，可以上传专属知识库。你的知识库内容将在创作时自动作为参考。
           </div>
           <div style="margin-bottom:1rem;">
             <label>上传文档</label>
-            <input type="file" id="knowledge-files" multiple accept=".txt,.md,.pdf,.docx" style="font-size:.875rem;">
+            <input type="file" id="knowledge-files" multiple accept=".txt,.md,.pdf,.docx" style="font-size:.875rem;background:#fff;padding:8px;">
           </div>
           <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;">
-            <select id="knowledge-kind" style="padding:.375rem .5rem;border:1px solid var(--line-dark);border-radius:8px;font-size:.875rem;">
-              <option value="">种类</option><option value="standup">脱口秀</option><option value="sketch">小品</option><option value="crosstalk">相声</option><option value="sitcom">情景喜剧</option><option value="manzai">漫才</option><option value="japanese_sketch">日式短剧</option>
-            </select>
-            <select id="knowledge-style" style="padding:.375rem .5rem;border:1px solid var(--line-dark);border-radius:8px;font-size:.875rem;">
-              <option value="">风格</option><option value="traditional">传统</option><option value="modern">现代</option><option value="自嘲">自嘲</option><option value="讽刺">讽刺</option>
-            </select>
-            <input type="text" id="knowledge-topic" placeholder="主题/话题" style="padding:.375rem .5rem;border:1px solid var(--line-dark);border-radius:8px;font-size:.875rem;">
+            <select id="knowledge-kind"><option value="">种类</option><option value="standup">脱口秀</option><option value="sketch">小品</option><option value="crosstalk">相声</option><option value="sitcom">情景喜剧</option><option value="manzai">漫才</option><option value="japanese_sketch">日式短剧</option></select>
+            <select id="knowledge-style"><option value="">风格</option><option value="traditional">传统</option><option value="modern">现代</option><option value="自嘲">自嘲</option><option value="讽刺">讽刺</option></select>
+            <input type="text" id="knowledge-topic" placeholder="主题/话题" style="width:auto;min-width:140px;">
           </div>
           <button class="btn" onclick="uploadKnowledge()">上传</button>
-          <div id="knowledge-upload-result" style="margin-top:.5rem;font-size:.875rem;"></div>
+          <div id="knowledge-upload-result" style="margin-top:.5rem;font-size:.875rem;font-weight:600;"></div>
           <div style="margin-top:1.5rem;">
-            <div style="font-size:.875rem;color:#666;margin-bottom:.5rem;">已上传文档</div>
+            <div style="font-size:.875rem;color:#666;margin-bottom:.5rem;font-weight:650;">已上传文档</div>
             <table>
               <thead><tr><th>文件名</th><th>种类</th><th>状态</th><th>操作</th></tr></thead>
               <tbody id="my-knowledge-list"><tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
@@ -178,6 +198,7 @@
     </div>
   </main>
 </div>
+
 <script src="/static/common.js"></script>
 <script>
     requireAuth();
@@ -246,9 +267,9 @@
                 const date = v.applied_at ? new Date(v.applied_at).toLocaleString('zh-CN') : '--';
                 let actions = '';
                 if (v.status === 'pending') {
-                    actions = `<button style="background:#16c79a;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:.75rem;cursor:pointer;margin-right:4px;" onclick="reviewVerify(${v.id}, true)">通过</button><button style="background:#e94560;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:.75rem;cursor:pointer;" onclick="reviewVerify(${v.id}, false)">拒绝</button>`;
+                    actions = `<button style="background:#16c79a;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;margin-right:4px;" onclick="reviewVerify(${v.id}, true)">通过</button><button style="background:#e94560;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;" onclick="reviewVerify(${v.id}, false)">拒绝</button>`;
                 }
-                tr.innerHTML = `<td>${v.id}</td><td>${escapeHtml(v.user_id)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(v.reason || '')}">${escapeHtml(v.reason || '--')}</td><td>${statusText}</td><td style="font-size:.75rem;color:#999;">${date}</td><td>${actions}</td>`;
+                tr.innerHTML = `<td>${v.id}</td><td>${escapeHtml(v.user_id)}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(v.reason || '')}">${escapeHtml(v.reason || '--')}</td><td>${statusText}</td><td style="font-size:12px;color:#999;font-weight:650;">${date}</td><td>${actions}</td>`;
                 tbody.appendChild(tr);
             });
         } catch (err) {
@@ -285,7 +306,7 @@
                 const tr = document.createElement('tr');
                 const statusMap = { pending: '⏳ 待入库', ingested: '✅ 已入库', failed: '❌ 失败' };
                 const statusText = statusMap[doc.status] || doc.status;
-                tr.innerHTML = `<td>${escapeHtml(doc.filename)}</td><td>${escapeHtml(doc.kind || '--')}</td><td>${statusText}</td><td><button style="background:#e94560;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:.75rem;cursor:pointer;" onclick="deleteKnowledge('${doc.doc_id}')">删除</button></td>`;
+                tr.innerHTML = `<td>${escapeHtml(doc.filename)}</td><td>${escapeHtml(doc.kind || '--')}</td><td>${statusText}</td><td><button style="background:#e94560;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;" onclick="deleteKnowledge('${doc.doc_id}')">删除</button></td>`;
                 tbody.appendChild(tr);
             });
         } catch (err) {
@@ -334,6 +355,16 @@
         }
     }
 
+    async function loadTokenBalance() {
+        try {
+            const res = await apiFetch('/me/wallet');
+            const data = await res.json();
+            document.getElementById('token-balance-pill').textContent = '💰 ' + (data.balance ?? '--');
+        } catch {
+            document.getElementById('token-balance-pill').textContent = '💰 --';
+        }
+    }
+
     const currentUser = getCurrentUserId();
     if (currentUser === 'admin') {
         document.getElementById('menu-knowledge-card').style.display = 'flex';
@@ -359,6 +390,7 @@
     checkVerifiedStatus();
     loadModels();
     loadModelConfig();
+    loadTokenBalance();
 </script>
 </body>
 </html>

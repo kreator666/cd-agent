@@ -893,15 +893,12 @@ function renderWorkflowStep(step, bindEvents = false) {
   const skillName = step.skill_name || 'Get达人';
 
   if (type === 'guide') {
-    let checklistHtml = '';
-    if (step.checklist && step.checklist.length > 0) {
-      checklistHtml = renderChecklist(step.checklist);
-    }
+    // 后端 reply 已包含结构化内容（流程列表 + 确认 + 下一步提示），不再单独渲染 checklist
     const actionsHtml = (step.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
     const contentHtml = content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
-    const html = `${checklistHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const html = `${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
     const msgDiv = addChatMessage('agent', 'Get达人', '创作向导', html);
     if (bindEvents) {
       msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {

@@ -278,11 +278,19 @@ class Skill(ComedySkill):
         return False
 
     def _action_fill_slot(self, slot_name: str, content: str, slots: dict[str, Any]) -> str:
-        """保存用户输入到核心槽位。"""
+        """保存用户输入到核心槽位，返回结构化回复（确认 + 流程列表 + 下一步提示）。"""
         slots[slot_name] = content
+        checklist = self._build_core_checklist(slots)
+        checklist_text = self._format_core_checklist(checklist)
+        next_hint = self._build_next_hint_from_core_checklist(checklist)
+        reply = (
+            f"✅ 已记录 {slot_name}：{content[:80]}{'...' if len(content) > 80 else ''}\n\n"
+            f"{checklist_text}\n\n"
+            f"{next_hint}"
+        )
         return json.dumps(
             {
-                "reply": f"✅ 已记录 {slot_name}：{content[:80]}{'...' if len(content) > 80 else ''}",
+                "reply": reply,
                 "advance": True,
                 "slots_update": {slot_name: content},
                 "outputs_update": {},
@@ -323,12 +331,14 @@ class Skill(ComedySkill):
         return '👉 所有维度已填写完成！请回复"生成"来生成最终剧本。'
 
     def _action_guide(self, slots: dict[str, Any], outputs: dict[str, Any]) -> str:
-        """生成下一步提示（checklist 由引擎层通过 step.checklist 单独渲染）。"""
+        """生成结构化回复（流程列表 + 下一步提示）。"""
         checklist = self._build_core_checklist(slots)
+        checklist_text = self._format_core_checklist(checklist)
         next_hint = self._build_next_hint_from_core_checklist(checklist)
+        reply = f"{checklist_text}\n\n{next_hint}"
         return json.dumps(
             {
-                "reply": next_hint,
+                "reply": reply,
                 "advance": False,
                 "slots_update": {},
                 "outputs_update": {},
@@ -345,8 +355,11 @@ class Skill(ComedySkill):
 
         if missing:
             missing_text = "、".join(missing)
+            checklist = self._build_core_checklist(slots)
+            checklist_text = self._format_core_checklist(checklist)
             reply = (
                 f"⚠️ 还有以下维度未填写：{missing_text}\n\n"
+                f"{checklist_text}\n\n"
                 f"请先使用 @{missing[0]} 输入相关内容，再回复\"生成\"。"
             )
             return json.dumps(

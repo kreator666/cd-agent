@@ -523,7 +523,7 @@ class Skill(ComedySkill):
         return '👉 下一步：所有维度已填写完成！请回复"生成"来生成最终剧本。'
 
     def _build_detailed_hint(self, checklist: list[dict[str, Any]], slots: dict[str, Any]) -> str:
-        """根据话题内容和当前缺失槽位，使用 LLM 动态生成填写建议。"""
+        """根据话题内容和当前缺失槽位生成填写建议：固定话术 + LLM 动态推理。"""
         topic = slots.get("话题", "")
         next_item = next(
             (item for item in checklist if not item["done"] and not item.get("optional")),
@@ -537,11 +537,13 @@ class Skill(ComedySkill):
                 return f"💡 建议：{self._SLOT_HINTS[next_slot]}"
             return "💡 建议：继续按流程填写，完成后即可生成最终剧本。"
 
-        # 态度节点使用固定建议，不调用 LLM
-        if next_slot == "态度":
-            return "💡 建议：你的态度是支持/反对？喜欢/讨厌？大声的说出来，朋友！"
+        # 固定话术映射
+        fixed_hints = {
+            "态度": "你的态度是支持/反对？喜欢/讨厌？大声的说出来，朋友！",
+        }
+        fixed = fixed_hints.get(next_slot, "")
 
-        # 偏见节点使用特殊规则调用 LLM 生成建议
+        # 构建 LLM prompt
         if next_slot == "偏见":
             system_prompt = (
                 "你是一位资深喜剧创作顾问。请根据用户提供的创作话题，"
@@ -552,7 +554,6 @@ class Skill(ComedySkill):
             )
             user_prompt = f"创作话题：{topic}\n请围绕这个话题，按照「理不歪笑不来」的原则，给出填写「偏见」的创意建议。"
         else:
-            # 其他节点使用通用 LLM prompt
             system_prompt = (
                 "你是一位资深喜剧创作顾问。请根据用户提供的创作话题，"
                 "给出针对下一个维度的简短填写建议。建议要有创意、贴合话题、能激发用户灵感，"
@@ -563,15 +564,19 @@ class Skill(ComedySkill):
                 f"下一步需要填写的维度：{next_slot}\n"
                 f"请围绕这个话题，给出填写「{next_slot}」的创意建议。"
             )
+
         try:
             hint = self._call_llm(system_prompt, user_prompt)
-            # 清理可能的空行和多余空格
             hint = hint.strip().replace("\n", " ").strip()
             if len(hint) > 120:
                 hint = hint[:117] + "..."
+            if fixed:
+                return f"💡 建议：{fixed}\n💡 {hint}"
             return f"💡 建议：{hint}"
         except Exception:
-            # LLM 调用失败时回退到固定模板
+            # LLM 调用失败时回退
+            if fixed:
+                return f"💡 建议：{fixed}"
             return f"💡 建议：{self._SLOT_HINTS.get(next_slot, '继续按流程填写，完成后即可生成最终剧本。')}"
 
     # ------------------------------------------------------------------ #

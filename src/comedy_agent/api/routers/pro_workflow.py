@@ -353,9 +353,13 @@ class ProWorkflowEngine:
 
             # 检查用户是否请求生成最终剧本
             trigger_words = ("生成", "生成剧本", "完成", "done", "finish")
-            if message.strip() in trigger_words:
+            clean_msg = message.strip().rstrip("。！.!?")
+            is_trigger = clean_msg in trigger_words or any(w in clean_msg for w in trigger_words)
+            if is_trigger:
+                # 排除 aggregate 自身，只检查创作步骤是否完成
                 required_done = all(
-                    item["done"] for item in checklist if not item.get("optional")
+                    item["done"] for item in checklist
+                    if not item.get("optional") and item["id"] != "aggregate"
                 )
                 if required_done:
                     # 自动切换到 aggregating 状态并执行
@@ -372,6 +376,25 @@ class ProWorkflowEngine:
                             "skill_name": "get_daren",
                         })
                         return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
+                else:
+                    # 步骤未完成，明确提示还差哪些
+                    incomplete = [
+                        item["label"] for item in checklist
+                        if not item["done"] and not item.get("optional") and item["id"] != "aggregate"
+                    ]
+                    reply = (
+                        f"{checklist_text}\n\n"
+                        f"⚠️ 还有以下必要步骤未完成：{', '.join(incomplete)}\n\n"
+                        f"请先完成以上步骤，再回复\"生成\"。"
+                    )
+                    messages.append({"role": "ai", "content": reply})
+                    steps.append({
+                        "type": "guide",
+                        "content": reply,
+                        "skill_name": None,
+                        "checklist": checklist,
+                    })
+                    return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
             reply = f"{checklist_text}\n\n{next_hint}"
             messages.append({"role": "ai", "content": reply})

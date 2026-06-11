@@ -53,14 +53,18 @@ class Skill(ComedySkill):
             slot_name, content = core_slot
             return self._action_fill_slot(slot_name, content, slots)
 
-        # 2. 检测"生成"指令
+        # 2. 智能话题识别：非提问句式且话题槽位为空时，自动将输入识别为话题
+        if not slots.get("话题") and user_input.strip() and not self._is_question(user_input):
+            return self._action_fill_slot("话题", user_input.strip(), slots)
+
+        # 3. 检测"生成"指令
         trigger_words = ("生成", "生成剧本", "完成", "done", "finish")
         clean_input = user_input.strip().rstrip("。！.!?")
         is_trigger = clean_input in trigger_words or any(w in clean_input for w in trigger_words)
         if is_trigger:
             return self._action_trigger_aggregate(slots, outputs, user_id)
 
-        # 3. 根据 workflow_step 执行其他动作
+        # 4. 根据 workflow_step 执行其他动作
         action = workflow_step.get("action", "guide")
         if action == "collect":
             return self._action_collect(workflow_step, slots, user_input)
@@ -249,6 +253,29 @@ class Skill(ComedySkill):
                 if content:
                     return slot_name, content
         return None
+
+    @staticmethod
+    def _is_question(user_input: str) -> bool:
+        """判断用户输入是否为提问句式。"""
+        import re
+        text = user_input.strip()
+        # 以问号结尾
+        if text.endswith(("?", "？")):
+            return True
+        # 包含典型疑问词
+        question_keywords = (
+            "我要做什么", "我该怎么做", "我应该", "怎么", "如何", "什么",
+            "为什么", "哪里", "谁", "多少", "吗", "呢", "吧", "能不能",
+            "可以吗", "怎么办", "请问", "求助", "帮助",
+        )
+        lower = text.lower()
+        for kw in question_keywords:
+            if kw in lower:
+                return True
+        # 包含"吗"、"呢"、"吧"等句末疑问助词（前面没有否定词）
+        if re.search(r"[^不没未必](吗|呢|吧)[。！]?$", text):
+            return True
+        return False
 
     def _action_fill_slot(self, slot_name: str, content: str, slots: dict[str, Any]) -> str:
         """保存用户输入到核心槽位。"""

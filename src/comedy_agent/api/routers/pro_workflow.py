@@ -176,6 +176,9 @@ class ProChatResponse(BaseModel):
     checklist: list[dict[str, Any]] | None = Field(
         default=None, description="当前流程检查清单"
     )
+    slots: dict[str, Any] | None = Field(
+        default=None, description="当前已收集的槽位"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -582,6 +585,7 @@ class ProWorkflowEngine:
             "next_actions": last_step.get("next_actions"),
             "checklist": last_step.get("checklist") or checklist,
             "steps": steps,
+            "slots": wf_state.get("slots", {}),
         }
 
     @staticmethod

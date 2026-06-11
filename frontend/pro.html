@@ -840,6 +840,12 @@ async function sendPrompt() {
     // Render workflow response (支持链式多步骤)
     renderWorkflowSteps(data);
 
+    // 更新页面标题为话题内容（如果话题槽位已填充）
+    if (data.slots && data.slots['话题']) {
+      const topicText = data.slots['话题'].slice(0, 20) + (data.slots['话题'].length > 20 ? '…' : '');
+      $('#pageTitle').textContent = topicText;
+    }
+
     saveCurrentConversation();
   } catch (err) {
     toast('生成失败：' + err.message);

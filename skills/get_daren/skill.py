@@ -336,7 +336,7 @@ class Skill(ComedySkill):
             checklist = self._build_core_checklist(slots)
             checklist_text = self._format_core_checklist(checklist)
             next_hint = self._build_next_hint_from_core_checklist(checklist)
-            detailed_hint = self._build_detailed_hint(checklist)
+            detailed_hint = self._build_detailed_hint(checklist, slots)
             structured = (
                 f"📋 创作流程：\n{checklist_text}\n\n"
                 f"{next_hint}\n\n"
@@ -459,7 +459,7 @@ class Skill(ComedySkill):
         checklist = self._build_core_checklist(slots)
         checklist_text = self._format_core_checklist(checklist)
         next_hint = self._build_next_hint_from_core_checklist(checklist)
-        detailed_hint = self._build_detailed_hint(checklist)
+        detailed_hint = self._build_detailed_hint(checklist, slots)
 
         parts = [f"📋 创作流程：\n{checklist_text}"]
         if confirm_slot and confirm_content:
@@ -501,15 +501,42 @@ class Skill(ComedySkill):
             return f"👉 下一步：请 @{next_item['id']} 输入相关内容。"
         return '👉 下一步：所有维度已填写完成！请回复"生成"来生成最终剧本。'
 
-    def _build_detailed_hint(self, checklist: list[dict[str, Any]]) -> str:
-        """根据当前缺失的槽位生成详细填写建议。"""
+    def _build_detailed_hint(self, checklist: list[dict[str, Any]], slots: dict[str, Any]) -> str:
+        """根据话题内容和当前缺失槽位，使用 LLM 动态生成填写建议。"""
+        topic = slots.get("话题", "")
         next_item = next(
             (item for item in checklist if not item["done"] and not item.get("optional")),
             None,
         )
-        if next_item and next_item["id"] in self._SLOT_HINTS:
-            return f"💡 建议：{self._SLOT_HINTS[next_item['id']]}"
-        return "💡 建议：继续按流程填写，完成后即可生成最终剧本。"
+        next_slot = next_item["id"] if next_item else ""
+
+        # 如果话题为空或下一步是生成剧本，回退到固定提示
+        if not topic or next_slot in ("", "aggregate"):
+            if next_slot in self._SLOT_HINTS:
+                return f"💡 建议：{self._SLOT_HINTS[next_slot]}"
+            return "💡 建议：继续按流程填写，完成后即可生成最终剧本。"
+
+        # 使用 LLM 围绕话题动态生成建议
+        system_prompt = (
+            "你是一位资深喜剧创作顾问。请根据用户提供的创作话题，"
+            "给出针对下一个维度的简短填写建议。建议要有创意、贴合话题、能激发用户灵感，"
+            "控制在 60 字以内。只输出建议内容，不要加标题或解释。"
+        )
+        user_prompt = (
+            f"创作话题：{topic}\n"
+            f"下一步需要填写的维度：{next_slot}\n"
+            f"请围绕这个话题，给出填写「{next_slot}」的创意建议。"
+        )
+        try:
+            hint = self._call_llm(system_prompt, user_prompt)
+            # 清理可能的空行和多余空格
+            hint = hint.strip().replace("\n", " ").strip()
+            if len(hint) > 120:
+                hint = hint[:117] + "..."
+            return f"💡 建议：{hint}"
+        except Exception:
+            # LLM 调用失败时回退到固定模板
+            return f"💡 建议：{self._SLOT_HINTS.get(next_slot, '继续按流程填写，完成后即可生成最终剧本。')}"
 
     # ------------------------------------------------------------------ #
     # aggregate：聚合所有输出并提炼最终结果

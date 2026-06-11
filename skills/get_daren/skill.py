@@ -52,8 +52,6 @@ class Skill(ComedySkill):
             return self._action_collect(workflow_step, slots, user_input)
         if action == "select":
             return self._action_select(workflow_step, slots, user_input)
-        if action == "call":
-            return self._action_call(workflow_step, slots, outputs, user_input, user_id)
         if action == "aggregate":
             return self._action_aggregate(workflow_step, slots, outputs, user_id)
 
@@ -82,12 +80,9 @@ class Skill(ComedySkill):
         # 如果用户输入不为空，收集该槽位
         if user_input.strip():
             val = user_input.strip()
-            context_hint = ""
-            if slot == "outline":
-                context_hint = "\n\n接下来我将引导你选择剧本体裁，然后依次调度话题专家、态度导师、情绪设计师等专家为你创作。"
             return json.dumps(
                 {
-                    "reply": f"✅ 已记录：{val[:60]}{'...' if len(val) > 60 else ''}" + context_hint,
+                    "reply": f"✅ 已记录：{val[:60]}{'...' if len(val) > 60 else ''}",
                     "advance": True,
                     "slots_update": {slot: val},
                     "outputs_update": {},
@@ -220,101 +215,6 @@ class Skill(ComedySkill):
         if "script_composer" in name:
             return "script_composer"
         return "other"
-
-    # ------------------------------------------------------------------ #
-    # call：调用指定 skill
-    # ------------------------------------------------------------------ #
-    def _action_call(
-        self,
-        step: dict[str, Any],
-        slots: dict[str, Any],
-        outputs: dict[str, Any],
-        user_input: str,
-        user_id: str | None,
-    ) -> str:
-        skill_name = step.get("skill", "")
-        message = step.get("message", f"正在调用 {skill_name}...")
-
-        orch = getattr(self, "orchestrator", None)
-        if orch is None:
-            return json.dumps(
-                {
-                    "reply": f"❌ 编排器未就绪，无法调用 {skill_name}",
-                    "advance": True,
-                    "slots_update": {},
-                    "outputs_update": {},
-                },
-                ensure_ascii=False,
-            )
-
-        # 构建 prompt，优先使用当前文本（上一步输出或大纲）
-        current_text = outputs.get("outline") or slots.get("outline", "")
-        for key in ["topic", "attitude", "emotion"]:
-            if key in outputs:
-                current_text = outputs[key]
-
-        if skill_name == "rule_persona":
-            persona_id = slots.get("persona_id", "")
-            memory = getattr(self, "memory", None)
-            rule_content = ""
-            persona_name = ""
-            if memory and persona_id:
-                persona = memory.load_persona(persona_id)
-                if persona:
-                    rule_content = getattr(persona, "rule_content", {})
-                    persona_name = getattr(persona, "name", "")
-            if not persona_id:
-                return json.dumps(
-                    {
-                        "reply": "🎭 **当前步骤：应用人物画像规则**\n你尚未选择人物画像，请先点击下方「写作团队」按钮，选择一个已有人物画像，Get达人将自动应用其规则约束。",
-                        "advance": False,
-                        "slots_update": {},
-                        "outputs_update": {},
-                    },
-                    ensure_ascii=False,
-                )
-            prompt = (
-                f"使用 rule_persona 技能。\n"
-                f"大纲：{current_text}\n"
-                f"规则：{rule_content}"
-            )
-            if persona_name:
-                message = f"🎭 正在应用人物画像「{persona_name}」的规则约束..."
-            else:
-                message = "🎭 正在应用人物画像规则..."
-        elif skill_name == "script_composer":
-            context_parts = [f"大纲：{slots.get('outline', '')}"]
-            for key, val in outputs.items():
-                if key != "outline":
-                    context_parts.append(f"【{key} 输出】\n{val}")
-            context_text = "\n\n".join(context_parts)
-            prompt = f"使用 script_composer 技能。\n上下文：\n{context_text}"
-        else:
-            prompt = f"使用 {skill_name} 技能。\n文本：{current_text}"
-
-        try:
-            result = orch.run(prompt, user_id=user_id)
-            output = result.get("output", "")
-        except Exception as e:
-            return json.dumps(
-                {
-                    "reply": f"❌ {skill_name} 调用失败：{e}",
-                    "advance": False,
-                    "slots_update": {},
-                    "outputs_update": {},
-                },
-                ensure_ascii=False,
-            )
-
-        return json.dumps(
-            {
-                "reply": message,
-                "advance": True,
-                "slots_update": {},
-                "outputs_update": {skill_name: output},
-            },
-            ensure_ascii=False,
-        )
 
     # ------------------------------------------------------------------ #
     # aggregate：聚合所有输出并提炼最终结果

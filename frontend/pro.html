@@ -825,8 +825,8 @@ async function sendPrompt() {
     agentMsg.classList.remove('typing');
     agentMsg.remove();
 
-    // Render workflow response
-    renderWorkflowResponse(data);
+    // Render workflow response (支持链式多步骤)
+    renderWorkflowSteps(data);
 
     saveCurrentConversation();
   } catch (err) {
@@ -838,6 +838,84 @@ async function sendPrompt() {
     isGenerating = false;
     $('#pageTitle').classList.remove('editing');
     $('#chatSendBtn').disabled = false;
+  }
+}
+
+function renderWorkflowSteps(data) {
+  if (data.steps && data.steps.length > 0) {
+    data.steps.forEach((step, idx) => {
+      const isLast = idx === data.steps.length - 1;
+      renderWorkflowStep(step, isLast);
+    });
+  } else {
+    // 兼容旧版单步响应
+    renderWorkflowResponse(data);
+  }
+}
+
+function renderChecklist(checklist) {
+  if (!checklist || checklist.length === 0) return '';
+  const rows = checklist.map(item => {
+    const done = item.done;
+    const icon = done ? '✅' : '⬜';
+    const style = done ? 'color:#666;text-decoration:line-through;' : 'color:#333;font-weight:600;';
+    const highlight = !done && !item.optional ? 'background:#fff8f0;border-radius:4px;' : '';
+    const opt = item.optional ? '<span style="color:#999;font-size:12px;">（可选）</span>' : '';
+    return `<div style="padding:4px 8px;${highlight}">${icon} <span style="${style}">${escapeHtml(item.label)}</span> ${opt}</div>`;
+  }).join('');
+  return `<div style="background:#f8f8f8;border-radius:8px;padding:12px 16px;margin-bottom:12px;border:1px solid #eee;">
+    <div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">📋 创作流程</div>
+    ${rows}
+  </div>`;
+}
+
+function renderWorkflowStep(step, bindEvents = false) {
+  const type = step.type;
+  const content = step.content;
+  const skillName = step.skill_name || 'Get达人';
+
+  if (type === 'guide') {
+    let checklistHtml = '';
+    if (step.checklist && step.checklist.length > 0) {
+      checklistHtml = renderChecklist(step.checklist);
+    }
+    const actionsHtml = (step.next_actions || []).map(a =>
+      `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
+    ).join('');
+    const contentHtml = content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
+    const html = `${checklistHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const msgDiv = addChatMessage('agent', 'Get达人', '创作向导', html);
+    if (bindEvents) {
+      msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const action = btn.dataset.action;
+          const value = btn.dataset.value;
+          if (action === 'select_skill' && value) {
+            $('#chatInput').value = value;
+            sendPrompt();
+          } else if (action === 'set_outline') {
+            $('#chatInput').focus();
+          } else {
+            $('#chatInput').value = value || btn.textContent;
+            sendPrompt();
+          }
+        });
+      });
+    }
+  } else if (type === 'skill_output') {
+    const skillInfo = allSkills.find(s => s.name === skillName) || { name: skillName, skill_type: 'topic', description: '' };
+    const gradient = getSkillGradient(skillInfo.skill_type);
+    const label = getSkillTypeLabel(skillInfo.skill_type);
+    const desc = skillInfo.description || '';
+    const descHtml = desc ? `<p style="font-size:13px;color:#888;margin-bottom:8px;font-weight:600;">💡 ${escapeHtml(desc)}</p>` : '';
+    const fullContent = descHtml + (content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`);
+    addChatMessage('agent', skillName, label, fullContent, { gradient });
+  } else if (type === 'final_script') {
+    typewriteScript(content);
+    addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });
+    toast('剧本生成完成');
+  } else if (type === 'error') {
+    addChatMessage('agent', 'Get达人', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
   }
 }
 

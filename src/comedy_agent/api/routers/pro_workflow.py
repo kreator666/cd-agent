@@ -43,25 +43,9 @@ _DEFAULT_WORKFLOW: dict[str, Any] = {
             "skill_type": "genre",
             "message": "🎭 请选择剧本体裁，这将决定整体的创作风格。",
         },
-        "calling_topic": {
-            "action": "call",
-            "skill": "topic",
-            "message": "🔍 正在调用话题专家扩写话题背景与冲突点...",
-        },
-        "calling_attitude": {
-            "action": "call",
-            "skill": "attitude",
-            "message": "🎯 正在调用态度专家注入态度...",
-        },
-        "calling_emotion": {
-            "action": "call",
-            "skill": "emotion",
-            "message": "💫 正在调用情绪专家调整情绪节奏...",
-        },
-        "calling_rule_persona": {
-            "action": "call",
-            "skill": "rule_persona",
-            "message": "🎭 正在应用人物画像规则...",
+        "guiding": {
+            "action": "guide",
+            "message": "请按照流程表格的指引，@对应的写作团队成员完成创作。",
         },
         "aggregating": {
             "action": "aggregate",
@@ -70,11 +54,8 @@ _DEFAULT_WORKFLOW: dict[str, Any] = {
     },
     "transitions": {
         "awaiting_outline": {"next": "awaiting_genre"},
-        "awaiting_genre": {"next": "calling_topic"},
-        "calling_topic": {"next": "calling_attitude"},
-        "calling_attitude": {"next": "calling_emotion"},
-        "calling_emotion": {"next": "calling_rule_persona"},
-        "calling_rule_persona": {"next": "aggregating"},
+        "awaiting_genre": {"next": "guiding"},
+        "guiding": {"next": "aggregating"},
         "aggregating": {"next": None},
     },
 }
@@ -189,6 +170,12 @@ class ProChatResponse(BaseModel):
     next_actions: list[dict[str, Any]] | None = Field(
         default=None, description="下一步可执行操作"
     )
+    steps: list[dict[str, Any]] | None = Field(
+        default=None, description="链式执行的所有步骤"
+    )
+    checklist: list[dict[str, Any]] | None = Field(
+        default=None, description="当前流程检查清单"
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -215,7 +202,13 @@ class ProWorkflowEngine:
         persona_id: str | None,
         model: str | None,
     ) -> dict[str, Any]:
-        """处理用户消息，推进状态机，返回响应。"""
+        """处理用户消息，推进状态机，返回响应。
+
+        新架构：
+        - 用户通过 @mention 主动触发 Skill（引擎层直接调用）
+        - Get达人 只做 collect / select / aggregate
+        - guiding 状态由引擎层直接生成 checklist
+        """
         # 1. 加载或创建会话
         conv = None
         if session_id:
@@ -243,80 +236,155 @@ class ProWorkflowEngine:
         # 2. 添加用户消息到会话
         messages.append({"role": "human", "content": message})
 
-        # 3. 获取当前状态配置
+        # 3. 初始化 steps 数组
+        steps: list[dict[str, Any]] = []
+
+        # 4. 检测 @mention 并直接调用对应 Skill
+        mentioned_skill = self._detect_mention(message)
+        if mentioned_skill:
+            skill_result = self._call_skill_direct(mentioned_skill, wf_state, user_id)
+            if skill_result:
+                wf_state.setdefault("outputs", {})[mentioned_skill] = skill_result["output"]
+                steps.append({
+                    "type": "skill_output",
+                    "content": skill_result["reply"],
+                    "skill_name": mentioned_skill,
+                })
+                messages.append({"role": "ai", "content": skill_result["reply"]})
+                # 记录日志
+                wf_state.setdefault("log", []).append({
+                    "state": wf_state.get("current_state", ""),
+                    "action": "user_call",
+                    "skill": mentioned_skill,
+                    "input": message,
+                    "output": skill_result["reply"][:200],
+                })
+
+        # 5. 自动应用人物画像（如果已选择且尚未应用）
+        if persona_id and "rule_persona" not in wf_state.get("outputs", {}):
+            persona_result = self._call_skill_direct("rule_persona", wf_state, user_id)
+            if persona_result and not persona_result["reply"].startswith("❌"):
+                wf_state.setdefault("outputs", {})["rule_persona"] = persona_result["output"]
+                steps.append({
+                    "type": "skill_output",
+                    "content": persona_result["reply"],
+                    "skill_name": "rule_persona",
+                })
+                messages.append({"role": "ai", "content": persona_result["reply"]})
+
+        # 6. 获取当前状态配置
         current_state = wf_state.get("current_state", self.workflow.get("initial_state", ""))
         state_cfg = self.workflow.get("states", {}).get(current_state)
 
         if state_cfg is None:
-            return self._error_response(session_id, current_state, f"未知工作流状态：{current_state}")
+            # 如果没有有效状态配置，至少返回 checklist
+            checklist = self._build_checklist(wf_state)
+            reply = self._format_checklist(checklist)
+            if not steps:
+                steps.append({
+                    "type": "guide",
+                    "content": reply,
+                    "skill_name": None,
+                    "checklist": checklist,
+                })
+            return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
-        # 4. 调用 Get达人 skill 执行当前状态动作
-        result = self._execute_state(state_cfg, wf_state, message, user_id)
-
-        # 5. 推进状态
-        if result.get("advance", False):
-            transitions = self.workflow.get("transitions", {})
-            next_state = transitions.get(current_state, {}).get("next")
-            if next_state:
-                wf_state["current_state"] = next_state
-            else:
-                wf_state["current_state"] = "done"
-
-        # 6. 记录日志
-        log_entry = {
-            "state": current_state,
-            "action": state_cfg.get("action"),
-            "input": message,
-            "output": result.get("reply", "")[:200],
-            "next": wf_state.get("current_state"),
-        }
-        wf_state.setdefault("log", []).append(log_entry)
-
-        # 7. 添加 AI 回复到会话
-        reply = result.get("reply", "")
-        messages.append({"role": "ai", "content": reply})
-
-        # 8. 保存会话
-        metadata = {"workflow": wf_state}
-        if persona_id:
-            metadata["persona_id"] = persona_id
-        self.memory.save_conversation(
-            user_id=user_id,
-            session_id=session_id,
-            messages=messages,
-            summary=message[:40] + "…" if len(message) > 40 else message,
-            source="pro",
-            metadata=metadata,
-        )
-
-        # 9. 确定响应类型
         action = state_cfg.get("action", "")
-        response_type = "guide"
-        skill_name = None
 
-        if action == "call":
-            response_type = "skill_output"
-            skill_name = state_cfg.get("skill")
-        elif action == "aggregate":
-            response_type = "final_script"
-            skill_name = "get_daren"
-        elif action == "select":
+        # 6. collect / select / aggregate：调用 Get达人 skill
+        if action in ("collect", "select", "aggregate"):
+            result = self._execute_state(state_cfg, wf_state, message, user_id)
+
+            # 推进状态
+            if result.get("advance", False):
+                transitions = self.workflow.get("transitions", {})
+                next_state = transitions.get(current_state, {}).get("next")
+                if next_state:
+                    wf_state["current_state"] = next_state
+                else:
+                    wf_state["current_state"] = "done"
+
+            # 记录日志
+            wf_state.setdefault("log", []).append({
+                "state": current_state,
+                "action": action,
+                "input": message,
+                "output": result.get("reply", "")[:200],
+                "next": wf_state.get("current_state"),
+            })
+
+            reply = result.get("reply", "")
+
+            # collect / select 确认后，追加 checklist 和下一步提示
+            if result.get("advance", False) and action in ("collect", "select"):
+                checklist = self._build_checklist(wf_state)
+                reply += "\n\n" + self._format_checklist(checklist)
+                reply += "\n\n" + self._build_next_hint_from_checklist(checklist)
+
+            messages.append({"role": "ai", "content": reply})
+
+            # 确定响应类型
             response_type = "guide"
-            skill_name = "get_daren"
+            skill_name = None
+            if action == "aggregate":
+                response_type = "final_script"
+                skill_name = "get_daren"
+            elif action == "select":
+                response_type = "guide"
+                skill_name = "get_daren"
 
-        # select 动作返回选项按钮
-        next_actions = None
-        if action == "select" and not result.get("advance"):
-            next_actions = self._build_select_actions(state_cfg)
+            # select 动作返回选项按钮
+            next_actions = None
+            if action == "select" and not result.get("advance"):
+                next_actions = self._build_select_actions(state_cfg)
 
-        return {
-            "session_id": session_id,
-            "type": response_type,
-            "content": reply,
-            "workflow_state": wf_state["current_state"],
-            "skill_name": skill_name,
-            "next_actions": next_actions,
-        }
+            steps.append({
+                "type": response_type,
+                "content": reply,
+                "skill_name": skill_name,
+                "next_actions": next_actions,
+            })
+
+        # 7. guiding 状态：引擎层直接生成 checklist
+        elif action == "guide":
+            checklist = self._build_checklist(wf_state)
+            checklist_text = self._format_checklist(checklist)
+            next_hint = self._build_next_hint_from_checklist(checklist)
+
+            # 检查用户是否请求生成最终剧本
+            trigger_words = ("生成", "生成剧本", "完成", "done", "finish")
+            if message.strip() in trigger_words:
+                required_done = all(
+                    item["done"] for item in checklist if not item.get("optional")
+                )
+                if required_done:
+                    # 自动切换到 aggregating 状态并执行
+                    wf_state["current_state"] = "aggregating"
+                    agg_cfg = self.workflow.get("states", {}).get("aggregating")
+                    if agg_cfg:
+                        result = self._execute_state(agg_cfg, wf_state, message, user_id)
+                        wf_state["current_state"] = "done"
+                        reply = result.get("reply", "")
+                        messages.append({"role": "ai", "content": reply})
+                        steps.append({
+                            "type": "final_script",
+                            "content": reply,
+                            "skill_name": "get_daren",
+                        })
+                        return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
+
+            reply = f"{checklist_text}\n\n{next_hint}"
+            messages.append({"role": "ai", "content": reply})
+            steps.append({
+                "type": "guide",
+                "content": reply,
+                "skill_name": None,
+                "checklist": checklist,
+            })
+
+        # 8. 保存会话并返回
+        checklist = self._build_checklist(wf_state)
+        return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
     def load_session(self, user_id: str, session_id: str) -> dict[str, Any] | None:
         """加载会话及工作流状态。"""
@@ -437,6 +505,176 @@ class ProWorkflowEngine:
                         {"action": "select_skill", "label": name, "value": name}
                     )
         return actions
+
+    # ------------------------------------------------------------------ #
+    # @mention 检测与 Skill 直接调用
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _detect_mention(message: str) -> str | None:
+        """检测用户消息中的 @mention，返回 skill 名。"""
+        import re
+        match = re.search(r"@(\S+)", message)
+        if match:
+            return match.group(1)
+        return None
+
+    def _call_skill_direct(self, skill_name: str, wf_state: dict[str, Any], user_id: str) -> dict[str, Any] | None:
+        """直接调用指定 Skill（绕过 Get达人）。"""
+        if self.orch is None:
+            return None
+
+        slots = wf_state.get("slots", {})
+        outputs = wf_state.get("outputs", {})
+
+        # 构建 prompt（复用原 _action_call 中的 prompt 构建逻辑）
+        current_text = outputs.get("outline") or slots.get("outline", "")
+        for key in ["topic", "attitude", "emotion"]:
+            if key in outputs:
+                current_text = outputs[key]
+
+        if skill_name == "rule_persona":
+            persona_id = slots.get("persona_id", "")
+            memory = getattr(self, "memory", None)
+            rule_content = ""
+            persona_name = ""
+            if memory and persona_id:
+                persona = memory.load_persona(persona_id)
+                if persona:
+                    rule_content = getattr(persona, "rule_content", {})
+                    persona_name = getattr(persona, "name", "")
+            if not persona_id:
+                return {
+                    "reply": "🎭 你尚未选择人物画像，请先点击写作团队按钮选择一个画像。",
+                    "output": "",
+                    "skill_name": skill_name,
+                }
+            prompt = (
+                f"使用 rule_persona 技能。\n"
+                f"大纲：{current_text}\n"
+                f"规则：{rule_content}"
+            )
+            reply_msg = f"🎭 正在应用人物画像「{persona_name}」的规则约束..." if persona_name else "🎭 正在应用人物画像规则..."
+        elif skill_name == "script_composer":
+            context_parts = [f"大纲：{slots.get('outline', '')}"]
+            for key, val in outputs.items():
+                if key != "outline":
+                    context_parts.append(f"【{key} 输出】\n{val}")
+            context_text = "\n\n".join(context_parts)
+            prompt = f"使用 script_composer 技能。\n上下文：\n{context_text}"
+            reply_msg = "📝 正在生成剧本..."
+        else:
+            prompt = f"使用 {skill_name} 技能。\n文本：{current_text}"
+            reply_msg = f"🔍 正在调用 {skill_name} 专家..."
+
+        try:
+            result = self.orch.run(prompt, user_id=user_id)
+            output = result.get("output", "")
+        except Exception as e:
+            logger.error("Skill 直接调用失败: %s", e, exc_info=True)
+            return {
+                "reply": f"❌ {skill_name} 调用失败：{e}",
+                "output": "",
+                "skill_name": skill_name,
+            }
+
+        return {
+            "reply": reply_msg,
+            "output": output,
+            "skill_name": skill_name,
+        }
+
+    # ------------------------------------------------------------------ #
+    # Checklist 生成与格式化
+    # ------------------------------------------------------------------ #
+    def _build_checklist(self, wf_state: dict[str, Any]) -> list[dict[str, Any]]:
+        """根据当前 slots 和 outputs 构建流程检查清单。"""
+        slots = wf_state.get("slots", {})
+        outputs = wf_state.get("outputs", {})
+        return [
+            {"id": "outline",  "label": "确定创作主题",     "done": bool(slots.get("outline")), "optional": False},
+            {"id": "genre",    "label": "选择剧本体裁",     "done": bool(slots.get("selected_genre")), "optional": False},
+            {"id": "topic",    "label": "话题专家分析",     "done": "topic" in outputs, "optional": False},
+            {"id": "attitude", "label": "态度导师设计",     "done": "attitude" in outputs, "optional": False},
+            {"id": "emotion",  "label": "情绪设计师",       "done": "emotion" in outputs, "optional": False},
+            {"id": "persona",  "label": "应用人物画像",     "done": "rule_persona" in outputs, "optional": True},
+            {"id": "aggregate","label": "生成最终剧本",     "done": "final_script" in outputs, "optional": False},
+        ]
+
+    @staticmethod
+    def _format_checklist(checklist: list[dict[str, Any]]) -> str:
+        """将 checklist 格式化为带勾的文本。"""
+        lines = ["📋 创作流程："]
+        for item in checklist:
+            mark = "✅" if item["done"] else "⬜"
+            opt = "（可选）" if item.get("optional") else ""
+            lines.append(f"{mark} {item['label']}{opt}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_next_hint_from_checklist(checklist: list[dict[str, Any]]) -> str:
+        """根据 checklist 构建下一步提示。"""
+        # 找到第一个未完成的必要步骤
+        next_item = next(
+            (item for item in checklist if not item["done"] and not item.get("optional")),
+            None
+        )
+        if next_item:
+            skill_labels = {
+                "outline": "Get达人",
+                "genre": "Get达人",
+                "topic": "话题专家",
+                "attitude": "态度导师",
+                "emotion": "情绪设计师",
+                "persona": "人物画像",
+                "aggregate": "剧本编排",
+            }
+            label = skill_labels.get(next_item["id"], next_item["label"])
+            if next_item["id"] in ("outline", "genre"):
+                return f"👉 下一步：{next_item['label']}（直接在下方输入即可）"
+            elif next_item["id"] == "aggregate":
+                return '👉 所有必要步骤已完成！请回复"生成"来生成最终剧本。'
+            else:
+                return f"👉 下一步：请 @{label} 来完成「{next_item['label']}」。"
+
+        # 所有必要步骤完成
+        return '👉 所有必要步骤已完成！请回复"生成"来生成最终剧本。'
+
+    def _build_response(
+        self,
+        session_id: str,
+        wf_state: dict[str, Any],
+        steps: list[dict[str, Any]],
+        checklist: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+        user_message: str,
+        persona_id: str | None,
+        user_id: str,
+    ) -> dict[str, Any]:
+        """构建并返回最终响应。"""
+        metadata = {"workflow": wf_state}
+        if persona_id:
+            metadata["persona_id"] = persona_id
+        self.memory.save_conversation(
+            user_id=user_id,
+            session_id=session_id,
+            messages=messages,
+            summary=user_message[:40] + "…" if len(user_message) > 40 else user_message,
+            source="pro",
+            metadata=metadata,
+        )
+
+        last_step = steps[-1] if steps else {"type": "guide", "content": "", "skill_name": None, "next_actions": None, "checklist": None}
+
+        return {
+            "session_id": session_id,
+            "type": last_step.get("type", "guide"),
+            "content": last_step.get("content", ""),
+            "workflow_state": wf_state.get("current_state", "done"),
+            "skill_name": last_step.get("skill_name"),
+            "next_actions": last_step.get("next_actions"),
+            "checklist": last_step.get("checklist") or checklist,
+            "steps": steps,
+        }
 
     @staticmethod
     def _error_response(session_id: str, state: str, content: str) -> dict[str, Any]:

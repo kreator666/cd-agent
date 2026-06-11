@@ -540,6 +540,7 @@ class Skill(ComedySkill):
         # 固定话术映射
         fixed_hints = {
             "态度": "你的态度是支持/反对？喜欢/讨厌？大声的说出来，朋友！",
+            "偏见": "说出你对这个话题的观点/洞察，但最好是偏见。理不歪笑不来",
         }
         fixed = fixed_hints.get(next_slot, "")
 

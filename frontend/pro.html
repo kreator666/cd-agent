@@ -257,7 +257,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <section class="left">
       <!-- 顶部配置摘要 -->
       <div class="chat-config-bar">
-        <div class="config-item" id="configOutline"><span class="config-label">📋</span><span id="outlinePreview">等待 Get达人 收集...</span></div>
+        <div class="config-item" id="configOutline"><span class="config-label">📋</span><span id="outlinePreview">等待 喜剧龙虾 收集...</span></div>
         <div class="config-item" id="configPersona" onclick="$('#teamBtn').click()"><span class="config-label">🎭</span><span id="personaPreview">未选择画像</span></div>
         <div class="config-item" id="configModel" onclick="toggleModelSelect()"><span class="config-label">🤖</span><span id="modelPreview">默认模型</span></div>
       </div>
@@ -267,7 +267,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
         <div class="msg-welcome" id="msgWelcome">
           <div class="welcome-avatar"></div>
           <div class="welcome-content">
-            <h3>👋 你好，我是 Get达人</h3>
+            <h3>👋 你好，我是 喜剧龙虾</h3>
             <p>我是你的专业版创作助手，会一步步引导你完成剧本创作。</p>
             <p>请直接在下方输入框告诉我你想创作什么内容，我会帮你确定选题、选择体裁、调度专家团队，最终生成完整剧本。</p>
           </div>
@@ -278,7 +278,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <div class="chat-input-area">
         <div class="chat-toolbar">
           <button class="toolbar-btn" onclick="event.stopPropagation(); $('#teamBtn').click();" title="@团队成员">@ 成员</button>
-          <button class="toolbar-btn" onclick="addMention('Get达人')" title="@Get达人">@Get达人</button>
+          <button class="toolbar-btn" onclick="addMention('喜剧龙虾')" title="@喜剧龙虾">@喜剧龙虾</button>
           <span class="toolbar-info" id="chatBudgetHint"></span>
         </div>
         <div class="chat-input-box">
@@ -311,7 +311,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
   <div class="dropdown team-menu" id="teamMenu">
     <div style="padding:0 4px 8px;border-bottom:1px solid var(--line);margin-bottom:6px;">
       <div class="menu-item" id="menuUser"><span class="mini-avatar" style="background:linear-gradient(135deg,#f1d6a4,#1e1e1e)"></span><div><span id="userName">意辰</span><div class="menu-sub">创作主理人</div></div><span class="persona-badge" id="menuPersonaBadge" style="display:none;margin-left:auto;"><span class="dot"></span><span id="menuPersonaName">未选择</span></span></div>
-      <div class="menu-item" onclick="mentionSkill('Get达人')"><span class="mini-avatar" style="background:linear-gradient(135deg,#ddd,#9b7)"></span><div>Get达人<div class="menu-sub">资料与结构助手 · 点击@他</div></div></div>
+      <div class="menu-item" onclick="mentionSkill('喜剧龙虾')"><span class="mini-avatar" style="background:linear-gradient(135deg,#ddd,#9b7)"></span><div>喜剧龙虾<div class="menu-sub">资料与结构助手 · 点击@他</div></div></div>
     </div>
     <div style="padding:4px;">
       <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;">写作团队成员（Skill）</div>
@@ -555,8 +555,8 @@ async function loadPersonas() {
 }
 
 function updateTeamCount() {
-  // 核心维度：话题、态度、偏见、情绪 + Get达人
-  const totalMembers = 1 + 4 + personas.length; // 1=Get达人, 4=核心维度
+  // 核心维度：话题、态度、偏见、情绪 + 喜剧龙虾
+  const totalMembers = 1 + 4 + personas.length; // 1=喜剧龙虾, 4=核心维度
   $('#teamCount').textContent = `（${totalMembers}）`;
 }
 
@@ -633,7 +633,7 @@ function renderTeamSkills() {
   const container = $('#teamSkills');
   if (!container) return;
 
-  // 核心工作流程维度（由 Get达人内部处理，非外部 Skill）
+  // 核心工作流程维度（由 喜剧龙虾 内部处理，非外部 Skill）
   const coreSlots = [
     { id: '话题', label: '话题', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
     { id: '态度', label: '态度', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
@@ -714,7 +714,7 @@ function newConversation() {
     <div class="msg-welcome" id="msgWelcome">
       <div class="welcome-avatar"></div>
       <div class="welcome-content">
-        <h3>👋 你好，我是 Get达人</h3>
+        <h3>👋 你好，我是 喜剧龙虾</h3>
         <p>我是你的专业版创作助手，会一步步引导你完成剧本创作。</p>
         <p>请直接在下方输入框告诉我你想创作什么内容，我会帮你确定选题、选择体裁、调度专家团队，最终生成完整剧本。</p>
       </div>
@@ -722,7 +722,7 @@ function newConversation() {
   `;
 
   // Reset outline preview
-  $('#outlinePreview').textContent = '等待 Get达人 收集...';
+  $('#outlinePreview').textContent = '等待 喜剧龙虾 收集...';
 
   // Clear editor
   $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
@@ -777,7 +777,7 @@ function loadConversation(id) {
   if (!c) return;
   currentConversationId = c.id;
   $('#pageTitle').textContent = c.title;
-  // 大纲由 Get达人在对话中收集，不通过独立输入框保存
+  // 大纲由 喜剧龙虾 在对话中收集，不通过独立输入框保存
   selectedPersonaId = c.personaId || '';
   selectedSkills = new Set(c.skillIds || []);
   // 恢复右侧编辑器
@@ -794,7 +794,7 @@ function loadConversation(id) {
       <div class="msg-welcome" id="msgWelcome">
         <div class="welcome-avatar"></div>
         <div class="welcome-content">
-          <h3>👋 你好，我是 Get达人</h3>
+          <h3>👋 你好，我是 喜剧龙虾</h3>
           <p>我是你的专业版创作助手，会一步步引导你完成剧本创作。</p>
           <p>请直接在下方输入框告诉我你想创作什么内容，我会帮你确定选题、选择体裁、调度专家团队，最终生成完整剧本。</p>
         </div>
@@ -824,7 +824,7 @@ async function sendPrompt() {
   input.style.height = 'auto';
 
   // Show agent typing indicator
-  const agentMsg = addChatMessage('agent', 'Get达人', '资料与结构助手', '收到，正在处理您的需求…', { gradient: 'background:linear-gradient(135deg,#ddd,#9b7)' });
+  const agentMsg = addChatMessage('agent', '喜剧龙虾', '资料与结构助手', '收到，正在处理您的需求…', { gradient: 'background:linear-gradient(135deg,#ddd,#9b7)' });
   agentMsg.classList.add('typing');
 
   // Update title if new
@@ -912,7 +912,7 @@ function renderChecklist(checklist) {
 function renderWorkflowStep(step, bindEvents = false) {
   const type = step.type;
   const content = step.content;
-  const skillName = step.skill_name || 'Get达人';
+  const skillName = step.skill_name || '喜剧龙虾';
 
   if (type === 'guide') {
     // 后端 reply 已包含结构化内容（流程列表 + 确认 + 下一步提示），不再单独渲染 checklist
@@ -921,7 +921,7 @@ function renderWorkflowStep(step, bindEvents = false) {
     ).join('');
     const contentHtml = content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
     const html = `${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
-    const msgDiv = addChatMessage('agent', 'Get达人', '创作向导', html);
+    const msgDiv = addChatMessage('agent', '喜剧龙虾', '创作向导', html);
     if (bindEvents) {
       msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -952,14 +952,14 @@ function renderWorkflowStep(step, bindEvents = false) {
     addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });
     toast('剧本生成完成');
   } else if (type === 'error') {
-    addChatMessage('agent', 'Get达人', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
+    addChatMessage('agent', '喜剧龙虾', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
   }
 }
 
 function renderWorkflowResponse(data) {
   const type = data.type;
   const content = data.content;
-  const skillName = data.skill_name || 'Get达人';
+  const skillName = data.skill_name || '喜剧龙虾';
 
   if (type === 'guide') {
     // 引导消息 + 快捷操作
@@ -967,7 +967,7 @@ function renderWorkflowResponse(data) {
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
     const html = `<p>${escapeHtml(content)}</p>${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
-    const msgDiv = addChatMessage('agent', 'Get达人', '创作向导', html);
+    const msgDiv = addChatMessage('agent', '喜剧龙虾', '创作向导', html);
     // 绑定快捷按钮点击事件
     msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -977,7 +977,7 @@ function renderWorkflowResponse(data) {
           $('#chatInput').value = value;
           sendPrompt();
         } else if (action === 'set_outline') {
-          // 大纲由 Get达人在对话中收集，不再弹出编辑框
+          // 大纲由 喜剧龙虾 在对话中收集，不再弹出编辑框
           $('#chatInput').focus();
         } else {
           $('#chatInput').value = value || btn.textContent;
@@ -998,7 +998,7 @@ function renderWorkflowResponse(data) {
     addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });
     toast('剧本生成完成');
   } else if (type === 'error') {
-    addChatMessage('agent', 'Get达人', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
+    addChatMessage('agent', '喜剧龙虾', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
   }
 }
 
@@ -1251,7 +1251,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#copyShare').addEventListener('click', () => toast('分享链接已复制'));
 
   // Outline input
-  // 大纲由 Get达人在对话中收集，不再监听独立输入框
+  // 大纲由 喜剧龙虾 在对话中收集，不再监听独立输入框
 
   // Model select change
   $('#model-select').addEventListener('change', function() {

@@ -1,4 +1,4 @@
-"""Get达人 Skill —— 专业版创作流程中央调度器。"""
+"""喜剧龙虾 Skill —— 专业版创作流程中央调度器。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from comedy_agent.skills.base import ComedySkill
 
 
 class GetDarenArgs(BaseModel):
-    """Get达人调度参数。"""
+    """喜剧龙虾调度参数。"""
 
     workflow_step: dict[str, Any] = Field(description="当前工作流状态配置")
     slots: dict[str, Any] = Field(default_factory=dict, description="已收集槽位")
@@ -23,17 +23,17 @@ class GetDarenArgs(BaseModel):
 
 
 class Skill(ComedySkill):
-    """Get达人 —— 根据工作流状态执行 collect/select/call/aggregate 动作。"""
+    """喜剧龙虾 —— 根据工作流状态执行 collect/select/call/aggregate 动作。"""
 
     name: str = "get_daren"
     description: str = (
-        "Get达人 —— 专业版创作流程的中央调度助手。"
+        "喜剧龙虾 —— 专业版创作流程的中央调度助手。"
         "负责根据当前工作流状态收集用户输入、引导选择、调用其他 Skill 并聚合提炼最终结果。"
     )
     args_schema: type[BaseModel] = GetDarenArgs
     task_type: str = "analytical"
 
-    # 核心工作流程维度（由 Get达人内部处理，不直接调用外部 Skill）
+    # 核心工作流程维度（由 喜剧龙虾 内部处理，不直接调用外部 Skill）
     CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
 
     # 各槽位的详细填写建议
@@ -450,7 +450,7 @@ class Skill(ComedySkill):
 
         # 使用 LLM 先回答用户的问题/闲聊，再衔接回创作流程
         system_prompt = (
-            "你是一位专业的喜剧创作助手，名叫 Get达人。"
+            "你是一位专业的喜剧创作助手，名叫 喜剧龙虾。"
             "用户正在和你一起进行喜剧剧本创作（流程：话题→态度→偏见→情绪→生成剧本）。"
             "但用户最近的输入没有按流程来，而是在闲聊、提问或跑题。"
             "请先用简短自然的方式回应用户的输入（真正回答他的问题或接住他的话），"
@@ -472,7 +472,7 @@ class Skill(ComedySkill):
                     "建议你按照下面的流程来填写各个维度，完成后就能生成完整的剧本了。"
                 )
             if any(kw in text for kw in ("你好", "嗨", "Hello", "hi")):
-                return "你好！我是 Get达人，很高兴协助你创作剧本。让我们开始吧！"
+                return "你好！我是 喜剧龙虾，很高兴协助你创作剧本。让我们开始吧！"
             if any(kw in text for kw in ("谢谢", "感谢", "多谢")):
                 return "不客气！继续加油，我们离完成剧本越来越近了。"
             if any(kw in text for kw in ("太难了", "不会", "不知道", "迷茫")):

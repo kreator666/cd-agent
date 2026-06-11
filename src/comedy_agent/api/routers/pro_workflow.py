@@ -2,7 +2,7 @@
 
 基于 multi-prompt.md 建议，采用"状态机 + 单一路径"模式：
 - 全局状态（current_state、slots、outputs）持久化在 Conversation.metadata
-- Get达人 skill 担任中央调度器，负责 collect / select / call / aggregate 四种动作
+- 喜剧龙虾 skill 担任中央调度器，负责 collect / select / call / aggregate 四种动作
 - 支持挂起等待用户输入，然后自动恢复
 - 所有状态转移和 Skill 调用记录到 workflow_log 用于调试
 """
@@ -36,7 +36,7 @@ _DEFAULT_WORKFLOW: dict[str, Any] = {
         "awaiting_outline": {
             "action": "collect",
             "slot": "outline",
-            "message": "📋 你好，我是 Get达人。请告诉我你想创作什么内容？一句话描述主题即可，例如：实习生被领导刁难后逆袭的职场段子。",
+            "message": "📋 你好，我是 喜剧龙虾。请告诉我你想创作什么内容？一句话描述主题即可，例如：实习生被领导刁难后逆袭的职场段子。",
         },
         "awaiting_genre": {
             "action": "select",
@@ -188,10 +188,10 @@ class ProWorkflowEngine:
     """专业版状态机工作流引擎。
 
     维护状态：current_state、slots、outputs、log
-    每次用户消息触发 Get达人调度器，执行当前状态对应的动作。
+    每次用户消息触发 喜剧龙虾 调度器，执行当前状态对应的动作。
     """
 
-    # 核心工作流程维度（由 Get达人内部处理，不直接调用外部 Skill）
+    # 核心工作流程维度（由 喜剧龙虾 内部处理，不直接调用外部 Skill）
     _CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
 
     def __init__(self, orch: Any, memory: Any, workflow: dict[str, Any] | None = None) -> None:
@@ -210,8 +210,8 @@ class ProWorkflowEngine:
     ) -> dict[str, Any]:
         """处理用户消息，返回响应。
 
-        新架构：Get达人 skill 内部处理核心工作流程（话题/态度/偏见/情绪），
-        引擎层不再依赖严格的状态机，始终调用 Get达人 skill 进行调度。
+        新架构：喜剧龙虾 skill 内部处理核心工作流程（话题/态度/偏见/情绪），
+        引擎层不再依赖严格的状态机，始终调用 喜剧龙虾 skill 进行调度。
         """
         # 1. 加载或创建会话
         conv = None
@@ -255,9 +255,9 @@ class ProWorkflowEngine:
                 })
                 messages.append({"role": "ai", "content": persona_result["reply"]})
 
-        # 5. 检测 @mention 外部 Skill（排除 Get达人和核心维度）
+        # 5. 检测 @mention 外部 Skill（排除 喜剧龙虾 和核心维度）
         mention = self._detect_mention(message)
-        if mention and mention not in ("get_daren", "Get达人") and mention not in self._CORE_SLOTS:
+        if mention and mention not in ("get_daren", "Get达人", "喜剧龙虾") and mention not in self._CORE_SLOTS:
             # 直接调用外部 Skill（场景、写手、找茬等）
             skill_result = self._call_skill_direct(mention, wf_state, user_id)
             if skill_result:
@@ -272,7 +272,7 @@ class ProWorkflowEngine:
                 checklist = self._build_checklist(wf_state)
                 return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
-        # 6. 调用 Get达人 skill（核心维度、生成指令、无 @mention 均走这里）
+        # 6. 调用 喜剧龙虾 skill（核心维度、生成指令、无 @mention 均走这里）
         guiding_cfg = self.workflow.get("states", {}).get("guiding", {"action": "guide"})
         result = self._execute_state(guiding_cfg, wf_state, message, user_id)
 
@@ -345,16 +345,16 @@ class ProWorkflowEngine:
         user_input: str,
         user_id: str,
     ) -> dict[str, Any]:
-        """调用 Get达人 skill 执行当前状态动作。"""
+        """调用 喜剧龙虾 skill 执行当前状态动作。"""
         if self.orch is None:
             return {"reply": "服务未就绪", "advance": False}
 
         try:
             skill = self.orch._find_skill("get_daren")
             if skill is None:
-                return {"reply": "❌ Get达人 skill 未注册", "advance": False}
+                return {"reply": "❌ 喜剧龙虾 skill 未注册", "advance": False}
         except Exception as e:
-            return {"reply": f"❌ 查找 Get达人 skill 失败：{e}", "advance": False}
+            return {"reply": f"❌ 查找 喜剧龙虾 skill 失败：{e}", "advance": False}
 
         try:
             result = skill.invoke(
@@ -368,10 +368,10 @@ class ProWorkflowEngine:
                 }
             )
         except Exception as e:
-            logger.error("Get达人执行失败: %s", e, exc_info=True)
+            logger.error("喜剧龙虾执行失败: %s", e, exc_info=True)
             return {"reply": f"❌ 调度失败：{e}", "advance": False}
 
-        # 解析 Get达人返回的 JSON
+        # 解析 喜剧龙虾 返回的 JSON
         parsed = self._parse_daren_result(result)
 
         # 更新 slots 和 outputs
@@ -383,7 +383,7 @@ class ProWorkflowEngine:
         return parsed
 
     def _parse_daren_result(self, result: Any) -> dict[str, Any]:
-        """解析 Get达人 skill 返回的结果。"""
+        """解析 喜剧龙虾 skill 返回的结果。"""
         raw = ""
         if isinstance(result, dict):
             raw = result.get("output", "")
@@ -447,7 +447,7 @@ class ProWorkflowEngine:
         return None
 
     def _call_skill_direct(self, skill_name: str, wf_state: dict[str, Any], user_id: str) -> dict[str, Any] | None:
-        """直接调用指定 Skill（绕过 Get达人）。"""
+        """直接调用指定 Skill（绕过 喜剧龙虾）。"""
         if self.orch is None:
             return None
 

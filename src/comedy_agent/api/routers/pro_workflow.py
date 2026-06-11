@@ -188,6 +188,9 @@ class ProWorkflowEngine:
     每次用户消息触发 Get达人调度器，执行当前状态对应的动作。
     """
 
+    # 核心工作流程维度（由 Get达人内部处理，不直接调用外部 Skill）
+    _CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
+
     def __init__(self, orch: Any, memory: Any, workflow: dict[str, Any] | None = None) -> None:
         self.orch = orch
         self.memory = memory
@@ -249,17 +252,34 @@ class ProWorkflowEngine:
                 })
                 messages.append({"role": "ai", "content": persona_result["reply"]})
 
-        # 5. 调用 Get达人 skill（始终使用 guiding 状态，让 Get达人自主调度）
+        # 5. 检测 @mention 外部 Skill（排除 Get达人和核心维度）
+        mention = self._detect_mention(message)
+        if mention and mention not in ("get_daren", "Get达人") and mention not in self._CORE_SLOTS:
+            # 直接调用外部 Skill（场景、写手、找茬等）
+            skill_result = self._call_skill_direct(mention, wf_state, user_id)
+            if skill_result:
+                if skill_result.get("output"):
+                    wf_state.setdefault("outputs", {})[mention] = skill_result["output"]
+                steps.append({
+                    "type": "skill_output",
+                    "content": skill_result.get("reply", ""),
+                    "skill_name": mention,
+                })
+                messages.append({"role": "ai", "content": skill_result.get("reply", "")})
+                checklist = self._build_checklist(wf_state)
+                return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
+
+        # 6. 调用 Get达人 skill（核心维度、生成指令、无 @mention 均走这里）
         guiding_cfg = self.workflow.get("states", {}).get("guiding", {"action": "guide"})
         result = self._execute_state(guiding_cfg, wf_state, message, user_id)
 
-        # 6. 更新 slots/outputs
+        # 7. 更新 slots/outputs
         if result.get("slots_update"):
             wf_state.setdefault("slots", {}).update(result["slots_update"])
         if result.get("outputs_update"):
             wf_state.setdefault("outputs", {}).update(result["outputs_update"])
 
-        # 7. 记录日志
+        # 8. 记录日志
         wf_state.setdefault("log", []).append({
             "state": wf_state.get("current_state", "guiding"),
             "action": "guide",
@@ -267,18 +287,18 @@ class ProWorkflowEngine:
             "output": result.get("reply", "")[:200],
         })
 
-        # 8. 添加 AI 回复
+        # 9. 添加 AI 回复
         reply = result.get("reply", "")
         messages.append({"role": "ai", "content": reply})
 
-        # 9. 确定响应类型
+        # 10. 确定响应类型
         if "final_script" in result.get("outputs_update", {}):
             response_type = "final_script"
             wf_state["current_state"] = "done"
         else:
             response_type = "guide"
 
-        # 10. 构建 checklist
+        # 11. 构建 checklist
         checklist = self._build_checklist(wf_state)
 
         steps.append({
@@ -288,7 +308,7 @@ class ProWorkflowEngine:
             "checklist": checklist,
         })
 
-        # 11. 保存会话并返回
+        # 12. 保存会话并返回
         return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
     def load_session(self, user_id: str, session_id: str) -> dict[str, Any] | None:

@@ -648,20 +648,17 @@ function renderTeamSkills() {
   });
   html += '</div></div>';
 
-  // 其他可用 Skill（按类型分组）
-  const types = ['topic', 'attitude', 'emotion', 'genre'];
-  types.forEach(t => {
-    const list = allSkills.filter(s => s.skill_type === t);
-    if (list.length) {
-      html += `<div style="padding:4px 8px;"><div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:4px;text-transform:uppercase;">${getSkillTypeLabel(t)}专家</div>`;
-      html += `<div class="skill-chips">`;
-      list.forEach(s => {
-        const active = selectedSkills.has(s.name) ? ' active' : '';
-        html += `<span class="skill-chip${active}" data-skill="${escapeHtml(s.name)}" onclick="mentionAndToggleSkill('${escapeHtml(s.name)}', this)">@${escapeHtml(s.name)}</span>`;
-      });
-      html += `</div></div>`;
-    }
-  });
+  // 其他可用专家（排除 topic/attitude/emotion/genre 等已由核心维度替代的类型）
+  const excludedTypes = ['topic', 'attitude', 'emotion', 'genre'];
+  const otherSkills = allSkills.filter(s => !excludedTypes.includes(s.skill_type) && s.name !== 'get_daren');
+  if (otherSkills.length) {
+    html += '<div style="padding:4px 8px;"><div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:4px;">其他专家</div>';
+    html += '<div class="skill-chips">';
+    otherSkills.forEach(s => {
+      html += `<span class="skill-chip" data-skill="${escapeHtml(s.name)}" onclick="mentionAndToggleSkill('${escapeHtml(s.name)}', this)">@${escapeHtml(s.name)}</span>`;
+    });
+    html += '</div></div>';
+  }
 
   container.innerHTML = html || '<div style="padding:8px;color:#999;font-size:13px;">暂无可用 Skill</div>';
   updateTeamCount();

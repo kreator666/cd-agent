@@ -864,7 +864,11 @@ async function sendPrompt() {
       $('#pageTitle').textContent = topicText;
     }
 
-    saveCurrentConversation();
+    // 非最终剧本场景立即保存；final_script 场景等待 typewriteScript 动画完成后再保存
+    const hasFinalScript = data.steps && data.steps.some(s => s.type === 'final_script');
+    if (!hasFinalScript) {
+      saveCurrentConversation();
+    }
   } catch (err) {
     toast('生成失败：' + err.message);
     agentMsg.classList.remove('typing');
@@ -1034,6 +1038,8 @@ function typewriteScript(text) {
         setTimeout(nextParagraph, 80);
       } else {
         $('#pageTitle').classList.remove('editing');
+        // 打字动画完成后保存完整内容
+        saveCurrentConversation();
       }
     }
   }

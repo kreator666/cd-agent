@@ -448,27 +448,42 @@ class Skill(ComedySkill):
         if not user_input.strip():
             return ""
 
-        # 简单启发式判断用户意图
-        text = user_input.strip()
-        if self._is_question(text):
-            return (
-                "这个问题问得好！不过我们现在正在创作剧本，"
-                "建议你按照下面的流程来填写各个维度，完成后就能生成完整的剧本了。"
-            )
-        if any(kw in text for kw in ("你好", "嗨", "Hello", "hi")):
-            return "你好！我是 Get达人，很高兴协助你创作剧本。让我们开始吧！"
-        if any(kw in text for kw in ("谢谢", "感谢", "多谢")):
-            return "不客气！继续加油，我们离完成剧本越来越近了。"
-        if any(kw in text for kw in ("太难了", "不会", "不知道", "迷茫")):
-            return (
-                "别担心，创作确实有挑战。你可以参考下面的建议来填写每个维度，"
-                "一步一步来，很快就能完成。"
-            )
-        # 默认反馈
-        return (
-            "明白了。如果你想继续创作剧本，可以按照下面的流程来填写各个维度。"
-            "每完成一个维度，我们离最终剧本就更近一步！"
+        # 使用 LLM 先回答用户的问题/闲聊，再衔接回创作流程
+        system_prompt = (
+            "你是一位专业的喜剧创作助手，名叫 Get达人。"
+            "用户正在和你一起进行喜剧剧本创作（流程：话题→态度→偏见→情绪→生成剧本）。"
+            "但用户最近的输入没有按流程来，而是在闲聊、提问或跑题。"
+            "请先用简短自然的方式回应用户的输入（真正回答他的问题或接住他的话），"
+            "然后再温和地提醒他回到创作流程。"
+            "控制在 100 字以内。"
         )
+        try:
+            feedback = self._call_llm(system_prompt, user_input.strip())
+            feedback = feedback.strip().replace("\n", " ").strip()
+            if len(feedback) > 150:
+                feedback = feedback[:147] + "..."
+            return feedback
+        except Exception:
+            # LLM 调用失败时回退到固定模板
+            text = user_input.strip()
+            if self._is_question(text):
+                return (
+                    "这个问题问得好！不过我们现在正在创作剧本，"
+                    "建议你按照下面的流程来填写各个维度，完成后就能生成完整的剧本了。"
+                )
+            if any(kw in text for kw in ("你好", "嗨", "Hello", "hi")):
+                return "你好！我是 Get达人，很高兴协助你创作剧本。让我们开始吧！"
+            if any(kw in text for kw in ("谢谢", "感谢", "多谢")):
+                return "不客气！继续加油，我们离完成剧本越来越近了。"
+            if any(kw in text for kw in ("太难了", "不会", "不知道", "迷茫")):
+                return (
+                    "别担心，创作确实有挑战。你可以参考下面的建议来填写每个维度，"
+                    "一步一步来，很快就能完成。"
+                )
+            return (
+                "明白了。如果你想继续创作剧本，可以按照下面的流程来填写各个维度。"
+                "每完成一个维度，我们离最终剧本就更近一步！"
+            )
 
     def _build_structured_reply(
         self,

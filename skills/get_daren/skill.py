@@ -296,14 +296,12 @@ class Skill(ComedySkill):
         return '👉 所有维度已填写完成！请回复"生成"来生成最终剧本。'
 
     def _action_guide(self, slots: dict[str, Any], outputs: dict[str, Any]) -> str:
-        """生成流程表格和下一步提示。"""
+        """生成下一步提示（checklist 由引擎层通过 step.checklist 单独渲染）。"""
         checklist = self._build_core_checklist(slots)
-        checklist_text = self._format_core_checklist(checklist)
         next_hint = self._build_next_hint_from_core_checklist(checklist)
-        reply = f"{checklist_text}\n\n{next_hint}"
         return json.dumps(
             {
-                "reply": reply,
+                "reply": next_hint,
                 "advance": False,
                 "slots_update": {},
                 "outputs_update": {},
@@ -320,10 +318,7 @@ class Skill(ComedySkill):
 
         if missing:
             missing_text = "、".join(missing)
-            checklist = self._build_core_checklist(slots)
-            checklist_text = self._format_core_checklist(checklist)
             reply = (
-                f"{checklist_text}\n\n"
                 f"⚠️ 还有以下维度未填写：{missing_text}\n\n"
                 f"请先使用 @{missing[0]} 输入相关内容，再回复\"生成\"。"
             )

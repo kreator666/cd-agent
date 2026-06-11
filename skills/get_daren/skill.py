@@ -33,6 +33,17 @@ class Skill(ComedySkill):
     args_schema: type[BaseModel] = GetDarenArgs
     task_type: str = "analytical"
 
+    # 核心工作流程维度（由 Get达人内部处理，不直接调用外部 Skill）
+    CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
+
+    # 各槽位的详细填写建议
+    _SLOT_HINTS: ClassVar[dict[str, str]] = {
+        "话题": "描述你想创作的主题场景，比如「实习生被领导刁难的职场故事」或「相亲时的尴尬瞬间」。",
+        "态度": "确定你想表达的核心态度，比如「讽刺」、「自嘲」、「批判」或「乐观」。",
+        "偏见": "给出一个独特视角或偏见，比如「领导永远是对的」或「加班就是努力」。",
+        "情绪": "描述情感节奏变化，比如「从愤怒到释然」或「从紧张到爆笑」。",
+    }
+
     def _run(
         self,
         workflow_step: dict[str, Any],
@@ -51,18 +62,18 @@ class Skill(ComedySkill):
         core_slot = self._detect_core_slot(user_input)
         if core_slot:
             slot_name, content = core_slot
-            return self._action_fill_slot(slot_name, content, slots)
+            return self._action_fill_slot(slot_name, content, slots, user_input)
 
         # 2. 智能话题识别：非提问句式且话题槽位为空时，自动将输入识别为话题
         if not slots.get("话题") and user_input.strip() and not self._is_question(user_input):
-            return self._action_fill_slot("话题", user_input.strip(), slots)
+            return self._action_fill_slot("话题", user_input.strip(), slots, user_input)
 
         # 3. 检测"生成"指令
         trigger_words = ("生成", "生成剧本", "完成", "done", "finish")
         clean_input = user_input.strip().rstrip("。！.!?")
         is_trigger = clean_input in trigger_words or any(w in clean_input for w in trigger_words)
         if is_trigger:
-            return self._action_trigger_aggregate(slots, outputs, user_id)
+            return self._action_trigger_aggregate(slots, outputs, user_id, user_input)
 
         # 4. 根据 workflow_step 执行其他动作
         action = workflow_step.get("action", "guide")
@@ -73,10 +84,10 @@ class Skill(ComedySkill):
         if action == "aggregate":
             return self._action_aggregate(workflow_step, slots, outputs, user_id)
         if action == "guide":
-            return self._action_guide(slots, outputs)
+            return self._action_guide(slots, outputs, user_input)
 
         # 默认：guide
-        return self._action_guide(slots, outputs)
+        return self._action_guide(slots, outputs, user_input)
 
     # ------------------------------------------------------------------ #
     # collect：收集单个槽位
@@ -232,8 +243,6 @@ class Skill(ComedySkill):
     # ------------------------------------------------------------------ #
     # 核心槽位：话题 / 态度 / 偏见 / 情绪
     # ------------------------------------------------------------------ #
-    CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
-
     @classmethod
     def _detect_core_slot(cls, user_input: str) -> tuple[str, str] | None:
         """检测用户输入中的 @话题 / @态度 / @偏见 / @情绪，返回 (槽位名, 内容)。"""
@@ -277,17 +286,15 @@ class Skill(ComedySkill):
             return True
         return False
 
-    def _action_fill_slot(self, slot_name: str, content: str, slots: dict[str, Any]) -> str:
-        """保存用户输入到核心槽位，返回结构化回复（确认 + 流程列表 + 下一步提示）。"""
+    # ------------------------------------------------------------------ #
+    # 结构化回复构建
+    # ------------------------------------------------------------------ #
+    def _action_fill_slot(self, slot_name: str, content: str, slots: dict[str, Any], user_input: str = "") -> str:
+        """保存用户输入到核心槽位，返回结构化回复（反馈 + 流程列表 + 确认 + 下一步 + 详细建议）。"""
         slots[slot_name] = content
-        checklist = self._build_core_checklist(slots)
-        checklist_text = self._format_core_checklist(checklist)
-        next_hint = self._build_next_hint_from_core_checklist(checklist)
-        reply = (
-            f"✅ 已记录 {slot_name}：{content[:80]}{'...' if len(content) > 80 else ''}\n\n"
-            f"{checklist_text}\n\n"
-            f"{next_hint}"
-        )
+        feedback = self._generate_feedback(slot_name, content, slots, user_input)
+        structured = self._build_structured_reply(slots, confirm_slot=slot_name, confirm_content=content)
+        reply = f"{feedback}\n\n{structured}"
         return json.dumps(
             {
                 "reply": reply,
@@ -298,44 +305,14 @@ class Skill(ComedySkill):
             ensure_ascii=False,
         )
 
-    def _build_core_checklist(self, slots: dict[str, Any]) -> list[dict[str, Any]]:
-        """根据核心槽位构建流程检查清单。"""
-        return [
-            {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False},
-            {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False},
-            {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False},
-            {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False},
-            {"id": "aggregate", "label": "生成最终剧本", "done": "final_script" in slots, "optional": False},
-        ]
-
-    @staticmethod
-    def _format_core_checklist(checklist: list[dict[str, Any]]) -> str:
-        """将核心槽位 checklist 格式化为文本。"""
-        lines = ["📋 创作流程："]
-        for item in checklist:
-            mark = "✅" if item["done"] else "⬜"
-            lines.append(f"{mark} {item['label']}")
-        return "\n".join(lines)
-
-    @classmethod
-    def _build_next_hint_from_core_checklist(cls, checklist: list[dict[str, Any]]) -> str:
-        """根据核心槽位 checklist 构建下一步提示。"""
-        next_item = next(
-            (item for item in checklist if not item["done"] and not item.get("optional")),
-            None,
-        )
-        if next_item:
-            if next_item["id"] == "aggregate":
-                return '👉 所有维度已填写完成！请回复"生成"来生成最终剧本。'
-            return f"👉 下一步：请 @{next_item['id']} 输入相关内容。"
-        return '👉 所有维度已填写完成！请回复"生成"来生成最终剧本。'
-
-    def _action_guide(self, slots: dict[str, Any], outputs: dict[str, Any]) -> str:
-        """生成结构化回复（流程列表 + 下一步提示）。"""
-        checklist = self._build_core_checklist(slots)
-        checklist_text = self._format_core_checklist(checklist)
-        next_hint = self._build_next_hint_from_core_checklist(checklist)
-        reply = f"{checklist_text}\n\n{next_hint}"
+    def _action_guide(self, slots: dict[str, Any], outputs: dict[str, Any], user_input: str = "") -> str:
+        """生成结构化回复。有用户输入时先反馈，再给出流程指引。"""
+        if user_input.strip():
+            feedback = self._generate_feedback(None, None, slots, user_input)
+            structured = self._build_structured_reply(slots)
+            reply = f"{feedback}\n\n{structured}"
+        else:
+            reply = self._build_structured_reply(slots)
         return json.dumps(
             {
                 "reply": reply,
@@ -347,7 +324,7 @@ class Skill(ComedySkill):
         )
 
     def _action_trigger_aggregate(
-        self, slots: dict[str, Any], outputs: dict[str, Any], user_id: str | None
+        self, slots: dict[str, Any], outputs: dict[str, Any], user_id: str | None, user_input: str = ""
     ) -> str:
         """检查核心槽位是否填满，然后执行聚合生成最终剧本。"""
         required_slots = list(self.CORE_SLOTS)
@@ -355,12 +332,20 @@ class Skill(ComedySkill):
 
         if missing:
             missing_text = "、".join(missing)
+            feedback = self._generate_feedback(None, None, slots, user_input)
             checklist = self._build_core_checklist(slots)
             checklist_text = self._format_core_checklist(checklist)
+            next_hint = self._build_next_hint_from_core_checklist(checklist)
+            detailed_hint = self._build_detailed_hint(checklist)
+            structured = (
+                f"📋 创作流程：\n{checklist_text}\n\n"
+                f"{next_hint}\n\n"
+                f"{detailed_hint}"
+            )
             reply = (
+                f"{feedback}\n\n"
                 f"⚠️ 还有以下维度未填写：{missing_text}\n\n"
-                f"{checklist_text}\n\n"
-                f"请先使用 @{missing[0]} 输入相关内容，再回复\"生成\"。"
+                f"{structured}"
             )
             return json.dumps(
                 {
@@ -401,6 +386,132 @@ class Skill(ComedySkill):
         )
 
     # ------------------------------------------------------------------ #
+    # 反馈生成：根据用户输入和当前状态生成自然回复
+    # ------------------------------------------------------------------ #
+    def _generate_feedback(
+        self,
+        slot_name: str | None,
+        content: str | None,
+        slots: dict[str, Any],
+        user_input: str,
+    ) -> str:
+        """根据用户输入生成反馈。slot_name 为 None 表示用户没有按流程输入。"""
+        if slot_name and content:
+            # 用户按流程填充了槽位
+            feedbacks = {
+                "话题": [
+                    f"「{content[:30]}」这个选题很有意思，期待你的创作！",
+                    f"好的，以「{content[:30]}」为主题展开，这是个不错的切入点。",
+                    f"收到！「{content[:30]}」这个话题很有发挥空间。",
+                ],
+                "态度": [
+                    f"「{content[:30]}」的态度定位很清晰，会让剧本更有棱角。",
+                    f"确定了「{content[:30]}」的基调，接下来可以继续深化。",
+                    f"态度定为「{content[:30]}」，这会让作品更有辨识度。",
+                ],
+                "偏见": [
+                    f"「{content[:30]}」这个视角很独特，会是很好的笑点来源。",
+                    f"独特的偏见视角「{content[:30]}」，这会让剧本更有记忆点。",
+                    f"这个偏见设定「{content[:30]}」很有意思，期待成品！",
+                ],
+                "情绪": [
+                    f"「{content[:30]}」的情感节奏设计会让剧本更有张力。",
+                    f"情绪线定为「{content[:30]}」，观众会跟着你的节奏走。",
+                    f"收到！「{content[:30]}」的情绪变化会让作品更有层次。",
+                ],
+            }
+            import random
+            return random.choice(feedbacks.get(slot_name, [f"已记录{slot_name}。"]))
+
+        # 用户没有按流程输入（闲聊、提问、跑题等）
+        if not user_input.strip():
+            return ""
+
+        # 简单启发式判断用户意图
+        text = user_input.strip()
+        if self._is_question(text):
+            return (
+                "这个问题问得好！不过我们现在正在创作剧本，"
+                "建议你按照下面的流程来填写各个维度，完成后就能生成完整的剧本了。"
+            )
+        if any(kw in text for kw in ("你好", "嗨", "Hello", "hi")):
+            return "你好！我是 Get达人，很高兴协助你创作剧本。让我们开始吧！"
+        if any(kw in text for kw in ("谢谢", "感谢", "多谢")):
+            return "不客气！继续加油，我们离完成剧本越来越近了。"
+        if any(kw in text for kw in ("太难了", "不会", "不知道", "迷茫")):
+            return (
+                "别担心，创作确实有挑战。你可以参考下面的建议来填写每个维度，"
+                "一步一步来，很快就能完成。"
+            )
+        # 默认反馈
+        return (
+            "明白了。如果你想继续创作剧本，可以按照下面的流程来填写各个维度。"
+            "每完成一个维度，我们离最终剧本就更近一步！"
+        )
+
+    def _build_structured_reply(
+        self,
+        slots: dict[str, Any],
+        confirm_slot: str | None = None,
+        confirm_content: str | None = None,
+    ) -> str:
+        """构建结构层：流程列表 + 确认 + 下一步 + 详细建议。"""
+        checklist = self._build_core_checklist(slots)
+        checklist_text = self._format_core_checklist(checklist)
+        next_hint = self._build_next_hint_from_core_checklist(checklist)
+        detailed_hint = self._build_detailed_hint(checklist)
+
+        parts = [f"📋 创作流程：\n{checklist_text}"]
+        if confirm_slot and confirm_content:
+            parts.append(f"✅ 已确认：{confirm_slot} = {confirm_content[:60]}{'...' if len(confirm_content) > 60 else ''}")
+        parts.append(next_hint)
+        parts.append(detailed_hint)
+
+        return "\n\n".join(parts)
+
+    def _build_core_checklist(self, slots: dict[str, Any]) -> list[dict[str, Any]]:
+        """根据核心槽位构建流程检查清单。"""
+        return [
+            {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False},
+            {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False},
+            {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False},
+            {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False},
+            {"id": "aggregate", "label": "生成最终剧本", "done": "final_script" in slots, "optional": False},
+        ]
+
+    @staticmethod
+    def _format_core_checklist(checklist: list[dict[str, Any]]) -> str:
+        """将核心槽位 checklist 格式化为文本。"""
+        lines = []
+        for item in checklist:
+            mark = "✅" if item["done"] else "⬜"
+            lines.append(f"{mark} {item['label']}")
+        return "\n".join(lines)
+
+    @classmethod
+    def _build_next_hint_from_core_checklist(cls, checklist: list[dict[str, Any]]) -> str:
+        """根据核心槽位 checklist 构建下一步提示。"""
+        next_item = next(
+            (item for item in checklist if not item["done"] and not item.get("optional")),
+            None,
+        )
+        if next_item:
+            if next_item["id"] == "aggregate":
+                return '👉 下一步：所有维度已填写完成！请回复"生成"来生成最终剧本。'
+            return f"👉 下一步：请 @{next_item['id']} 输入相关内容。"
+        return '👉 下一步：所有维度已填写完成！请回复"生成"来生成最终剧本。'
+
+    def _build_detailed_hint(self, checklist: list[dict[str, Any]]) -> str:
+        """根据当前缺失的槽位生成详细填写建议。"""
+        next_item = next(
+            (item for item in checklist if not item["done"] and not item.get("optional")),
+            None,
+        )
+        if next_item and next_item["id"] in self._SLOT_HINTS:
+            return f"💡 建议：{self._SLOT_HINTS[next_item['id']]}"
+        return "💡 建议：继续按流程填写，完成后即可生成最终剧本。"
+
+    # ------------------------------------------------------------------ #
     # aggregate：聚合所有输出并提炼最终结果
     # ------------------------------------------------------------------ #
     def _action_aggregate(
@@ -414,7 +525,7 @@ class Skill(ComedySkill):
         # 优先使用新核心槽位（话题/态度/偏见/情绪）
         core_slots_filled = all(slots.get(s) for s in self.CORE_SLOTS)
         if core_slots_filled:
-            return self._action_trigger_aggregate(slots, outputs, user_id)
+            return self._action_trigger_aggregate(slots, outputs, user_id, "")
 
         # 回退到旧模式（outline + genre + outputs）
         message = step.get("message", "正在生成最终剧本...")

@@ -357,23 +357,44 @@ class Skill(ComedySkill):
                 ensure_ascii=False,
             )
 
-        # 所有槽位已填满，执行聚合
+        # 所有槽位已填满，调用 standup skill 生成最终剧本
         context_parts = []
         for slot_name in required_slots:
-            context_parts.append(f"【{slot_name}】\n{slots[slot_name]}")
-        context = "\n\n".join(context_parts)
+            context_parts.append(f"【{slot_name}】{slots[slot_name]}")
+        topic = " | ".join(context_parts)
 
-        system_prompt = (
-            "你是一位资深喜剧剧本总编。请根据以下四个维度的输入（话题、态度、偏见、情绪），"
-            "整合成一份完整、流畅、可直接演出的喜剧剧本。保留各维度的创意亮点，"
-            "消除冗余和冲突，确保人物、情节、笑点自然连贯。只输出剧本正文，不要解释。"
-        )
-        user_prompt = f"请根据以下素材生成最终剧本：\n\n{context}"
-
+        final = ""
         try:
-            final = self._call_llm(system_prompt, user_prompt)
+            orch = getattr(self, "orchestrator", None)
+            if orch is not None:
+                standup_skill = orch._find_skill("standup_generator")
+                if standup_skill is not None:
+                    final = standup_skill._run(
+                        topic=topic,
+                        style="日常观察",
+                        duration=3,
+                        audience="通用",
+                        density="标准",
+                        perspective_count=2,
+                        user_id=user_id,
+                        debug=False,
+                    )
+                else:
+                    final = "❌ 未找到 standup_generator skill，请检查 Skill 注册状态。"
+            else:
+                final = "❌ 编排器未就绪，无法调用外部 Skill。"
         except Exception as e:
-            final = f"聚合失败：{e}"
+            # 回退：使用 LLM 直接聚合
+            system_prompt = (
+                "你是一位资深喜剧剧本总编。请根据以下四个维度的输入（话题、态度、偏见、情绪），"
+                "整合成一份完整、流畅、可直接演出的喜剧剧本。保留各维度的创意亮点，"
+                "消除冗余和冲突，确保人物、情节、笑点自然连贯。只输出剧本正文，不要解释。"
+            )
+            user_prompt = f"请根据以下素材生成最终剧本：\n\n{topic.replace(' | ', chr(10))}"
+            try:
+                final = self._call_llm(system_prompt, user_prompt)
+            except Exception as inner_e:
+                final = f"聚合失败：{e}（回退也失败：{inner_e}）"
 
         return json.dumps(
             {
@@ -520,17 +541,28 @@ class Skill(ComedySkill):
         if next_slot == "态度":
             return "💡 建议：你的态度是支持/反对？喜欢/讨厌？大声的说出来，朋友！"
 
-        # 使用 LLM 围绕话题动态生成建议
-        system_prompt = (
-            "你是一位资深喜剧创作顾问。请根据用户提供的创作话题，"
-            "给出针对下一个维度的简短填写建议。建议要有创意、贴合话题、能激发用户灵感，"
-            "控制在 60 字以内。只输出建议内容，不要加标题或解释。"
-        )
-        user_prompt = (
-            f"创作话题：{topic}\n"
-            f"下一步需要填写的维度：{next_slot}\n"
-            f"请围绕这个话题，给出填写「{next_slot}」的创意建议。"
-        )
+        # 偏见节点使用特殊规则调用 LLM 生成建议
+        if next_slot == "偏见":
+            system_prompt = (
+                "你是一位资深喜剧创作顾问。请根据用户提供的创作话题，"
+                "给出针对「偏见」维度的简短填写建议。"
+                "规则：说出你对这个话题的观点/洞察，但最好是偏见。理不歪笑不来。"
+                "建议要有创意、贴合话题、能激发用户灵感，控制在 60 字以内。"
+                "只输出建议内容，不要加标题或解释。"
+            )
+            user_prompt = f"创作话题：{topic}\n请围绕这个话题，按照「理不歪笑不来」的原则，给出填写「偏见」的创意建议。"
+        else:
+            # 其他节点使用通用 LLM prompt
+            system_prompt = (
+                "你是一位资深喜剧创作顾问。请根据用户提供的创作话题，"
+                "给出针对下一个维度的简短填写建议。建议要有创意、贴合话题、能激发用户灵感，"
+                "控制在 60 字以内。只输出建议内容，不要加标题或解释。"
+            )
+            user_prompt = (
+                f"创作话题：{topic}\n"
+                f"下一步需要填写的维度：{next_slot}\n"
+                f"请围绕这个话题，给出填写「{next_slot}」的创意建议。"
+            )
         try:
             hint = self._call_llm(system_prompt, user_prompt)
             # 清理可能的空行和多余空格

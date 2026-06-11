@@ -15,12 +15,33 @@
       "skill_type": "genre",
       "skill": null
     },
-    "guiding": {
-      "action": "guide",
-      "message": "请按照流程表格的指引，@对应的写作团队成员完成创作。",
+    "calling_topic": {
+      "action": "call",
+      "message": "调用话题专家",
       "slot": null,
       "skill_type": null,
-      "skill": null
+      "skill": "topic"
+    },
+    "calling_attitude": {
+      "action": "call",
+      "message": "调用态度专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "attitude"
+    },
+    "calling_emotion": {
+      "action": "call",
+      "message": "调用情绪专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "emotion"
+    },
+    "calling_rule_persona": {
+      "action": "call",
+      "message": "应用人物画像",
+      "slot": null,
+      "skill_type": null,
+      "skill": "rule_persona"
     },
     "aggregating": {
       "action": "aggregate",
@@ -35,9 +56,18 @@
       "next": "awaiting_genre"
     },
     "awaiting_genre": {
-      "next": "guiding"
+      "next": "calling_topic"
     },
-    "guiding": {
+    "calling_topic": {
+      "next": "calling_attitude"
+    },
+    "calling_attitude": {
+      "next": "calling_emotion"
+    },
+    "calling_emotion": {
+      "next": "calling_rule_persona"
+    },
+    "calling_rule_persona": {
       "next": "aggregating"
     },
     "aggregating": {

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -46,24 +46,33 @@ class Skill(ComedySkill):
         slots = slots or {}
         outputs = outputs or {}
         conversation_history = conversation_history or []
-        action = workflow_step.get("action", "collect")
 
+        # 1. 检测核心槽位 @mention（话题/态度/偏见/情绪）
+        core_slot = self._detect_core_slot(user_input)
+        if core_slot:
+            slot_name, content = core_slot
+            return self._action_fill_slot(slot_name, content, slots)
+
+        # 2. 检测"生成"指令
+        trigger_words = ("生成", "生成剧本", "完成", "done", "finish")
+        clean_input = user_input.strip().rstrip("。！.!?")
+        is_trigger = clean_input in trigger_words or any(w in clean_input for w in trigger_words)
+        if is_trigger:
+            return self._action_trigger_aggregate(slots, outputs, user_id)
+
+        # 3. 根据 workflow_step 执行其他动作
+        action = workflow_step.get("action", "guide")
         if action == "collect":
             return self._action_collect(workflow_step, slots, user_input)
         if action == "select":
             return self._action_select(workflow_step, slots, user_input)
         if action == "aggregate":
             return self._action_aggregate(workflow_step, slots, outputs, user_id)
+        if action == "guide":
+            return self._action_guide(slots, outputs)
 
-        return json.dumps(
-            {
-                "reply": f"未知动作类型：{action}",
-                "advance": True,
-                "slots_update": {},
-                "outputs_update": {},
-            },
-            ensure_ascii=False,
-        )
+        # 默认：guide
+        return self._action_guide(slots, outputs)
 
     # ------------------------------------------------------------------ #
     # collect：收集单个槽位
@@ -217,6 +226,146 @@ class Skill(ComedySkill):
         return "other"
 
     # ------------------------------------------------------------------ #
+    # 核心槽位：话题 / 态度 / 偏见 / 情绪
+    # ------------------------------------------------------------------ #
+    CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
+
+    @classmethod
+    def _detect_core_slot(cls, user_input: str) -> tuple[str, str] | None:
+        """检测用户输入中的 @话题 / @态度 / @偏见 / @情绪，返回 (槽位名, 内容)。"""
+        import re
+        for slot_name in cls.CORE_SLOTS:
+            pattern = rf"@{slot_name}\s*(.+)$"
+            match = re.search(pattern, user_input, re.MULTILINE)
+            if match:
+                content = match.group(1).strip()
+                return slot_name, content
+        # 也支持不带空格的变体，如 @话题xxx
+        for slot_name in cls.CORE_SLOTS:
+            pattern = rf"@{slot_name}(.+)$"
+            match = re.search(pattern, user_input, re.MULTILINE)
+            if match:
+                content = match.group(1).strip()
+                if content:
+                    return slot_name, content
+        return None
+
+    def _action_fill_slot(self, slot_name: str, content: str, slots: dict[str, Any]) -> str:
+        """保存用户输入到核心槽位。"""
+        slots[slot_name] = content
+        return json.dumps(
+            {
+                "reply": f"✅ 已记录 {slot_name}：{content[:80]}{'...' if len(content) > 80 else ''}",
+                "advance": True,
+                "slots_update": {slot_name: content},
+                "outputs_update": {},
+            },
+            ensure_ascii=False,
+        )
+
+    def _build_core_checklist(self, slots: dict[str, Any]) -> list[dict[str, Any]]:
+        """根据核心槽位构建流程检查清单。"""
+        return [
+            {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False},
+            {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False},
+            {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False},
+            {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False},
+            {"id": "aggregate", "label": "生成最终剧本", "done": "final_script" in slots, "optional": False},
+        ]
+
+    @staticmethod
+    def _format_core_checklist(checklist: list[dict[str, Any]]) -> str:
+        """将核心槽位 checklist 格式化为文本。"""
+        lines = ["📋 创作流程："]
+        for item in checklist:
+            mark = "✅" if item["done"] else "⬜"
+            lines.append(f"{mark} {item['label']}")
+        return "\n".join(lines)
+
+    @classmethod
+    def _build_next_hint_from_core_checklist(cls, checklist: list[dict[str, Any]]) -> str:
+        """根据核心槽位 checklist 构建下一步提示。"""
+        next_item = next(
+            (item for item in checklist if not item["done"] and not item.get("optional")),
+            None,
+        )
+        if next_item:
+            if next_item["id"] == "aggregate":
+                return '👉 所有维度已填写完成！请回复"生成"来生成最终剧本。'
+            return f"👉 下一步：请 @{next_item['id']} 输入相关内容。"
+        return '👉 所有维度已填写完成！请回复"生成"来生成最终剧本。'
+
+    def _action_guide(self, slots: dict[str, Any], outputs: dict[str, Any]) -> str:
+        """生成流程表格和下一步提示。"""
+        checklist = self._build_core_checklist(slots)
+        checklist_text = self._format_core_checklist(checklist)
+        next_hint = self._build_next_hint_from_core_checklist(checklist)
+        reply = f"{checklist_text}\n\n{next_hint}"
+        return json.dumps(
+            {
+                "reply": reply,
+                "advance": False,
+                "slots_update": {},
+                "outputs_update": {},
+            },
+            ensure_ascii=False,
+        )
+
+    def _action_trigger_aggregate(
+        self, slots: dict[str, Any], outputs: dict[str, Any], user_id: str | None
+    ) -> str:
+        """检查核心槽位是否填满，然后执行聚合生成最终剧本。"""
+        required_slots = list(self.CORE_SLOTS)
+        missing = [s for s in required_slots if not slots.get(s)]
+
+        if missing:
+            missing_text = "、".join(missing)
+            checklist = self._build_core_checklist(slots)
+            checklist_text = self._format_core_checklist(checklist)
+            reply = (
+                f"{checklist_text}\n\n"
+                f"⚠️ 还有以下维度未填写：{missing_text}\n\n"
+                f"请先使用 @{missing[0]} 输入相关内容，再回复\"生成\"。"
+            )
+            return json.dumps(
+                {
+                    "reply": reply,
+                    "advance": False,
+                    "slots_update": {},
+                    "outputs_update": {},
+                },
+                ensure_ascii=False,
+            )
+
+        # 所有槽位已填满，执行聚合
+        context_parts = []
+        for slot_name in required_slots:
+            context_parts.append(f"【{slot_name}】\n{slots[slot_name]}")
+        context = "\n\n".join(context_parts)
+
+        system_prompt = (
+            "你是一位资深喜剧剧本总编。请根据以下四个维度的输入（话题、态度、偏见、情绪），"
+            "整合成一份完整、流畅、可直接演出的喜剧剧本。保留各维度的创意亮点，"
+            "消除冗余和冲突，确保人物、情节、笑点自然连贯。只输出剧本正文，不要解释。"
+        )
+        user_prompt = f"请根据以下素材生成最终剧本：\n\n{context}"
+
+        try:
+            final = self._call_llm(system_prompt, user_prompt)
+        except Exception as e:
+            final = f"聚合失败：{e}"
+
+        return json.dumps(
+            {
+                "reply": final,
+                "advance": True,
+                "slots_update": {},
+                "outputs_update": {"final_script": final},
+            },
+            ensure_ascii=False,
+        )
+
+    # ------------------------------------------------------------------ #
     # aggregate：聚合所有输出并提炼最终结果
     # ------------------------------------------------------------------ #
     def _action_aggregate(
@@ -226,6 +375,13 @@ class Skill(ComedySkill):
         outputs: dict[str, Any],
         user_id: str | None,
     ) -> str:
+        """聚合所有输出并提炼最终结果（兼容新4槽位模式）。"""
+        # 优先使用新核心槽位（话题/态度/偏见/情绪）
+        core_slots_filled = all(slots.get(s) for s in self.CORE_SLOTS)
+        if core_slots_filled:
+            return self._action_trigger_aggregate(slots, outputs, user_id)
+
+        # 回退到旧模式（outline + genre + outputs）
         message = step.get("message", "正在生成最终剧本...")
         outline = slots.get("outline", "")
         genre = slots.get("selected_genre", "")
@@ -237,7 +393,6 @@ class Skill(ComedySkill):
             context_parts.append(f"【{key} 专家输出】\n{val}")
         context = "\n\n".join(context_parts)
 
-        # 使用基类内置 LLM 能力生成聚合结果
         system_prompt = (
             "你是一位资深喜剧剧本总编。请根据以下多位专家的输出和原始大纲，"
             "整合成一份完整、流畅、可直接演出的喜剧剧本。保留各位专家的创意亮点，"

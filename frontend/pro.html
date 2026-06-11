@@ -450,7 +450,7 @@ function loadConversations() {
 }
 
 function getSkillTypeLabel(type) {
-  const map = { topic: '话题专家', attitude: '态度导师', emotion: '情绪设计师', genre: '风格顾问' };
+  const map = { topic: '话题', attitude: '态度', emotion: '情绪', genre: '风格' };
   return map[type] || type;
 }
 
@@ -460,6 +460,7 @@ function getSkillGradient(type) {
     attitude: 'linear-gradient(135deg,#dcfce7,#22c55e)',
     emotion: 'linear-gradient(135deg,#fce7f3,#ec4899)',
     genre: 'linear-gradient(135deg,#fef3c7,#f59e0b)',
+    bias: 'linear-gradient(135deg,#f3e8ff,#9333ea)',
   };
   return map[type] || 'linear-gradient(135deg,#eee,#ba7a5a)';
 }
@@ -554,9 +555,8 @@ async function loadPersonas() {
 }
 
 function updateTeamCount() {
-  const coreSkillTypes = ['topic', 'attitude', 'emotion', 'genre'];
-  const coreMembers = allSkills.filter(s => coreSkillTypes.includes(s.skill_type)).length;
-  const totalMembers = 1 + coreMembers + personas.length; // 1=Get达人
+  // 核心维度：话题、态度、偏见、情绪 + Get达人
+  const totalMembers = 1 + 4 + personas.length; // 1=Get达人, 4=核心维度
   $('#teamCount').textContent = `（${totalMembers}）`;
 }
 
@@ -632,12 +632,28 @@ async function loadSkills() {
 function renderTeamSkills() {
   const container = $('#teamSkills');
   if (!container) return;
+
+  // 核心工作流程维度（由 Get达人内部处理，非外部 Skill）
+  const coreSlots = [
+    { id: '话题', label: '话题', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
+    { id: '态度', label: '态度', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
+    { id: '偏见', label: '偏见', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
+    { id: '情绪', label: '情绪', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
+  ];
+
+  let html = '<div style="padding:4px 8px;"><div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:4px;">核心创作维度</div>';
+  html += '<div class="skill-chips">';
+  coreSlots.forEach(slot => {
+    html += `<span class="skill-chip" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient};color:#fff;border:none;">@${slot.id}</span>`;
+  });
+  html += '</div></div>';
+
+  // 其他可用 Skill（按类型分组）
   const types = ['topic', 'attitude', 'emotion', 'genre'];
-  let html = '';
   types.forEach(t => {
     const list = allSkills.filter(s => s.skill_type === t);
     if (list.length) {
-      html += `<div style="padding:4px 8px;"><div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:4px;text-transform:uppercase;">${getSkillTypeLabel(t)}</div>`;
+      html += `<div style="padding:4px 8px;"><div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:4px;text-transform:uppercase;">${getSkillTypeLabel(t)}专家</div>`;
       html += `<div class="skill-chips">`;
       list.forEach(s => {
         const active = selectedSkills.has(s.name) ? ' active' : '';
@@ -646,9 +662,8 @@ function renderTeamSkills() {
       html += `</div></div>`;
     }
   });
-  container.innerHTML = html || '<div style="padding:8px;color:#999;font-size:13px;">暂无可用 Skill</div>';
 
-  // Update team count: 1(Get达人) + 核心写作专家(topic/attitude/emotion/genre) + 人物画像数
+  container.innerHTML = html || '<div style="padding:8px;color:#999;font-size:13px;">暂无可用 Skill</div>';
   updateTeamCount();
 }
 
@@ -678,7 +693,7 @@ function mentionAndToggleSkill(name, el) {
 }
 
 function updateEstimate() {
-  const skillCost = { topic: 15, attitude: 10, emotion: 10, genre: 15, rule_persona: 20, script_composer: 25 };
+  const skillCost = { topic: 15, attitude: 10, emotion: 10, genre: 15, bias: 10, rule_persona: 20, script_composer: 25 };
   let skillTokens = 0;
   selectedSkills.forEach(s => {
     const info = allSkills.find(x => x.name === s);
@@ -1105,11 +1120,13 @@ async function createPersona() {
 function replaceMention(newName) {
   const input = $('#chatInput');
   let current = input.value;
-  const coreTypes = ['topic', 'attitude', 'emotion', 'genre'];
-  const coreSkills = allSkills.filter(s => coreTypes.includes(s.skill_type));
+  // 核心维度 + 所有 Skill 名称都可能被替换
+  const coreSlots = ['话题', '态度', '偏见', '情绪'];
+  const allSkillNames = allSkills.map(s => s.name);
+  const allMentions = [...coreSlots, ...allSkillNames];
   let replaced = false;
-  for (const s of coreSkills) {
-    const pattern = '@' + s.name;
+  for (const name of allMentions) {
+    const pattern = '@' + name;
     if (current.includes(pattern)) {
       current = current.replace(pattern, '@' + newName);
       replaced = true;
@@ -1127,6 +1144,17 @@ function replaceMention(newName) {
 
 function mentionSkill(name) {
   addMention(name);
+  closeAll();
+}
+
+function mentionSlot(slotName) {
+  const input = $('#chatInput');
+  let current = input.value;
+  current = current + (current && !current.endsWith(' ') ? ' ' : '') + '@' + slotName + ' ';
+  input.value = current;
+  input.focus();
+  input.style.height = 'auto';
+  input.style.height = input.scrollHeight + 'px';
   closeAll();
 }
 

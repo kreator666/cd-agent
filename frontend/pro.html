@@ -737,12 +737,14 @@ function saveCurrentConversation() {
   if (!currentConversationId) return;
   const title = $('#pageTitle').textContent;
   const editorHtml = $('#editor').innerHTML;
+  const chatHtml = $('#chatMessages').innerHTML;
   const existing = conversations.find(c => c.id === currentConversationId);
   const conv = {
     id: currentConversationId,
     title,
     updatedAt: Date.now(),
     editorHtml,
+    chatHtml,
     outline: '',
     personaId: selectedPersonaId,
     skillIds: Array.from(selectedSkills),
@@ -778,10 +780,26 @@ function loadConversation(id) {
   // 大纲由 Get达人在对话中收集，不通过独立输入框保存
   selectedPersonaId = c.personaId || '';
   selectedSkills = new Set(c.skillIds || []);
+  // 恢复右侧编辑器
   if (c.editorHtml) {
     $('#editor').innerHTML = c.editorHtml;
   } else {
     $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
+  }
+  // 恢复左侧聊天消息
+  if (c.chatHtml) {
+    $('#chatMessages').innerHTML = c.chatHtml;
+  } else {
+    $('#chatMessages').innerHTML = `
+      <div class="msg-welcome" id="msgWelcome">
+        <div class="welcome-avatar"></div>
+        <div class="welcome-content">
+          <h3>👋 你好，我是 Get达人</h3>
+          <p>我是你的专业版创作助手，会一步步引导你完成剧本创作。</p>
+          <p>请直接在下方输入框告诉我你想创作什么内容，我会帮你确定选题、选择体裁、调度专家团队，最终生成完整剧本。</p>
+        </div>
+      </div>
+    `;
   }
   updatePersonaUI();
   renderTeamSkills();
@@ -1239,8 +1257,10 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPersonas();
   loadSkills();
 
-  // Init first conversation
-  if (!currentConversationId) {
+  // Init conversation: auto-load most recent if exists
+  if (conversations.length > 0) {
+    loadConversation(conversations[0].id);
+  } else if (!currentConversationId) {
     currentConversationId = Date.now().toString();
   }
 

@@ -813,6 +813,7 @@ async function loadConversation(id) {
     }
   } else if (needsRecovery && !c.sessionId) {
     console.warn('[history] 需要恢复但缺少 sessionId，无法从服务端拉取');
+    c.editorHtml = '<div class="editor-empty">该历史记录缺少会话信息，无法从服务端恢复完整结果。<br>请继续对话或新建对话重新生成。</div>';
   }
 
   // 恢复右侧编辑器

@@ -773,6 +773,17 @@ function renderHistory() {
   });
 }
 
+function isPartialEditorOutput(html) {
+  if (!html) return true;
+  // 空状态或打字中（class="generated typing"）均为不完整输出
+  if (html.includes('editor-empty')) return true;
+  if (html.includes('generated typing')) return true;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const text = tmp.textContent || '';
+  return text.length < 20;
+}
+
 async function loadConversation(id) {
   const c = conversations.find(x => x.id === id);
   if (!c) return;
@@ -784,8 +795,8 @@ async function loadConversation(id) {
   // 恢复服务端会话 ID，保证刷新后继续同一工作流
   workflowSessionId = c.sessionId || null;
 
-  // 如果本地未保存最终剧本，尝试从服务端会话中恢复
-  if (!c.editorHtml && c.sessionId) {
+  // 如果本地未保存最终剧本，或保存的是打字中的半成品/空状态，尝试从服务端会话恢复
+  if ((!c.editorHtml || isPartialEditorOutput(c.editorHtml)) && c.sessionId) {
     try {
       const res = await apiFetch(`/pro/chat/${encodeURIComponent(c.sessionId)}`);
       const sessionData = await res.json();

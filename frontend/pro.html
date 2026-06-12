@@ -748,6 +748,7 @@ function saveCurrentConversation() {
     outline: '',
     personaId: selectedPersonaId,
     skillIds: Array.from(selectedSkills),
+    sessionId: workflowSessionId,
   };
   if (existing) {
     Object.assign(existing, conv);
@@ -768,11 +769,11 @@ function renderHistory() {
     return `<div class="history-item" data-id="${c.id}"><b>${escapeHtml(c.title)}</b><br><span style="font-size:12px;color:#888;">${date} · ${c.skillIds?.length || 0} 个 Skill</span></div>`;
   }).join('');
   list.querySelectorAll('.history-item').forEach(item => {
-    item.addEventListener('click', () => loadConversation(item.dataset.id));
+    item.addEventListener('click', async () => { await loadConversation(item.dataset.id); });
   });
 }
 
-function loadConversation(id) {
+async function loadConversation(id) {
   const c = conversations.find(x => x.id === id);
   if (!c) return;
   currentConversationId = c.id;
@@ -780,12 +781,30 @@ function loadConversation(id) {
   // 大纲由 喜剧龙虾 在对话中收集，不通过独立输入框保存
   selectedPersonaId = c.personaId || '';
   selectedSkills = new Set(c.skillIds || []);
+  // 恢复服务端会话 ID，保证刷新后继续同一工作流
+  workflowSessionId = c.sessionId || null;
+
+  // 如果本地未保存最终剧本，尝试从服务端会话中恢复
+  if (!c.editorHtml && c.sessionId) {
+    try {
+      const res = await apiFetch(`/pro/chat/${encodeURIComponent(c.sessionId)}`);
+      const sessionData = await res.json();
+      const outputs = sessionData?.metadata?.workflow?.outputs || {};
+      if (outputs.final_script) {
+        c.editorHtml = outputs.final_script.split('\n').filter(p => p.trim()).map(p => `<p class="generated">${escapeHtml(p)}</p>`).join('');
+      }
+    } catch (err) {
+      console.error('恢复会话最终剧本失败', err);
+    }
+  }
+
   // 恢复右侧编辑器
   if (c.editorHtml) {
     $('#editor').innerHTML = c.editorHtml;
   } else {
     $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
   }
+
   // 恢复左侧聊天消息
   if (c.chatHtml) {
     $('#chatMessages').innerHTML = c.chatHtml;
@@ -1183,7 +1202,7 @@ function mentionSlot(slotName) {
 }
 
 /* ========== Event Listeners ========== */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   requireAuth();
   loadConversations();
 
@@ -1215,6 +1234,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (a === 'share') { closeAll(); $('#mask').classList.add('open'); $('#shareModal').classList.add('open'); }
     if (a === 'new') { newConversation(); }
   }));
+
+  // 页面关闭前自动保存当前对话，防止最终剧本在打字动画期间丢失
+  window.addEventListener('beforeunload', () => saveCurrentConversation());
 
   // Chat input
   const chatInput = $('#chatInput');
@@ -1265,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Init conversation: auto-load most recent if exists
   if (conversations.length > 0) {
-    loadConversation(conversations[0].id);
+    await loadConversation(conversations[0].id);
   } else if (!currentConversationId) {
     currentConversationId = Date.now().toString();
   }

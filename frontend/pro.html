@@ -796,17 +796,23 @@ async function loadConversation(id) {
   workflowSessionId = c.sessionId || null;
 
   // 如果本地未保存最终剧本，或保存的是打字中的半成品/空状态，尝试从服务端会话恢复
-  if ((!c.editorHtml || isPartialEditorOutput(c.editorHtml)) && c.sessionId) {
+  const needsRecovery = !c.editorHtml || isPartialEditorOutput(c.editorHtml);
+  console.log('[history] editorHtml length=', (c.editorHtml || '').length, 'sessionId=', c.sessionId, 'needsRecovery=', needsRecovery);
+  if (needsRecovery && c.sessionId) {
     try {
+      console.log('[history] fetching /pro/chat/' + c.sessionId);
       const res = await apiFetch(`/pro/chat/${encodeURIComponent(c.sessionId)}`);
       const sessionData = await res.json();
       const outputs = sessionData?.metadata?.workflow?.outputs || {};
+      console.log('[history] final_script length=', (outputs.final_script || '').length);
       if (outputs.final_script) {
         c.editorHtml = outputs.final_script.split('\n').filter(p => p.trim()).map(p => `<p class="generated">${escapeHtml(p)}</p>`).join('');
       }
     } catch (err) {
-      console.error('恢复会话最终剧本失败', err);
+      console.error('[history] 恢复会话最终剧本失败', err);
     }
+  } else if (needsRecovery && !c.sessionId) {
+    console.warn('[history] 需要恢复但缺少 sessionId，无法从服务端拉取');
   }
 
   // 恢复右侧编辑器

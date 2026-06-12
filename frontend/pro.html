@@ -695,6 +695,11 @@ function newConversation() {
   $('#pageTitle').textContent = '新对话';
   $('#pageTitle').classList.add('editing');
 
+  // Reset workflow state to start a fresh server session
+  workflowSessionId = null;
+  selectedPersonaId = '';
+  selectedSkills = new Set();
+
   // Reset chat messages
   const area = $('#chatMessages');
   area.innerHTML = `
@@ -713,6 +718,11 @@ function newConversation() {
 
   // Clear editor
   $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
+
+  // Refresh UI state
+  updatePersonaUI();
+  renderTeamSkills();
+  updateEstimate();
 
   setTimeout(() => {
     $('#pageTitle').classList.remove('editing');

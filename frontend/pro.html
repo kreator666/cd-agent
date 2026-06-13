@@ -121,13 +121,14 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .team-menu{top:66px;left:24px;width:290px;padding:14px}.menu-item{display:flex;align-items:center;gap:12px;padding:13px;border-radius:14px;font-weight:700;color:#444;cursor:pointer;}.menu-item:hover{background:#f7f8fa}.mini-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0c26f,#222)}.menu-sub{font-size:13px;color:#9aa0a6;font-weight:600;margin-top:2px}
 .panel{top:86px;right:30px;width:360px;max-height:70vh;padding:18px;overflow:auto}.panel h3{margin:4px 0 16px;font-size:17px}.history-item,.file-item{padding:13px;border-radius:16px;margin-bottom:8px;background:#fafafa;line-height:1.6;cursor:pointer;}.history-item:hover,.file-item:hover{background:#fff2ed}.file-type{font-size:12px;color:#ff764a;font-weight:800}.drawer-close{float:right;color:#888;font-size:20px;border-radius:8px;padding:2px 8px;}.drawer-close:hover{background:#f4f5f7;}.modal{position:fixed;left:50%;top:50%;width:420px;padding:24px;transform:translate(-50%,-46%) scale(.98)}.modal.open{transform:translate(-50%,-50%) scale(1)}.modal h3{margin:0 0 14px}.share-box{background:#f7f8fa;border-radius:14px;padding:14px;color:#777;margin:14px 0;word-break:break-all}.copy-btn{background:#15171a;color:#fff;border-radius:14px;padding:11px 16px;font-weight:800}.mask{position:fixed;inset:0;background:rgba(20,24,32,.08);z-index:35;opacity:0;pointer-events:none;transition:.22s}.mask.open{opacity:1;pointer-events:auto}.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,16px);border-radius:999px;padding:12px 18px;font-weight:800;color:#333}.toast.show{transform:translate(-50%,0)}
 
-/* Skill selector chips in team menu */
-.skill-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-left:42px;}
-.skill-chip{display:inline-block;padding:4px 10px;background:#f0f1f4;border-radius:10px;font-size:12px;font-weight:650;color:#555;cursor:pointer;transition:.15s;}
-.skill-chip:hover{background:#ffe8e0;color:#ff764a;}
-.skill-chip.active{background:#ff764a;color:#fff;}
-.slot-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;}
-.slot-icon{width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,.6);}
+/* Core dimension slot cards in team menu */
+.slot-list{display:flex;flex-direction:column;gap:10px;padding:4px 8px;}
+.slot-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;color:#fff;cursor:pointer;transition:.2s cubic-bezier(.2,.8,.2,1);box-shadow:0 4px 14px rgba(0,0,0,.08);}
+.slot-row:hover{transform:translateX(6px) scale(1.02);filter:brightness(1.05);}
+.slot-avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2.5px solid rgba(255,255,255,.75);box-shadow:0 3px 10px rgba(0,0,0,.12);flex-shrink:0;}
+.slot-info{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.slot-name{font-size:16px;font-weight:780;letter-spacing:.02em;}
+.slot-meta{font-size:12px;font-weight:650;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* Persona badge */
 .persona-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#f0f1f4;border-radius:10px;font-size:13px;font-weight:700;color:#333;margin-left:auto;}
@@ -632,18 +633,21 @@ function renderTeamSkills() {
 
   // 核心工作流程维度（由 喜剧龙虾 内部处理，非外部 Skill）
   const coreSlots = [
-    { id: '话题', label: '话题', icon: '/static/images/slots/topic.png', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
-    { id: '态度', label: '态度', icon: '/static/images/slots/attitude.png', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
-    { id: '偏见', label: '偏见', icon: '/static/images/slots/bias.png', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
-    { id: '情绪', label: '情绪', icon: '/static/images/slots/emotion.png', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
+    { id: '话题', label: '话题', name: '话题小灵通', icon: '/static/images/slots/topic.png', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
+    { id: '态度', label: '态度', name: '态度女王', icon: '/static/images/slots/attitude.png', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
+    { id: '偏见', label: '偏见', name: '偏见侦探', icon: '/static/images/slots/bias.png', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
+    { id: '情绪', label: '情绪', name: '情绪魔法师', icon: '/static/images/slots/emotion.png', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
   ];
 
-  let html = '<div class="skill-chips">';
+  let html = '<div class="slot-list">';
   coreSlots.forEach(slot => {
-    html += `<span class="skill-chip slot-chip" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient};color:#fff;border:none;">
-      <img src="${slot.icon}" alt="${slot.label}" class="slot-icon">
-      <span>${slot.label}</span>
-    </span>`;
+    html += `<div class="slot-row" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient}">
+      <img src="${slot.icon}" alt="${slot.label}" class="slot-avatar">
+      <div class="slot-info">
+        <div class="slot-name">${slot.name}</div>
+        <div class="slot-meta">@${slot.label} · ${slot.desc}</div>
+      </div>
+    </div>`;
   });
   html += '</div>';
 

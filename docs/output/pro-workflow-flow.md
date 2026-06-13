@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 - 下拉框列出当前用户的 Persona（`/pro/personas`）。
 - 选择画像后记录到 `selectedPersonaId`，发送消息时通过 `persona_id` 字段传给后端。
 - 后端收到 `persona_id` 后，在流程开始时调用 `rule_persona` Skill，将画像规则注入 `outputs.rule_persona`。
+- 最终生成剧本时，`get_daren` 会判断画像规则与话题的相关性，仅相关时才把规则加入最终生成上下文。
 
 ### 2.3 创作大纲
 
@@ -244,13 +245,18 @@ async def pro_chat(request: ProChatRequest, user_id: str = Depends(get_current_u
 
 ### 最终剧本生成
 
-**代码位置**：`skills/get_daren/skill.py` 第 326~407 行
+**代码位置**：`skills/get_daren/skill.py` 第 326~450 行
 
 1. 检查四个核心槽位是否全部填满。
 2. 若有缺失，返回提示「还有以下维度未填写：...」。
-3. 若全部填满，优先调用 `standup_generator` Skill 生成剧本。
-4. 若 `standup_generator` 未注册或调用失败，回退到 LLM 直接聚合。
-5. 将最终结果写入 `outputs_update.final_script`。
+3. 若全部填满，先判断人物画像规则与话题的相关性：
+   - 调用 `_is_persona_relevant(topic, persona_rule)` 让 LLM 返回 `{\"related\": true/false}`。
+   - 例如：话题是职场相关，人物画像是「毒舌职场侠」则相关；话题是校园爱情，人物画像是「毒舌职场侠」则不相关。
+   - 相关时把 `【人物画像规则】{persona_rule}` 加入生成上下文。
+   - 不相关或判断失败时，不使用人物画像规则，避免污染输出。
+4. 组合上下文（话题/态度/偏见/情绪 + 可选的人物画像规则）调用 `standup_generator` Skill 生成剧本。
+5. 若 `standup_generator` 未注册或调用失败，回退到 LLM 直接聚合。
+6. 将最终结果写入 `outputs_update.final_script`。
 
 ---
 

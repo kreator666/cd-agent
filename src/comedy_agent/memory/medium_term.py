@@ -12,8 +12,9 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.schema import CreateColumn
 
 from comedy_agent.core.config import settings
 from comedy_agent.memory.models import (
@@ -79,75 +80,91 @@ class SQLMemoryStore(MemoryStore):
                 conn.exec_driver_sql("PRAGMA journal_mode=WAL")
                 conn.commit()
         Base.metadata.create_all(self.engine)
-        # 简单迁移：为旧表添加缺失列（开发阶段兼容）
-        with self.engine.connect() as conn:
-            # user_profiles.password_hash
-            columns = [
-                row[1]
-                for row in conn.exec_driver_sql("PRAGMA table_info(user_profiles)")
-            ]
-            if "password_hash" not in columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE user_profiles ADD COLUMN password_hash VARCHAR(256)"
-                )
-                conn.commit()
-                logger.info("Migrated user_profiles: added password_hash column")
-            if "knowledge_shared" not in columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE user_profiles ADD COLUMN knowledge_shared BOOLEAN DEFAULT 0"
-                )
-                conn.commit()
-                logger.info("Migrated user_profiles: added knowledge_shared column")
-            if "follower_count" not in columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE user_profiles ADD COLUMN follower_count INTEGER DEFAULT 0"
-                )
-                conn.commit()
-                logger.info("Migrated user_profiles: added follower_count column")
-            if "bio" not in columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE user_profiles ADD COLUMN bio TEXT"
-                )
-                conn.commit()
-                logger.info("Migrated user_profiles: added bio column")
-            # user_conversations.source / metadata
-            conv_columns = [
-                row[1]
-                for row in conn.exec_driver_sql("PRAGMA table_info(user_conversations)")
-            ]
-            if "source" not in conv_columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE user_conversations ADD COLUMN source VARCHAR(16) DEFAULT 'chat'"
-                )
-                conn.commit()
-                logger.info("Migrated user_conversations: added source column")
-            if "extra_metadata" not in conv_columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE user_conversations ADD COLUMN extra_metadata JSON"
-                )
-                conn.commit()
-                logger.info("Migrated user_conversations: added extra_metadata column")
-            # personas 表缺失列迁移
-            persona_columns = [
-                row[1]
-                for row in conn.exec_driver_sql("PRAGMA table_info(personas)")
-            ]
-            if "description" not in persona_columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE personas ADD COLUMN description VARCHAR(512)"
-                )
-                conn.commit()
-                logger.info("Migrated personas: added description column")
-            if "reference_files" not in persona_columns:
-                conn.exec_driver_sql(
-                    "ALTER TABLE personas ADD COLUMN reference_files JSON"
-                )
-                conn.commit()
-                logger.info("Migrated personas: added reference_files column")
+        # 自动同步 schema：创建缺失表、为已有表添加缺失列
+        self._sync_schema()
         self.Session = sessionmaker(bind=self.engine)
         # 同步：为所有已认证大V创建缺失的 IP 风格记录
         self._sync_verified_users_to_ip_styles()
         logger.info("SQLMemoryStore initialized: %s", db_url)
+
+    # ------------------------------------------------------------------ #
+    # Schema 同步
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _sqlite_default_for(column) -> str:
+        """为 NOT NULL 但没有默认值的列生成 SQLite 兼容默认值字符串。"""
+        from sqlalchemy import Boolean, DateTime, Integer, JSON, String, Text
+
+        col_type = column.type
+        if isinstance(col_type, Boolean):
+            return "0"
+        if isinstance(col_type, Integer):
+            return "0"
+        if isinstance(col_type, (String, Text)):
+            return "''"
+        if isinstance(col_type, DateTime):
+            return "CURRENT_TIMESTAMP"
+        if isinstance(col_type, JSON):
+            return "'null'"
+        return "''"
+
+    def _column_definition(self, column) -> str:
+        """生成 ALTER TABLE ADD COLUMN 可用的列定义字符串。"""
+        raw = str(CreateColumn(column).compile(dialect=self.engine.dialect))
+        marker = "ADD COLUMN "
+        idx = raw.upper().find(marker)
+        if idx != -1:
+            return raw[idx + len(marker):]
+        return raw
+
+    def _sync_schema(self) -> None:
+        """同步 ORM schema 到数据库：建缺失表、补缺失列。"""
+        from sqlalchemy import inspect
+
+        inspector = inspect(self.engine)
+        existing_tables = set(inspector.get_table_names())
+        orm_tables = {table.name: table for table in Base.metadata.sorted_tables}
+
+        with self.engine.connect() as conn:
+            # 1. 创建缺失的表
+            for table_name, table in orm_tables.items():
+                if table_name not in existing_tables:
+                    try:
+                        table.create(conn)
+                        conn.commit()
+                        logger.info("Migrated: created table %s", table_name)
+                    except Exception:  # noqa: BLE001
+                        logger.warning("Failed to create table %s", table_name, exc_info=True)
+
+            # 2. 为已有表添加缺失列
+            for table_name, table in orm_tables.items():
+                if table_name not in existing_tables:
+                    continue
+                existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+                for column in table.columns:
+                    if column.name in existing_cols:
+                        continue
+                    if column.primary_key:
+                        logger.warning(
+                            "Skipped adding primary key column %s.%s", table_name, column.name
+                        )
+                        continue
+                    col_def = self._column_definition(column)
+                    if (
+                        not column.nullable
+                        and column.default is None
+                        and column.server_default is None
+                    ):
+                        col_def = f"{col_def} DEFAULT {self._sqlite_default_for(column)}"
+                    sql = f'ALTER TABLE "{table_name}" ADD COLUMN {col_def}'
+                    try:
+                        conn.exec_driver_sql(sql)
+                        conn.commit()
+                        logger.info("Migrated: added column %s.%s", table_name, column.name)
+                    except Exception:  # noqa: BLE001
+                        logger.warning(
+                            "Failed to add column %s.%s", table_name, column.name, exc_info=True
+                        )
 
     # ------------------------------------------------------------------ #
     # 辅助方法

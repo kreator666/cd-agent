@@ -192,7 +192,8 @@
                 if (res.ok) {
                     localStorage.setItem('token', data.access_token);
                     localStorage.setItem('user_id', data.user_id);
-                    window.location.href = '/static/index.html';
+                    // 加时间戳，避免浏览器缓存旧版 index.html
+                    window.location.href = '/static/index.html?_=' + Date.now();
                 } else {
                     errorEl.textContent = data.detail || '登录失败';
                 }

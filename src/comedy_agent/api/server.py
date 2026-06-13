@@ -406,6 +406,17 @@ app.include_router(actor_router)
 app.include_router(admin_router)
 app.include_router(export_router)
 
+# 禁止浏览器缓存前端静态资源，避免部署新版后页面仍显示旧版本
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # 挂载前端静态文件（如果 frontend/ 目录存在）
 _frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
 if _frontend_dir.is_dir():

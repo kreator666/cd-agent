@@ -18,7 +18,8 @@ function authHeaders() {
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user_id');
-    window.location.href = '/static/login.html';
+    // 加时间戳，避免浏览器缓存旧版 login.html
+    window.location.href = '/static/login.html?_=' + Date.now();
 }
 
 function escapeHtml(text) {
@@ -72,22 +73,23 @@ function requireAuth() {
     const token = getToken();
     const userId = getCurrentUserId();
     if (!token || !userId) {
-        window.location.href = '/static/login.html';
+        window.location.href = '/static/login.html?_=' + Date.now();
     }
 }
 
 /* ================================================
    页面导航（PRD v2 双模式）
    ================================================ */
-function goHome() { window.location.href = '/static/index.html'; }
-function goSpeed() { window.location.href = '/static/speed.html'; }
-function goPro() { window.location.href = '/static/pro.html'; }
+function goHome() { window.location.href = '/static/index.html?_=' + Date.now(); }
+function goSpeed() { window.location.href = '/static/speed.html?_=' + Date.now(); }
+function goPro() { window.location.href = '/static/pro.html?_=' + Date.now(); }
 function goIPRole(roleId) {
+    const ts = '_=' + Date.now();
     if (roleId) {
-        window.location.href = `/static/ip-role.html?role_id=${encodeURIComponent(roleId)}`;
+        window.location.href = `/static/ip-role.html?role_id=${encodeURIComponent(roleId)}&${ts}`;
     } else {
-        window.location.href = '/static/ip-role.html';
+        window.location.href = `/static/ip-role.html?${ts}`;
     }
 }
-function goSkills() { window.location.href = '/static/skills.html'; }
-function goMe() { window.location.href = '/static/me.html'; }
+function goSkills() { window.location.href = '/static/skills.html?_=' + Date.now(); }
+function goMe() { window.location.href = '/static/me.html?_=' + Date.now(); }

@@ -126,6 +126,8 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .skill-chip{display:inline-block;padding:4px 10px;background:#f0f1f4;border-radius:10px;font-size:12px;font-weight:650;color:#555;cursor:pointer;transition:.15s;}
 .skill-chip:hover{background:#ffe8e0;color:#ff764a;}
 .skill-chip.active{background:#ff764a;color:#fff;}
+.slot-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;}
+.slot-icon{width:22px;height:22px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,.6);}
 
 /* Persona badge */
 .persona-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#f0f1f4;border-radius:10px;font-size:13px;font-weight:700;color:#333;margin-left:auto;}
@@ -630,15 +632,18 @@ function renderTeamSkills() {
 
   // 核心工作流程维度（由 喜剧龙虾 内部处理，非外部 Skill）
   const coreSlots = [
-    { id: '话题', label: '话题', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
-    { id: '态度', label: '态度', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
-    { id: '偏见', label: '偏见', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
-    { id: '情绪', label: '情绪', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
+    { id: '话题', label: '话题', icon: '/static/images/slots/topic.png', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
+    { id: '态度', label: '态度', icon: '/static/images/slots/attitude.png', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
+    { id: '偏见', label: '偏见', icon: '/static/images/slots/bias.png', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
+    { id: '情绪', label: '情绪', icon: '/static/images/slots/emotion.png', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
   ];
 
   let html = '<div class="skill-chips">';
   coreSlots.forEach(slot => {
-    html += `<span class="skill-chip" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient};color:#fff;border:none;">@${slot.id}</span>`;
+    html += `<span class="skill-chip slot-chip" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient};color:#fff;border:none;">
+      <img src="${slot.icon}" alt="${slot.label}" class="slot-icon">
+      <span>${slot.label}</span>
+    </span>`;
   });
   html += '</div>';
 

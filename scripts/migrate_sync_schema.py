@@ -55,23 +55,8 @@ def _sqlite_default_for(column) -> str:
 
 def _column_definition(engine, column) -> str:
     """生成 ALTER TABLE ADD COLUMN 可用的列定义字符串。"""
-    # CreateColumn 输出形如 "ALTER TABLE ... ADD COLUMN col_name TYPE ..."
-    # 我们只需要 col_name TYPE ... 这部分
-    raw = str(CreateColumn(column).compile(dialect=engine.dialect))
-    # 去掉前缀 "ALTER TABLE xxx ADD COLUMN "
-    prefix = "ALTER TABLE "
-    if raw.upper().startswith(prefix):
-        raw = raw[len(prefix):]
-    # 去掉表名和 "ADD COLUMN"
-    parts = raw.split(None, 4)
-    if len(parts) >= 5 and parts[1].upper() == "ADD" and parts[2].upper() == "COLUMN":
-        return raw[len(parts[0]) + len(parts[1]) + len(parts[2]) + 3:]
-    # 兜底：按 "ADD COLUMN" 切分
-    marker = "ADD COLUMN "
-    idx = raw.upper().find(marker)
-    if idx != -1:
-        return raw[idx + len(marker):]
-    return raw
+    # SQLAlchemy CreateColumn 直接输出列定义，例如 "is_verified BOOLEAN NOT NULL"
+    return str(CreateColumn(column).compile(dialect=engine.dialect))
 
 
 def migrate(db_url: str | None = None, dry_run: bool = False) -> dict:
@@ -124,8 +109,9 @@ def migrate(db_url: str | None = None, dry_run: bool = False) -> dict:
                     continue
 
                 col_def = _column_definition(engine, column)
-                # 如果列是 NOT NULL 但没有默认值，追加一个 SQLite 默认值
-                if not column.nullable and column.default is None and column.server_default is None:
+                # SQLite 不允许为已有行添加没有默认值的 NOT NULL 列，
+                # 因此只要列是 NOT NULL 且没有数据库级默认值，就附加一个默认值。
+                if not column.nullable and column.server_default is None:
                     default_value = _sqlite_default_for(column)
                     col_def = f"{col_def} DEFAULT {default_value}"
 

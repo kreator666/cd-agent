@@ -110,12 +110,8 @@ class SQLMemoryStore(MemoryStore):
 
     def _column_definition(self, column) -> str:
         """生成 ALTER TABLE ADD COLUMN 可用的列定义字符串。"""
-        raw = str(CreateColumn(column).compile(dialect=self.engine.dialect))
-        marker = "ADD COLUMN "
-        idx = raw.upper().find(marker)
-        if idx != -1:
-            return raw[idx + len(marker):]
-        return raw
+        # SQLAlchemy CreateColumn 直接输出列定义，例如 "is_verified BOOLEAN NOT NULL"
+        return str(CreateColumn(column).compile(dialect=self.engine.dialect))
 
     def _sync_schema(self) -> None:
         """同步 ORM schema 到数据库：建缺失表、补缺失列。"""
@@ -150,11 +146,9 @@ class SQLMemoryStore(MemoryStore):
                         )
                         continue
                     col_def = self._column_definition(column)
-                    if (
-                        not column.nullable
-                        and column.default is None
-                        and column.server_default is None
-                    ):
+                    # SQLite 不允许为已有行添加没有默认值的 NOT NULL 列，
+                    # 因此只要列是 NOT NULL 且没有数据库级默认值，就附加一个默认值。
+                    if not column.nullable and column.server_default is None:
                         col_def = f"{col_def} DEFAULT {self._sqlite_default_for(column)}"
                     sql = f'ALTER TABLE "{table_name}" ADD COLUMN {col_def}'
                     try:

@@ -104,6 +104,12 @@ class SQLMemoryStore(MemoryStore):
                 )
                 conn.commit()
                 logger.info("Migrated user_profiles: added follower_count column")
+            if "bio" not in columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE user_profiles ADD COLUMN bio TEXT"
+                )
+                conn.commit()
+                logger.info("Migrated user_profiles: added bio column")
             # user_conversations.source / metadata
             conv_columns = [
                 row[1]

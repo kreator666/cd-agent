@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, ClassVar
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, Field
 
@@ -361,6 +364,13 @@ class Skill(ComedySkill):
         context_parts = []
         for slot_name in required_slots:
             context_parts.append(f"【{slot_name}】{slots[slot_name]}")
+
+        # 判断人物画像规则是否与话题相关，相关才加入最终生成上下文
+        persona_rule = outputs.get("rule_persona", "")
+        topic_text = slots.get("话题", "")
+        if persona_rule and self._is_persona_relevant(topic_text, persona_rule):
+            context_parts.append(f"【人物画像规则】{persona_rule[:500]}")
+
         topic = " | ".join(context_parts)
 
         final = ""
@@ -405,6 +415,38 @@ class Skill(ComedySkill):
             },
             ensure_ascii=False,
         )
+
+    def _is_persona_relevant(self, topic: str, persona_rule: str) -> bool:
+        """判断人物画像规则是否与创作话题相关。
+
+        例如：话题是职场相关，人物画像是「毒舌职场侠」则相关；
+              话题是校园爱情，人物画像是「毒舌职场侠」则不相关。
+        默认不相关，避免无关画像污染最终输出。
+        """
+        if not topic or not persona_rule:
+            return False
+
+        system_prompt = (
+            "你是一位相关性判断助手。请判断给定的人物画像规则是否与创作话题相关。"
+            "只输出 JSON，不要任何解释。格式：{\"related\": true} 或 {\"related\": false}"
+        )
+        user_prompt = f"话题：{topic}\n人物画像规则：{persona_rule}\n\n请判断两者是否相关。"
+
+        try:
+            result = self._call_llm(system_prompt, user_prompt)
+            # 清理可能的 markdown 代码块
+            result = result.strip()
+            if result.startswith("```"):
+                result = result.strip("`").strip()
+                if result.startswith("json"):
+                    result = result[4:].strip()
+            data = json.loads(result)
+            related = bool(data.get("related", False))
+            logger.debug("人物画像相关性判断: topic=%s, related=%s", topic[:40], related)
+            return related
+        except Exception as e:
+            logger.warning("人物画像相关性判断失败，默认不使用: %s", e)
+            return False
 
     # ------------------------------------------------------------------ #
     # 反馈生成：根据用户输入和当前状态生成自然回复

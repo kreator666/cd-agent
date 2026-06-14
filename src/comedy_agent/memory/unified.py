@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -18,6 +19,7 @@ from comedy_agent.memory.models import (
     IPStyleData,
     KnowledgeCardData,
     PersonaData,
+    PreferenceItem,
     ProjectData,
     SaltHistoryData,
     ScriptData,
@@ -108,13 +110,13 @@ class UnifiedMemory(MemoryStore):
         return self._store.delete_conversation(user_id, session_id)
 
     def save_preference(self, user_id: str, key: str, value: Any) -> None:
-        pass
+        self._store.save_preference(user_id, key, value)
 
     def load_preference(self, user_id: str, key: str) -> Any | None:
-        return None
+        return self._store.load_preference(user_id, key)
 
-    def list_preferences(self, user_id: str) -> list[Any]:
-        return []
+    def list_preferences(self, user_id: str) -> list[PreferenceItem]:
+        return self._store.list_preferences(user_id)
 
     def save_script(self, user_id: str, script: ScriptData) -> ScriptData:
         return self._store.save_script(user_id, script)
@@ -343,6 +345,7 @@ class UnifiedMemory(MemoryStore):
         self,
         user_id: str,
         max_tokens: int = 800,
+        include_preferences: bool = True,
         include_recent_conversations: bool = True,
         include_recent_scripts: bool = True,
         max_conversations: int = 2,
@@ -350,12 +353,13 @@ class UnifiedMemory(MemoryStore):
     ) -> str:
         """构建用户记忆上下文文本，用于注入 Agent System Prompt。
 
-        按优先级组装：近期会话 > 近期作品，
+        按优先级组装：用户偏好 > 近期会话 > 近期作品，
         超出 Token 预算时从低优先级内容开始截断。
 
         Args:
             user_id: 用户唯一标识。
             max_tokens: 上下文最大 Token 预算。
+            include_preferences: 是否包含用户偏好。
             include_recent_conversations: 是否包含近期会话。
             include_recent_scripts: 是否包含近期作品。
             max_conversations: 最大会话数。
@@ -367,7 +371,16 @@ class UnifiedMemory(MemoryStore):
         ctx = self.build_user_context(user_id, max_conversations=max_conversations)
         items: list[tuple[int, str]] = []  # (priority, text)
 
-        # 1. 近期会话（逐条加入，支持段内截断）
+        # 1. 用户偏好（最高优先级）
+        if include_preferences and ctx.preferences:
+            pref_items = []
+            for pref in ctx.preferences:
+                value_str = json.dumps(pref.value, ensure_ascii=False) if pref.value is not None else "null"
+                pref_items.append(f"- {pref.key}: {value_str}")
+            if pref_items:
+                items.append((1, "【用户偏好】\n" + "\n".join(pref_items)))
+
+        # 2. 近期会话（逐条加入，支持段内截断）
         if include_recent_conversations and ctx.recent_conversations:
             conv_items = []
             for conv in ctx.recent_conversations[:max_conversations]:

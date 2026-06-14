@@ -25,6 +25,7 @@ from comedy_agent.memory.models import (
     IPStyleData,
     KnowledgeCardData,
     PersonaData,
+    PreferenceItem,
     ProjectData,
     SaltHistoryData,
     ScriptData,
@@ -440,16 +441,37 @@ class SQLMemoryStore(MemoryStore):
             return True
 
     # ------------------------------------------------------------------ #
-    # 中期记忆 —— 偏好（已弃用，保留空实现以兼容抽象基类）
+    # 中期记忆 —— 偏好
     # ------------------------------------------------------------------ #
     def save_preference(self, user_id: str, key: str, value: Any) -> None:
-        pass
+        """保存用户偏好。相同 key 则更新。"""
+        with self._new_session() as session:
+            row = session.query(UserPreference).filter_by(user_id=user_id, key=key).first()
+            if row is None:
+                row = UserPreference(user_id=user_id, key=key, value=value)
+                session.add(row)
+                logger.debug("Created preference: %s.%s", user_id, key)
+            else:
+                row.value = value
+                logger.debug("Updated preference: %s.%s", user_id, key)
+            session.commit()
 
     def load_preference(self, user_id: str, key: str) -> Any | None:
-        return None
+        """读取指定用户偏好。"""
+        with self._new_session() as session:
+            row = session.query(UserPreference).filter_by(user_id=user_id, key=key).first()
+            return row.value if row else None
 
-    def list_preferences(self, user_id: str) -> list[Any]:
-        return []
+    def list_preferences(self, user_id: str) -> list[PreferenceItem]:
+        """列出用户所有偏好。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(UserPreference)
+                .filter_by(user_id=user_id)
+                .order_by(UserPreference.created_at.desc())
+                .all()
+            )
+            return [PreferenceItem(key=r.key, value=r.value) for r in rows]
 
     # ------------------------------------------------------------------ #
     # 中期记忆 —— 作品
@@ -826,13 +848,14 @@ class SQLMemoryStore(MemoryStore):
         self, user_id: str, max_conversations: int = 3
     ) -> UserContext:
         profile = self.get_or_create_user(user_id)
+        preferences = self.list_preferences(user_id)
         recent_conversations = self.list_conversations(
             user_id, limit=max_conversations
         )
         recent_scripts = self.list_scripts(user_id)[:max_conversations]
         return UserContext(
             profile=profile,
-            preferences=[],
+            preferences=preferences,
             recent_conversations=recent_conversations,
             recent_scripts=recent_scripts,
         )

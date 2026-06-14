@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.api.state import state
-from comedy_agent.api.routers.actor import router as actor_router
 from comedy_agent.api.routers.admin import require_admin, router as admin_router
 from comedy_agent.api.routers.export import router as export_router
 from comedy_agent.api.routers.ip_styles import router as ip_styles_router
@@ -402,7 +401,6 @@ app.include_router(speed_router)
 app.include_router(ip_styles_router)
 app.include_router(submissions_router)
 app.include_router(users_router)
-app.include_router(actor_router)
 app.include_router(admin_router)
 app.include_router(export_router)
 

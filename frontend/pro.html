@@ -453,7 +453,7 @@ function loadConversations() {
 }
 
 function getSkillTypeLabel(type) {
-  const map = { topic: '话题', attitude: '态度', emotion: '情绪', genre: '风格' };
+  const map = { topic: '话题', attitude: '态度', emotion: '情绪', genre: '风格', material: '素材', layout: '排版' };
   return map[type] || type;
 }
 
@@ -464,6 +464,8 @@ function getSkillGradient(type) {
     emotion: 'linear-gradient(135deg,#fce7f3,#ec4899)',
     genre: 'linear-gradient(135deg,#fef3c7,#f59e0b)',
     bias: 'linear-gradient(135deg,#f3e8ff,#9333ea)',
+    material: 'linear-gradient(135deg,#fef9c3,#eab308)',
+    layout: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)',
   };
   return map[type] || 'linear-gradient(135deg,#eee,#ba7a5a)';
 }
@@ -637,6 +639,8 @@ function renderTeamSkills() {
     { id: '态度', label: '态度', name: '态度女王', icon: '/static/images/slots/attitude.png', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
     { id: '偏见', label: '偏见', name: '偏见侦探', icon: '/static/images/slots/bias.png', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
     { id: '情绪', label: '情绪', name: '情绪魔法师', icon: '/static/images/slots/emotion.png', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
+    { id: '素材', label: '素材', name: '素材搜集员', icon: '/static/images/slots/material.png', desc: '搜索网络创作资料', gradient: 'linear-gradient(135deg,#fef9c3,#eab308)' },
+    { id: '排版', label: '排版', name: '排版设计师', icon: '/static/images/slots/layout.png', desc: '转换为平台文章格式', gradient: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)' },
   ];
 
   let html = '<div class="slot-list">';
@@ -1183,7 +1187,7 @@ function replaceMention(newName) {
   const input = $('#chatInput');
   let current = input.value;
   // 核心维度 + 所有 Skill 名称都可能被替换
-  const coreSlots = ['话题', '态度', '偏见', '情绪'];
+  const coreSlots = ['话题', '态度', '偏见', '情绪', '素材', '排版'];
   const allSkillNames = allSkills.map(s => s.name);
   const allMentions = [...coreSlots, ...allSkillNames];
   let replaced = false;

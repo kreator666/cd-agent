@@ -27,6 +27,8 @@ SKILL_COST = {
     "genre": 15,
     "rule_persona": 20,
     "script_composer": 25,
+    "material": 20,
+    "layout": 15,
 }
 
 
@@ -248,6 +250,10 @@ async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
             info["skill_type"] = "script_composer"
         elif "style_mimic" in name:
             info["skill_type"] = "style_mimic"
+        elif "material" in name:
+            info["skill_type"] = "material"
+        elif "layout" in name:
+            info["skill_type"] = "layout"
         else:
             info["skill_type"] = "other"
         if skill_type is None or info["skill_type"] == skill_type:
@@ -327,8 +333,8 @@ async def pro_generate(
         state.orch.set_model(model_name)
 
     # 3. 构造组合 Pipeline 调用
-    # 按类型排序：topic → attitude → emotion → genre → rule_persona → script_composer
-    type_order = ["topic", "attitude", "emotion", "genre", "rule_persona", "script_composer"]
+    # 按类型排序：topic → attitude → emotion → genre → material → rule_persona → script_composer → layout
+    type_order = ["topic", "attitude", "emotion", "genre", "material", "rule_persona", "script_composer", "layout"]
     ordered_skills = []
     for t in type_order:
         for sid in request.skill_ids:

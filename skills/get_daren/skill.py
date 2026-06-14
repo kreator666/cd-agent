@@ -237,10 +237,14 @@ class Skill(ComedySkill):
             return "emotion"
         if "genre" in name:
             return "genre"
+        if "material" in name:
+            return "material"
         if "rule_persona" in name:
             return "rule_persona"
         if "script_composer" in name:
             return "script_composer"
+        if "layout" in name:
+            return "layout"
         return "other"
 
     # ------------------------------------------------------------------ #

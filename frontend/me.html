@@ -430,8 +430,10 @@
     }
 
     checkVerifiedStatus();
-    loadModels();
-    loadModelConfig();
+    (async () => {
+        await loadModels();
+        await loadModelConfig();
+    })();
     loadTokenBalance();
 
     // ========== 工作流配置（状态机）==========

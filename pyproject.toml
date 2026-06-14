@@ -48,6 +48,8 @@ dependencies = [
     "alembic>=1.13.0",
     # 可观测性
     "langsmith>=0.1.0",
+    # 素材搜索
+    "duckduckgo-search>=5.0",
 ]
 
 [project.optional-dependencies]

@@ -442,6 +442,8 @@ _BUILTIN_SKILL_NAMES = {
     "genre",
     "rule_persona",
     "script_composer",
+    "material",
+    "layout",
 }
 
 

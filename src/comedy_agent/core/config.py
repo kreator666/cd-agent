@@ -31,6 +31,9 @@ class Settings(BaseSettings):
         default="https://maas-openapi.wanjiedata.com/api/v1", alias="WJ_BASE_URL"
     )
 
+    # 素材搜索（可选回退）
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")
     default_embedding_model: str = Field(

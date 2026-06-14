@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.core.config import settings
@@ -342,6 +343,8 @@ async def pro_generate(
     context_parts: list[str] = []
     current_text = request.outline
 
+    start_usage_tracking()
+
     for skill_name in ordered_skills:
         if skill_name == "rule_persona":
             # 人物画像规则注入
@@ -386,8 +389,14 @@ async def pro_generate(
     persona.usage_count = (persona.usage_count or 0) + 1
     state.memory.save_persona(persona)
 
-    # 扣除 Token
-    state.memory.deduct_tokens(user_id, token_cost)
+    # 按真实 Token 用量扣费并记录
+    billing = charge_model_usage(
+        user_id=user_id,
+        endpoint="/pro/generate",
+        description=f"专业版剧本生成 ({','.join(ordered_skills)})",
+        fallback_cost=token_cost,
+    )
+    token_cost = billing["cost"]
 
     # 保存生成记录
     session_id = uuid.uuid4().hex[:16]

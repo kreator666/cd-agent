@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.memory.models import IPStyleData
@@ -80,8 +81,16 @@ async def try_ip_role(
         f"强度：{request.intensity}\n"
         f"角色风格：{role.prompt_snippet}"
     )
+    start_usage_tracking()
     result = state.orch.run(prompt, user_id=user_id)
     polished = result.get("output", "")
+
+    charge_model_usage(
+        user_id=user_id,
+        endpoint="/ip-roles/{role_id}/try",
+        description=f"IP 角色试用 ({role.actor_name})",
+        fallback_cost=5,
+    )
 
     # 更新使用次数
     role.usage_count = (role.usage_count or 0) + 1

@@ -10,6 +10,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.memory.models import IPStyleData
@@ -72,12 +73,12 @@ async def speed_polish(
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
-    cost = INTENSITY_COST.get(request.intensity, 20)
+    min_cost = INTENSITY_COST.get(request.intensity, 20)
     account = state.memory.get_token_account(user_id)
-    if account.balance < cost:
+    if account.balance < min_cost:
         raise HTTPException(
             status_code=402,
-            detail=f"Token 余额不足（需 {cost}，余 {account.balance}）",
+            detail=f"Token 余额不足（至少需 {min_cost}，余 {account.balance}）",
         )
 
     # 模型选择：用户传入 > 用户配置 > 默认
@@ -141,13 +142,20 @@ async def speed_polish(
             f"【参考知识结束】"
         )
 
+    start_usage_tracking()
     result = state.orch.run(prompt, user_id=user_id)
     polished = result.get("output", "")
 
     # Token 预估（简单字符数估算）
     estimated_tokens = int(len(request.text) * 0.8)
 
-    state.memory.deduct_tokens(user_id, cost)
+    billing = charge_model_usage(
+        user_id=user_id,
+        endpoint="/speed/polish",
+        description=f"极速版加梗 ({request.intensity})",
+        fallback_cost=min_cost,
+    )
+    cost = billing["cost"]
     session_id = uuid.uuid4().hex[:16]
     state.memory.save_conversation(
         user_id=user_id,

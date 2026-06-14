@@ -25,6 +25,7 @@ from comedy_agent.memory.models import (
     ScriptData,
     SubmissionData,
     TokenAccountData,
+    TokenConsumptionData,
     UserContext,
     UserProfileData,
 )
@@ -188,6 +189,16 @@ class UnifiedMemory(MemoryStore):
 
     def recharge_tokens(self, user_id: str, amount: int) -> TokenAccountData:
         return self._store.recharge_tokens(user_id, amount)
+
+    def save_consumption_record(
+        self, record: TokenConsumptionData
+    ) -> TokenConsumptionData:
+        return self._store.save_consumption_record(record)
+
+    def list_consumption_records(
+        self, user_id: str, limit: int = 50, offset: int = 0
+    ) -> list[TokenConsumptionData]:
+        return self._store.list_consumption_records(user_id, limit, offset)
 
     # ------------------------------------------------------------------ #
     # 项目

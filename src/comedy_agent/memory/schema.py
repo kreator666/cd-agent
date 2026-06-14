@@ -81,6 +81,9 @@ class UserProfile(Base):
     earnings: Mapped[list["EarningRecord"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
+    consumption_records: Mapped[list["TokenConsumptionRecord"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin"
+    )
     personas: Mapped[list["Persona"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", lazy="selectin"
     )
@@ -570,6 +573,55 @@ class EarningRecord(Base):
 
     # Relationship
     user: Mapped["UserProfile"] = relationship(back_populates="earnings")
+
+
+# ------------------------------------------------------------------ #
+# TokenConsumptionRecord —— Token 消费记录
+# ------------------------------------------------------------------ #
+class TokenConsumptionRecord(Base):
+    """模型调用 Token 消费记录表。"""
+
+    __tablename__ = "token_consumption_records"
+
+    consumption_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+        comment="用户 ID",
+    )
+    session_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="关联会话 ID"
+    )
+    endpoint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="调用入口，如 /chat /salt /pro/generate"
+    )
+    model: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="实际使用的模型名"
+    )
+    prompt_tokens: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="输入 Token 数"
+    )
+    completion_tokens: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="输出 Token 数"
+    )
+    total_tokens: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="总 Token 数"
+    )
+    cost: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="扣除的 Token 数"
+    )
+    description: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="描述，如极速版润色"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    user: Mapped["UserProfile"] = relationship(back_populates="consumption_records")
 
 
 # ------------------------------------------------------------------ #

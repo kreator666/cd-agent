@@ -23,6 +23,7 @@ from comedy_agent.memory.models import (
     ScriptData,
     SubmissionData,
     TokenAccountData,
+    TokenConsumptionData,
     UserContext,
     UserProfileData,
 )
@@ -547,6 +548,21 @@ class MemoryStore(ABC):
     @abstractmethod
     def list_earnings(self, user_id: str | None = None, actor_name: str | None = None) -> list[EarningRecordData]:
         """列出收益记录。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # Token 消费记录
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_consumption_record(self, record: TokenConsumptionData) -> TokenConsumptionData:
+        """保存 Token 消费记录。"""
+        ...
+
+    @abstractmethod
+    def list_consumption_records(
+        self, user_id: str, limit: int = 50, offset: int = 0
+    ) -> list[TokenConsumptionData]:
+        """列出用户 Token 消费记录，按创建时间倒序。"""
         ...
 
     # ------------------------------------------------------------------ #

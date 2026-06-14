@@ -31,6 +31,7 @@ from comedy_agent.memory.models import (
     ScriptData,
     SubmissionData,
     TokenAccountData,
+    TokenConsumptionData,
     UserContext,
     UserProfileData,
 )
@@ -43,6 +44,7 @@ from comedy_agent.memory.schema import (
     KnowledgeCard,
     SaltHistory,
     ScriptSubmission,
+    TokenConsumptionRecord,
     UserConversation,
     UserDocument,
     UserPreference,
@@ -1293,6 +1295,74 @@ class SQLMemoryStore(MemoryStore):
                     actor_name=r.actor_name,
                     record_type=r.record_type,
                     amount=r.amount,
+                    description=r.description,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    # ------------------------------------------------------------------ #
+    # Token 消费记录
+    # ------------------------------------------------------------------ #
+    def save_consumption_record(
+        self, record: TokenConsumptionData
+    ) -> TokenConsumptionData:
+        """保存 Token 消费记录。"""
+        record_id = record.consumption_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = TokenConsumptionRecord(
+                consumption_id=record_id,
+                user_id=record.user_id,
+                session_id=record.session_id,
+                endpoint=record.endpoint,
+                model=record.model,
+                prompt_tokens=record.prompt_tokens or 0,
+                completion_tokens=record.completion_tokens or 0,
+                total_tokens=record.total_tokens or 0,
+                cost=record.cost or 0,
+                description=record.description,
+            )
+            session.add(row)
+            session.commit()
+            logger.debug("Saved consumption record: %s", record_id)
+            return TokenConsumptionData(
+                consumption_id=row.consumption_id,
+                user_id=row.user_id,
+                session_id=row.session_id,
+                endpoint=row.endpoint,
+                model=row.model,
+                prompt_tokens=row.prompt_tokens,
+                completion_tokens=row.completion_tokens,
+                total_tokens=row.total_tokens,
+                cost=row.cost,
+                description=row.description,
+                created_at=row.created_at,
+            )
+
+    def list_consumption_records(
+        self, user_id: str, limit: int = 50, offset: int = 0
+    ) -> list[TokenConsumptionData]:
+        """列出用户 Token 消费记录，按创建时间倒序。"""
+        with self._new_session() as session:
+            rows = (
+                session.query(TokenConsumptionRecord)
+                .filter_by(user_id=user_id)
+                .order_by(TokenConsumptionRecord.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+                .all()
+            )
+            return [
+                TokenConsumptionData(
+                    consumption_id=r.consumption_id,
+                    user_id=r.user_id,
+                    session_id=r.session_id,
+                    endpoint=r.endpoint,
+                    model=r.model,
+                    prompt_tokens=r.prompt_tokens,
+                    completion_tokens=r.completion_tokens,
+                    total_tokens=r.total_tokens,
+                    cost=r.cost,
                     description=r.description,
                     created_at=r.created_at,
                 )

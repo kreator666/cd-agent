@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消费明细 — Comedy Agent</title>
+    <style>
+    :root{
+      --bg:#ffffff;--ink:#343434;--muted:#888b92;--light:#f5f6f8;--line:#eceef2;--line-dark:#dfe2e7;
+      --orange:#ff764a;--green:#18a058;--icon:#5f6368;--shadow:0 18px 50px rgba(20,26,38,.10);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+      font-size:16px;letter-spacing:.02em;
+    }
+    .app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+    button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+    /* Topbar */
+    .topbar{height:76px;display:grid;grid-template-columns:420px 1fr 420px;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+    .brand{display:flex;align-items:center;gap:10px;color:#333;font-weight:650;border-radius:18px;padding:8px 10px;margin-left:-10px;transition:.24s ease;}
+    .brand:hover{background:#f7f8fa;transform:translateY(-1px)}
+    .brand-avatar{width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:linear-gradient(135deg,#f1d6a4,#1e1e1e);box-shadow:0 2px 7px rgba(0,0,0,.14);}
+    .title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+    .actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+
+    /* Nav sidebar */
+    .nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+    .nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+    .nav-sidebar a:hover{background:#f0f1f4;}
+    .nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+    /* Main */
+    .main{flex:1;min-height:0;padding-left:56px;overflow-y:auto;}
+    .main-inner{max-width:960px;margin:0 auto;padding:24px 20px;}
+
+    /* Consumptions page */
+    .page-header{display:flex;align-items:center;gap:16px;margin-bottom:16px;}
+    .page-title{font-size:18px;font-weight:780;color:#232323;}
+    .back-btn{display:flex;align-items:center;gap:6px;background:var(--light);color:#555;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;transition:.15s;text-decoration:none;}
+    .back-btn:hover{background:#e5e7eb;}
+    .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px;}
+    .summary-card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid var(--line);}
+    .summary-card .label{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;}
+    .summary-card .value{font-size:22px;font-weight:800;color:#232323;}
+    .card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.06);border:1px solid var(--line);}
+    table{width:100%;border-collapse:collapse;font-size:14px;}
+    th,td{padding:10px 8px;text-align:left;}
+    th{color:#666;font-weight:700;border-bottom:1.5px solid var(--line);font-size:13px;}
+    td{border-bottom:1px solid #f0f0f0;font-weight:600;color:#444;}
+    .empty{text-align:center;color:#888;padding:40px 0;}
+    .load-more{display:block;width:100%;padding:12px;background:var(--light);color:#555;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-top:16px;transition:.15s;}
+    .load-more:hover{background:#e5e7eb;}
+    .load-more:disabled{opacity:.5;cursor:not-allowed;}
+    .endpoint-tag{display:inline-block;background:#fff2ed;color:#ff764a;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:700;}
+
+    /* Responsive */
+    @media(max-width:1100px){.topbar{grid-template-columns:1fr;gap:16px;height:auto;padding:24px}.main{padding-left:0;}}
+    @media(max-width:768px){table{font-size:12px;}th,td{padding:8px 4px;}.hide-mobile{display:none;}}
+    </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <button class="brand" onclick="goHome()">
+      <span class="brand-avatar"></span>
+      <span>Comedy Agent</span>
+    </button>
+    <div class="title">💰 消费明细</div>
+    <div class="actions"></div>
+  </header>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro.html" title="专业版">🎬</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="main-inner">
+      <div class="page-header">
+        <a href="/static/me.html" class="back-btn">← 返回我的</a>
+        <div class="page-title">模型调用消费记录</div>
+      </div>
+
+      <div class="summary">
+        <div class="summary-card">
+          <div class="label">总记录数</div>
+          <div class="value" id="total-count">--</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">累计消耗 Token</div>
+          <div class="value" id="total-tokens">--</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">累计扣费</div>
+          <div class="value" id="total-cost">--</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>时间</th>
+              <th>入口</th>
+              <th class="hide-mobile">模型</th>
+              <th>输入/输出</th>
+              <th>总 Token</th>
+              <th>扣费</th>
+              <th class="hide-mobile">描述</th>
+            </tr>
+          </thead>
+          <tbody id="consumption-list">
+            <tr><td colspan="7" class="empty">加载中...</td></tr>
+          </tbody>
+        </table>
+        <button class="load-more" id="load-more" onclick="loadMore()" style="display:none;">加载更多</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+    requireAuth();
+
+    let offset = 0;
+    const limit = 50;
+    let hasMore = true;
+
+    function formatDate(iso) {
+        if (!iso) return '--';
+        const d = new Date(iso);
+        return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function loadConsumptions(append = false) {
+        const tbody = document.getElementById('consumption-list');
+        const loadMoreBtn = document.getElementById('load-more');
+        if (!append) {
+            tbody.innerHTML = '<tr><td colspan="7" class="empty">加载中...</td></tr>';
+        }
+        try {
+            const res = await apiFetch(`/me/consumptions?limit=${limit}&offset=${offset}`);
+            const data = await res.json();
+            const items = data.items || [];
+
+            if (!append) {
+                tbody.innerHTML = '';
+            }
+
+            if (items.length === 0 && !append) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无消费记录</td></tr>';
+            } else {
+                items.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${formatDate(item.created_at)}</td>
+                        <td><span class="endpoint-tag">${item.endpoint || '-'}</span></td>
+                        <td class="hide-mobile">${item.model || '-'}</td>
+                        <td>${item.prompt_tokens || 0} / ${item.completion_tokens || 0}</td>
+                        <td>${item.total_tokens || 0}</td>
+                        <td>${item.cost || 0}</td>
+                        <td class="hide-mobile">${item.description || '-'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            hasMore = items.length === limit;
+            loadMoreBtn.style.display = hasMore ? 'block' : 'none';
+
+            // 更新汇总（简单累计当前已加载的数据）
+            updateSummary(items, append);
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="7" class="empty">加载失败：${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    let summary = { count: 0, tokens: 0, cost: 0 };
+    function updateSummary(items, append) {
+        if (!append) {
+            summary = { count: 0, tokens: 0, cost: 0 };
+        }
+        items.forEach(item => {
+            summary.count += 1;
+            summary.tokens += item.total_tokens || 0;
+            summary.cost += item.cost || 0;
+        });
+        document.getElementById('total-count').textContent = summary.count;
+        document.getElementById('total-tokens').textContent = summary.tokens.toLocaleString();
+        document.getElementById('total-cost').textContent = summary.cost.toLocaleString();
+    }
+
+    function loadMore() {
+        if (!hasMore) return;
+        offset += limit;
+        loadConsumptions(true);
+    }
+
+    loadConsumptions();
+</script>
+</body>
+</html>

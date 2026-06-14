@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.admin import require_admin, router as admin_router
@@ -569,7 +570,7 @@ async def reload_skills(
     return SkillReloadResponse(**stats)
 
 
-CHAT_COST = 5
+CHAT_MIN_COST = 5
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(
@@ -580,8 +581,8 @@ async def chat(
         raise HTTPException(status_code=503, detail="服务未就绪")
     if state.memory is not None:
         account = state.memory.get_token_account(user_id)
-        if account.balance < CHAT_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {CHAT_COST}，余 {account.balance}）")
+        if account.balance < CHAT_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {CHAT_MIN_COST}，余 {account.balance}）")
 
     tracer = get_tracer()
     metrics = get_metrics()
@@ -594,6 +595,8 @@ async def chat(
         # 生成或复用 session_id
         import uuid
         session_id = request.session_id or uuid.uuid4().hex[:16]
+
+        start_usage_tracking()
 
         with tracer.span(
             "api.chat",
@@ -659,9 +662,14 @@ async def chat(
                         prompt_template="使用 {skill_name} 技能，主题是【{topic}】，风格改成【{style}】",
                     )
 
-            # 扣费
-            if state.memory is not None:
-                state.memory.deduct_tokens(user_id, CHAT_COST)
+            # 按真实 Token 用量扣费并记录
+            charge_model_usage(
+                user_id=user_id,
+                endpoint="/chat",
+                description="Agent 对话",
+                session_id=session_id,
+                fallback_cost=CHAT_MIN_COST,
+            )
 
             return ChatResponse(
                 output=result["output"], session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
@@ -670,7 +678,7 @@ async def chat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-STANDUP_COST = 18
+STANDUP_MIN_COST = 18
 
 @app.post("/skills/standup", response_model=StandupResponse, tags=["skills"])
 async def skill_standup(
@@ -681,8 +689,8 @@ async def skill_standup(
         raise HTTPException(status_code=503, detail="服务未就绪")
     if state.memory is not None:
         account = state.memory.get_token_account(user_id)
-        if account.balance < STANDUP_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {STANDUP_COST}，余 {account.balance}）")
+        if account.balance < STANDUP_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {STANDUP_MIN_COST}，余 {account.balance}）")
 
     # 优先复用 orchestrator 中已注册的 Skill，保证模型上下文一致
     skill = None
@@ -700,6 +708,7 @@ async def skill_standup(
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "topic": request.topic,
@@ -712,14 +721,18 @@ async def skill_standup(
                 "debug": request.debug,
             }
         )
-        if state.memory is not None:
-            state.memory.deduct_tokens(user_id, STANDUP_COST)
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/standup",
+            description="脱口秀创作",
+            fallback_cost=STANDUP_MIN_COST,
+        )
         return StandupResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-SKETCH_COST = 18
+SKETCH_MIN_COST = 18
 
 @app.post("/skills/sketch", response_model=SketchResponse, tags=["skills"])
 async def skill_sketch(
@@ -730,8 +743,8 @@ async def skill_sketch(
         raise HTTPException(status_code=503, detail="服务未就绪")
     if state.memory is not None:
         account = state.memory.get_token_account(user_id)
-        if account.balance < SKETCH_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {SKETCH_COST}，余 {account.balance}）")
+        if account.balance < SKETCH_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {SKETCH_MIN_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -746,6 +759,7 @@ async def skill_sketch(
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "theme": request.theme,
@@ -757,14 +771,18 @@ async def skill_sketch(
                 "user_id": user_id,
             }
         )
-        if state.memory is not None:
-            state.memory.deduct_tokens(user_id, SKETCH_COST)
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/sketch",
+            description="小品创作",
+            fallback_cost=SKETCH_MIN_COST,
+        )
         return SketchResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-MANZAI_COST = 18
+MANZAI_MIN_COST = 18
 
 @app.post("/skills/manzai", response_model=ManzaiResponse, tags=["skills"])
 async def skill_manzai(
@@ -775,8 +793,8 @@ async def skill_manzai(
         raise HTTPException(status_code=503, detail="服务未就绪")
     if state.memory is not None:
         account = state.memory.get_token_account(user_id)
-        if account.balance < MANZAI_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {MANZAI_COST}，余 {account.balance}）")
+        if account.balance < MANZAI_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {MANZAI_MIN_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -791,6 +809,7 @@ async def skill_manzai(
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "topic": request.topic,
@@ -801,14 +820,18 @@ async def skill_manzai(
                 "user_id": user_id,
             }
         )
-        if state.memory is not None:
-            state.memory.deduct_tokens(user_id, MANZAI_COST)
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/manzai",
+            description="漫才创作",
+            fallback_cost=MANZAI_MIN_COST,
+        )
         return ManzaiResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-JAPANESE_SKETCH_COST = 18
+JAPANESE_SKETCH_MIN_COST = 18
 
 @app.post("/skills/japanese-sketch", response_model=JapaneseSketchResponse, tags=["skills"])
 async def skill_japanese_sketch(
@@ -819,8 +842,8 @@ async def skill_japanese_sketch(
         raise HTTPException(status_code=503, detail="服务未就绪")
     if state.memory is not None:
         account = state.memory.get_token_account(user_id)
-        if account.balance < JAPANESE_SKETCH_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（需 {JAPANESE_SKETCH_COST}，余 {account.balance}）")
+        if account.balance < JAPANESE_SKETCH_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {JAPANESE_SKETCH_MIN_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -835,6 +858,7 @@ async def skill_japanese_sketch(
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "theme": request.theme,
@@ -847,8 +871,12 @@ async def skill_japanese_sketch(
                 "user_id": user_id,
             }
         )
-        if state.memory is not None:
-            state.memory.deduct_tokens(user_id, JAPANESE_SKETCH_COST)
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/japanese-sketch",
+            description="日式短剧创作",
+            fallback_cost=JAPANESE_SKETCH_MIN_COST,
+        )
         return JapaneseSketchResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

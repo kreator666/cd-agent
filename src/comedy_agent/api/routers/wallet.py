@@ -103,6 +103,58 @@ async def get_stats(user_id: str = Depends(get_current_user)) -> StatsResponse:
     )
 
 
+class ConsumptionRecordResponse(BaseModel):
+    """单条消费记录响应。"""
+
+    consumption_id: str = Field(description="记录 ID")
+    session_id: str | None = Field(default=None, description="会话 ID")
+    endpoint: str | None = Field(default=None, description="调用入口")
+    model: str | None = Field(default=None, description="模型名")
+    prompt_tokens: int = Field(default=0, description="输入 Token 数")
+    completion_tokens: int = Field(default=0, description="输出 Token 数")
+    total_tokens: int = Field(default=0, description="总 Token 数")
+    cost: int = Field(default=0, description="扣除 Token 数")
+    description: str | None = Field(default=None, description="描述")
+    created_at: str | None = Field(default=None, description="创建时间")
+
+
+class ConsumptionListResponse(BaseModel):
+    """消费记录列表响应。"""
+
+    items: list[ConsumptionRecordResponse] = Field(description="消费记录列表")
+    total: int = Field(default=0, description="总记录数")
+
+
+@router.get("/me/consumptions", response_model=ConsumptionListResponse)
+async def list_consumptions(
+    limit: int = 50,
+    offset: int = 0,
+    user_id: str = Depends(get_current_user),
+) -> ConsumptionListResponse:
+    """获取当前用户的模型调用消费明细。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    records = state.memory.list_consumption_records(user_id, limit=limit, offset=offset)
+    return ConsumptionListResponse(
+        items=[
+            ConsumptionRecordResponse(
+                consumption_id=r.consumption_id or "",
+                session_id=r.session_id,
+                endpoint=r.endpoint,
+                model=r.model,
+                prompt_tokens=r.prompt_tokens,
+                completion_tokens=r.completion_tokens,
+                total_tokens=r.total_tokens,
+                cost=r.cost,
+                description=r.description,
+                created_at=r.created_at.isoformat() if r.created_at else None,
+            )
+            for r in records
+        ],
+        total=len(records),
+    )
+
+
 # ------------------------------------------------------------------ #
 # 模型配置
 # ------------------------------------------------------------------ #

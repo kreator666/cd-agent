@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.memory.models import SaltHistoryData
@@ -39,12 +40,12 @@ async def salt(request: SaltRequest, user_id: str = Depends(get_current_user)) -
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
-    cost = SALT_COST.get(request.salt_level, 20)
+    min_cost = SALT_COST.get(request.salt_level, 20)
     account = state.memory.get_token_account(user_id)
-    if account.balance < cost:
+    if account.balance < min_cost:
         raise HTTPException(
             status_code=402,
-            detail=f"Token 余额不足（需 {cost}，余 {account.balance}）",
+            detail=f"Token 余额不足（至少需 {min_cost}，余 {account.balance}）",
         )
 
     if request.model:
@@ -56,10 +57,17 @@ async def salt(request: SaltRequest, user_id: str = Depends(get_current_user)) -
         f"原文：{request.text}\n"
         f"盐度：{request.salt_level}"
     )
+    start_usage_tracking()
     result = state.orch.run(prompt, user_id=user_id)
     polished = result.get("output", "")
 
-    state.memory.deduct_tokens(user_id, cost)
+    billing = charge_model_usage(
+        user_id=user_id,
+        endpoint="/salt",
+        description=f"加点盐 ({request.salt_level})",
+        fallback_cost=min_cost,
+    )
+    cost = billing["cost"]
     # 统一保存到 conversation，source="salt"
     import uuid
     session_id = uuid.uuid4().hex[:16]

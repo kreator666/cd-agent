@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.admin import require_admin
 from comedy_agent.auth.dependencies import get_current_user
@@ -213,6 +214,9 @@ class ProWorkflowEngine:
         新架构：喜剧龙虾 skill 内部处理核心工作流程（话题/态度/偏见/情绪），
         引擎层不再依赖严格的状态机，始终调用 喜剧龙虾 skill 进行调度。
         """
+        # 0. 开始追踪模型用量
+        start_usage_tracking()
+
         # 1. 加载或创建会话
         conv = None
         if session_id:
@@ -643,6 +647,13 @@ async def pro_chat(
         outline=request.outline,
         persona_id=request.persona_id,
         model=request.model,
+    )
+    charge_model_usage(
+        user_id=user_id,
+        endpoint="/pro/chat",
+        description="专业版 Wizard 对话",
+        session_id=result.get("session_id"),
+        fallback_cost=5,
     )
     return ProChatResponse(**result)
 

@@ -242,6 +242,25 @@ class EarningRecordData(BaseModel):
 
 
 # ------------------------------------------------------------------ #
+# Token 消费记录
+# ------------------------------------------------------------------ #
+class TokenConsumptionData(BaseModel):
+    """模型调用 Token 消费记录数据。"""
+
+    consumption_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str = Field(description="用户 ID")
+    session_id: str | None = Field(default=None, description="关联会话 ID")
+    endpoint: str | None = Field(default=None, description="调用入口，如 /chat /salt /pro/generate")
+    model: str | None = Field(default=None, description="实际使用的模型名")
+    prompt_tokens: int = Field(default=0, description="输入 Token 数")
+    completion_tokens: int = Field(default=0, description="输出 Token 数")
+    total_tokens: int = Field(default=0, description="总 Token 数")
+    cost: int = Field(default=0, description="扣除的 Token 数")
+    description: str | None = Field(default=None, description="描述")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
 # 敏感词
 # ------------------------------------------------------------------ #
 class FollowData(BaseModel):

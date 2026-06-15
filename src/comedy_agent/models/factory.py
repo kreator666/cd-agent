@@ -422,7 +422,6 @@ class ModelFactory:
             fallbacks=fallbacks,
             exceptions_to_handle=exceptions,
         )
-        runnable.callbacks = [UsageCallbackHandler(model_name=name or settings.default_model)]
         return runnable
 
     @classmethod

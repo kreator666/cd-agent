@@ -413,12 +413,36 @@ class AgentOrchestrator:
                 return tool
         return None
 
+    @staticmethod
+    def _clean_request_for_fallback(user_request: str) -> str:
+        """去除常见的技能指令前缀，保留用户实际输入内容。"""
+        # 去除 "使用 xxx 技能。" / "用 xxx 技能。" / "使用 xxx 技能来" 等前缀
+        cleaned = re.sub(
+            r"^(?:使用|用)\s*\w+(?:\s*技能)?\s*(?:来|去)?\s*[。：:.]?\s*",
+            "",
+            user_request,
+            flags=re.IGNORECASE,
+        )
+        # 去除 "搜索词：" / "创作话题：" / "文本：" / "Text:" 等前缀（逐行处理）
+        lines = cleaned.splitlines()
+        cleaned_lines: list[str] = []
+        for line in lines:
+            line = re.sub(
+                r"^\s*(?:文本|text|搜索词|query|关键词|创作话题|topic)\s*[：:]\s*",
+                "",
+                line,
+                flags=re.IGNORECASE,
+            )
+            if line.strip():
+                cleaned_lines.append(line)
+        return "\n".join(cleaned_lines).strip()
+
     def _extract_skill_args(
         self, skill: BaseTool, user_request: str
     ) -> dict[str, Any]:
         """用 LLM 将用户请求解析为技能参数。
 
-        若解析失败则兜底：将用户请求作为第一个必填参数传入。
+        若解析失败则兜底：将清洗后的用户实际输入作为第一个必填参数传入。
         """
         schema = getattr(skill, "args_schema", None)
         if schema is None:
@@ -478,10 +502,11 @@ class AgentOrchestrator:
                 skill.name,
                 user_request[:100],
             )
-            # 兜底：第一个必填参数
+            # 兜底：第一个必填参数，先清洗掉技能指令前缀
+            fallback_value = self._clean_request_for_fallback(user_request)
             if first_required:
-                return {first_required: user_request}
-            return {"input": user_request}
+                return {first_required: fallback_value}
+            return {"input": fallback_value}
 
     def _invoke_directive_skill(
         self,

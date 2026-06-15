@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -270,13 +271,15 @@ class ProWorkflowEngine:
         mention = self._detect_mention(message)
         if mention and mention not in ("get_daren", "Get达人", "喜剧龙虾") and mention not in self._CORE_SLOTS:
             # 直接调用外部 Skill（场景、写手、找茬等）
-            skill_result = self._call_skill_direct(mention, wf_state, user_id)
+            skill_result = self._call_skill_direct(mention, wf_state, user_id, message=message)
             if skill_result:
                 if skill_result.get("output"):
                     wf_state.setdefault("outputs", {})[mention] = skill_result["output"]
+                # 直接展示 Skill 实际输出（如素材、排版结果），而非仅展示调用提示
+                display_content = skill_result.get("output") or skill_result.get("reply", "")
                 steps.append({
                     "type": "skill_output",
-                    "content": skill_result.get("reply", ""),
+                    "content": display_content,
                     "skill_name": mention,
                 })
                 messages.append({"role": "ai", "content": skill_result.get("reply", "")})
@@ -457,7 +460,13 @@ class ProWorkflowEngine:
             return match.group(1)
         return None
 
-    def _call_skill_direct(self, skill_name: str, wf_state: dict[str, Any], user_id: str) -> dict[str, Any] | None:
+    def _call_skill_direct(
+        self,
+        skill_name: str,
+        wf_state: dict[str, Any],
+        user_id: str,
+        message: str = "",
+    ) -> dict[str, Any] | None:
         """直接调用指定 Skill（绕过 喜剧龙虾）。"""
         if self.orch is None:
             return None
@@ -474,6 +483,13 @@ class ProWorkflowEngine:
         for key in ["topic", "attitude", "emotion"]:
             if key in outputs:
                 current_text = outputs[key]
+
+        # 提取用户消息中除 @mention 之外的实际查询词
+        user_query = message
+        mention_match = re.search(r"@(\S+)", message)
+        if mention_match:
+            user_query = message[: mention_match.start()] + message[mention_match.end() :]
+        user_query = user_query.strip("，,。. ")
 
         if skill_name == "rule_persona":
             persona_id = slots.get("persona_id", "")
@@ -505,6 +521,13 @@ class ProWorkflowEngine:
             context_text = "\n\n".join(context_parts)
             prompt = f"使用 script_composer 技能。\n上下文：\n{context_text}"
             reply_msg = "📝 正在生成剧本..."
+        elif canonical_name == "material":
+            # 素材搜索优先使用用户输入的查询词，避免与工作流 outline 混淆
+            prompt = (
+                f"使用 {canonical_name} 技能。\n"
+                f"搜索词：{user_query}"
+            )
+            reply_msg = f"🔍 正在调用 {display_name} 专家搜索「{user_query}」..."
         else:
             prompt = f"使用 {canonical_name} 技能。\n文本：{current_text}"
             reply_msg = f"🔍 正在调用 {display_name} 专家..."

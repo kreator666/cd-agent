@@ -61,17 +61,32 @@ def get_model_usage() -> ModelUsage | None:
 
 def _extract_usage_from_response(response: LLMResult, model_name: str | None = None) -> ModelUsage:
     """从 LLMResult 中提取 Token 用量，支持多种 provider 格式。"""
-    prompt_tokens = 0
-    completion_tokens = 0
-    total_tokens = 0
+    prompt_tokens: int | None = 0
+    completion_tokens: int | None = 0
+    total_tokens: int | None = 0
+
+    def _int(value: Any, default: int = 0) -> int:
+        """将任意值安全转换为 int；None 或非数字返回 default。"""
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
     # 1. 尝试从 response.llm_output["token_usage"] 读取（OpenAI 兼容格式）
     llm_output = getattr(response, "llm_output", {}) or {}
     token_usage = llm_output.get("token_usage") if isinstance(llm_output, dict) else None
     if token_usage:
-        prompt_tokens = token_usage.get("prompt_tokens") or token_usage.get("input_tokens") or 0
-        completion_tokens = token_usage.get("completion_tokens") or token_usage.get("output_tokens") or 0
-        total_tokens = token_usage.get("total_tokens") or (prompt_tokens + completion_tokens)
+        prompt_tokens = (
+            _int(token_usage.get("prompt_tokens"))
+            or _int(token_usage.get("input_tokens"))
+        )
+        completion_tokens = (
+            _int(token_usage.get("completion_tokens"))
+            or _int(token_usage.get("output_tokens"))
+        )
+        total_tokens = _int(token_usage.get("total_tokens")) or (prompt_tokens + completion_tokens)
 
     # 2. 尝试从每个 generation 的 message.usage_metadata 读取（LangChain 标准字段）
     if total_tokens == 0:
@@ -82,9 +97,9 @@ def _extract_usage_from_response(response: LLMResult, model_name: str | None = N
                     continue
                 usage = getattr(msg, "usage_metadata", None) or {}
                 if usage:
-                    prompt_tokens = max(prompt_tokens, usage.get("input_tokens", 0))
-                    completion_tokens = max(completion_tokens, usage.get("output_tokens", 0))
-                    total_tokens = max(total_tokens, usage.get("total_tokens", 0))
+                    prompt_tokens = max(prompt_tokens, _int(usage.get("input_tokens"), 0))
+                    completion_tokens = max(completion_tokens, _int(usage.get("output_tokens"), 0))
+                    total_tokens = max(total_tokens, _int(usage.get("total_tokens"), 0))
 
     # 3. Ollama 等本地模型可能把计数放在 response_metadata
     if total_tokens == 0:
@@ -95,12 +110,17 @@ def _extract_usage_from_response(response: LLMResult, model_name: str | None = N
                     continue
                 meta = getattr(msg, "response_metadata", {}) or {}
                 if isinstance(meta, dict):
-                    prompt_tokens = prompt_tokens or meta.get("prompt_eval_count", 0)
-                    completion_tokens = completion_tokens or meta.get("eval_count", 0)
+                    prompt_tokens = prompt_tokens or _int(meta.get("prompt_eval_count"), 0)
+                    completion_tokens = completion_tokens or _int(meta.get("eval_count"), 0)
                     total_tokens = total_tokens or (
                         prompt_tokens + completion_tokens
-                        or meta.get("total_duration")
+                        or _int(meta.get("total_duration"), 0)
                     )
+
+    # 统一转换为 int，避免后续比较时出现 None
+    prompt_tokens = _int(prompt_tokens, 0)
+    completion_tokens = _int(completion_tokens, 0)
+    total_tokens = _int(total_tokens, 0)
 
     # 兜底：如果只有 total_tokens，按 6:4 拆分（仅用于展示，不影响扣费）
     if total_tokens == 0 and (prompt_tokens or completion_tokens):
@@ -110,9 +130,9 @@ def _extract_usage_from_response(response: LLMResult, model_name: str | None = N
         completion_tokens = total_tokens - prompt_tokens
 
     return ModelUsage(
-        prompt_tokens=int(prompt_tokens or 0),
-        completion_tokens=int(completion_tokens or 0),
-        total_tokens=int(total_tokens or 0),
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
         model=model_name,
     )
 

@@ -34,9 +34,13 @@ class Settings(BaseSettings):
     # 素材搜索：RSS 新闻源列表（逗号分隔）
     news_rss_feeds: str = Field(
         default=(
-            "https://feeds.bbci.co.uk/news/rss.xml,"
-            "https://www.theguardian.com/world/rss,"
-            "https://www.zaobao.com.sg/rss.xml"
+            "https://www.chinanews.com.cn/rss/scroll-news.xml,"
+            "https://www.chinanews.com.cn/rss/china.xml,"
+            "https://www.chinanews.com.cn/rss/world.xml,"
+            "https://www.chinanews.com.cn/rss/finance.xml,"
+            "https://www.ithome.com/rss/,"
+            "https://36kr.com/feed,"
+            "https://rss.mifaw.com/articles/5c8bb11a3c41f61efd36683e/5c919d543882afa09dff3fa3"
         ),
         alias="NEWS_RSS_FEEDS",
     )

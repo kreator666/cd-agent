@@ -46,8 +46,11 @@ def test_search_rss_filters_by_query(skill: MaterialSkill) -> None:
 
 
 def test_search_rss_empty_feeds(skill: MaterialSkill) -> None:
-    """未配置 RSS 源时应返回空列表。"""
-    with patch("comedy_agent.skills.material.settings.news_rss_feeds", ""):
+    """未配置 RSS 源且 WebSearch 不可用时，应返回空列表。"""
+    with (
+        patch("comedy_agent.skills.material.settings.news_rss_feeds", ""),
+        patch("comedy_agent.skills.material.DuckDuckGoSearchRun", None),
+    ):
         results = skill._search("query", count=1)
     assert results == []
 

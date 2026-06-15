@@ -47,10 +47,27 @@ def test_search_fallback_to_searxng(skill: MaterialSkill) -> None:
     assert results[0]["title"] == "SearXNG"
 
 
+def test_search_fallback_to_bing(skill: MaterialSkill) -> None:
+    mock_bing = [{"title": "Bing", "href": "https://bing.com", "body": "结果"}]
+    with (
+        patch.object(skill, "_search_duckduckgo", return_value=[]),
+        patch(
+            "comedy_agent.skills.material.settings.bing_search_api_key", "test-key"
+        ),
+        patch.object(skill, "_search_bing", return_value=mock_bing),
+    ):
+        results = skill._search("query", count=1)
+    assert len(results) == 1
+    assert results[0]["title"] == "Bing"
+
+
 def test_search_fallback_to_tavily(skill: MaterialSkill) -> None:
     mock_tavily = [{"title": "Tavily", "href": "https://tavily.com", "body": "结果"}]
     with (
         patch.object(skill, "_search_duckduckgo", return_value=[]),
+        patch(
+            "comedy_agent.skills.material.settings.bing_search_api_key", ""
+        ),
         patch(
             "comedy_agent.skills.material.settings.tavily_api_key", "test-key"
         ),
@@ -59,6 +76,29 @@ def test_search_fallback_to_tavily(skill: MaterialSkill) -> None:
         results = skill._search("query", count=1)
     assert len(results) == 1
     assert results[0]["title"] == "Tavily"
+
+
+def test_search_bing_parses_json(skill: MaterialSkill) -> None:
+    import json
+
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(
+        {
+            "webPages": {
+                "value": [
+                    {"name": "标题1", "url": "https://example.com/1", "snippet": "摘要1"},
+                    {"name": "标题2", "url": "https://example.com/2", "snippet": "摘要2"},
+                ]
+            }
+        }
+    ).encode("utf-8")
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_response):
+        results = skill._search_bing("query", 2, "test-key")
+    assert len(results) == 2
+    assert results[0]["title"] == "标题1"
+    assert results[0]["href"] == "https://example.com/1"
 
 
 def test_search_searxng_parses_json(skill: MaterialSkill) -> None:

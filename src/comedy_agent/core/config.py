@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # 素材搜索（可选回退）
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
     searxng_url: str = Field(default="", alias="SEARXNG_URL")
+    bing_search_api_key: str = Field(default="", alias="BING_SEARCH_API_KEY")
+    bing_search_endpoint: str = Field(
+        default="https://api.bing.microsoft.com/v7.0/search", alias="BING_SEARCH_ENDPOINT"
+    )
 
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")

@@ -94,7 +94,7 @@ class MaterialSkill(ComedySkill):
         return " ".join(parts)
 
     def _search(self, query: str, count: int) -> list[dict[str, Any]]:
-        """执行搜索：DuckDuckGo -> SearXNG -> Tavily。"""
+        """执行搜索：DuckDuckGo -> SearXNG -> Bing -> Tavily。"""
         results = self._search_duckduckgo(query, count)
         if results:
             return results
@@ -102,6 +102,12 @@ class MaterialSkill(ComedySkill):
         searxng_url = getattr(settings, "searxng_url", "") or ""
         if searxng_url:
             results = self._search_searxng(query, count, searxng_url)
+            if results:
+                return results
+
+        bing_key = getattr(settings, "bing_search_api_key", "") or ""
+        if bing_key:
+            results = self._search_bing(query, count, bing_key)
             if results:
                 return results
 
@@ -170,6 +176,36 @@ class MaterialSkill(ComedySkill):
             ][:count]
         except Exception as exc:  # noqa: BLE001
             logger.warning("SearXNG 搜索失败: %s", exc)
+            return []
+
+    @staticmethod
+    def _search_bing(query: str, count: int, api_key: str) -> list[dict[str, Any]]:
+        """使用 Bing Web Search API 搜索。"""
+        try:
+            endpoint = getattr(settings, "bing_search_endpoint", "https://api.bing.microsoft.com/v7.0/search")
+            params = {"q": query, "count": min(count, 50), "mkt": "zh-CN"}
+            url = f"{endpoint}?{urllib.parse.urlencode(params)}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Ocp-Apim-Subscription-Key": api_key,
+                    "User-Agent": "comedy-agent/1.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            return [
+                {
+                    "title": item.get("name", ""),
+                    "href": item.get("url", ""),
+                    "body": item.get("snippet", ""),
+                }
+                for item in data.get("webPages", {}).get("value", [])
+                if item.get("name") or item.get("snippet")
+            ][:count]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Bing 搜索失败: %s", exc)
             return []
 
     @staticmethod

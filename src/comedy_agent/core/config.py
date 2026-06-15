@@ -31,17 +31,7 @@ class Settings(BaseSettings):
         default="https://maas-openapi.wanjiedata.com/api/v1", alias="WJ_BASE_URL"
     )
 
-    # 素材搜索（可选回退）
-    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
-    searxng_url: str = Field(default="", alias="SEARXNG_URL")
-    bing_search_api_key: str = Field(default="", alias="BING_SEARCH_API_KEY")
-    bing_search_endpoint: str = Field(
-        default="https://api.bing.microsoft.com/v7.0/search", alias="BING_SEARCH_ENDPOINT"
-    )
-    # 强制指定素材搜索引擎；为空时使用默认回退链
-    material_search_engine: str = Field(default="", alias="MATERIAL_SEARCH_ENGINE")
-    # 新闻类数据源（免费新闻 API / RSS）
-    newsapi_api_key: str = Field(default="", alias="NEWSAPI_API_KEY")
+    # 素材搜索：RSS 新闻源列表（逗号分隔）
     news_rss_feeds: str = Field(
         default=(
             "https://feeds.bbci.co.uk/news/rss.xml,"

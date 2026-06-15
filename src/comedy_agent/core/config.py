@@ -40,6 +40,16 @@ class Settings(BaseSettings):
     )
     # 强制指定素材搜索引擎；为空时使用默认回退链
     material_search_engine: str = Field(default="", alias="MATERIAL_SEARCH_ENGINE")
+    # 新闻类数据源（免费新闻 API / RSS）
+    newsapi_api_key: str = Field(default="", alias="NEWSAPI_API_KEY")
+    news_rss_feeds: str = Field(
+        default=(
+            "https://feeds.bbci.co.uk/news/rss.xml,"
+            "https://www.theguardian.com/world/rss,"
+            "https://www.zaobao.com.sg/rss.xml"
+        ),
+        alias="NEWS_RSS_FEEDS",
+    )
 
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")

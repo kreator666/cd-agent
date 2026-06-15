@@ -121,6 +121,50 @@ def test_search_forced_engine_skips_fallback_chain(skill: MaterialSkill) -> None
     mock_bing.assert_called_once_with("query", 1, "test-key")
 
 
+def test_search_newsapi_parses_json(skill: MaterialSkill) -> None:
+    import json
+
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(
+        {
+            "status": "ok",
+            "articles": [
+                {"title": "新闻1", "url": "https://example.com/1", "description": "摘要1"},
+                {"title": "新闻2", "url": "https://example.com/2", "description": "摘要2"},
+            ],
+        }
+    ).encode("utf-8")
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_response):
+        results = skill._search_newsapi("query", 2, "test-key")
+    assert len(results) == 2
+    assert results[0]["title"] == "新闻1"
+    assert results[0]["href"] == "https://example.com/1"
+
+
+def test_search_rss_parses_feed(skill: MaterialSkill) -> None:
+    rss_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <rss><channel>
+        <item><title>新闻1</title><link>https://example.com/1</link><description>摘要1</description></item>
+        <item><title>新闻2</title><link>https://example.com/2</link><description>摘要2</description></item>
+        <item><title>其他</title><link>https://example.com/3</link><description>无关内容</description></item>
+    </channel></rss>""".encode("utf-8")
+    mock_response = MagicMock()
+    mock_response.read.return_value = rss_xml
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+    with (
+        patch(
+            "comedy_agent.skills.material.settings.news_rss_feeds", "https://example.com/rss"
+        ),
+        patch("urllib.request.urlopen", return_value=mock_response),
+    ):
+        results = skill._search_rss("新闻", 2)
+    assert len(results) == 2
+    assert results[0]["title"] == "新闻1"
+
+
 def test_search_searxng_parses_json(skill: MaterialSkill) -> None:
     import json
     from unittest.mock import patch

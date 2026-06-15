@@ -93,13 +93,20 @@ class MaterialSkill(ComedySkill):
             parts.append(topic.strip())
         return " ".join(parts)
 
-    _SEARCH_ENGINES: ClassVar[tuple[str, ...]] = ("duckduckgo", "searxng", "bing", "tavily")
+    _SEARCH_ENGINES: ClassVar[tuple[str, ...]] = (
+        "duckduckgo",
+        "searxng",
+        "bing",
+        "tavily",
+        "newsapi",
+        "rss",
+    )
 
     def _search(self, query: str, count: int) -> list[dict[str, Any]]:
         """执行搜索。
 
         若配置了 ``material_search_engine``，则只使用该引擎；
-        否则按 DuckDuckGo -> SearXNG -> Bing -> Tavily 顺序回退。
+        否则按 DuckDuckGo -> SearXNG -> Bing -> Tavily -> NewsAPI -> RSS 顺序回退。
         """
         forced = (getattr(settings, "material_search_engine", "") or "").lower().strip()
         if forced:
@@ -132,6 +139,13 @@ class MaterialSkill(ComedySkill):
             if tavily_key:
                 return self._search_tavily(query, count, tavily_key)
             return []
+        if engine == "newsapi":
+            newsapi_key = getattr(settings, "newsapi_api_key", "") or ""
+            if newsapi_key:
+                return self._search_newsapi(query, count, newsapi_key)
+            return []
+        if engine == "rss":
+            return self._search_rss(query, count)
         logger.warning("未知搜索引擎: %s", engine)
         return []
 
@@ -244,6 +258,98 @@ class MaterialSkill(ComedySkill):
         except Exception as exc:  # noqa: BLE001
             logger.warning("Tavily 搜索失败: %s", exc)
             return []
+
+    @staticmethod
+    def _search_newsapi(query: str, count: int, api_key: str) -> list[dict[str, Any]]:
+        """使用 NewsAPI 搜索新闻。"""
+        try:
+            params = {
+                "q": query,
+                "pageSize": min(count, 100),
+                "language": "zh" if any("\u4e00" <= c <= "\u9fff" for c in query) else "en",
+                "apiKey": api_key,
+            }
+            url = f"https://newsapi.org/v2/everything?{urllib.parse.urlencode(params)}"
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "comedy-agent/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            if data.get("status") != "ok":
+                logger.warning("NewsAPI 返回错误: %s", data.get("message"))
+                return []
+
+            return [
+                {
+                    "title": item.get("title", ""),
+                    "href": item.get("url", ""),
+                    "body": item.get("description", ""),
+                }
+                for item in data.get("articles", [])
+                if item.get("title") or item.get("description")
+            ][:count]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("NewsAPI 搜索失败: %s", exc)
+            return []
+
+    @staticmethod
+    def _search_rss(query: str, count: int) -> list[dict[str, Any]]:
+        """通过 RSS 订阅源聚合新闻素材。"""
+        import xml.etree.ElementTree as ET
+
+        feeds_str = getattr(settings, "news_rss_feeds", "") or ""
+        feeds = [f.strip() for f in feeds_str.split(",") if f.strip()]
+        if not feeds:
+            return []
+
+        results: list[dict[str, Any]] = []
+        per_feed = max(1, count // len(feeds) + 1)
+        query_lower = query.lower()
+
+        for feed_url in feeds:
+            try:
+                req = urllib.request.Request(
+                    feed_url,
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"
+                        )
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    xml_data = resp.read()
+
+                root = ET.fromstring(xml_data)
+                channel = root.find("channel") if root.tag == "rss" else root
+                if channel is None:
+                    continue
+
+                for item in channel.findall("item"):
+                    title = (item.findtext("title") or "").strip()
+                    link = (item.findtext("link") or "").strip()
+                    desc = (item.findtext("description") or "").strip()
+
+                    # 简单相关性过滤：标题或摘要包含查询词
+                    if query and query_lower not in (title + desc).lower():
+                        continue
+
+                    if title or desc:
+                        results.append({
+                            "title": title,
+                            "href": link,
+                            "body": desc,
+                        })
+                    if len(results) >= count:
+                        return results
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("RSS 源解析失败 %s: %s", feed_url, exc)
+                continue
+
+        return results
 
     def _format_results(
         self,

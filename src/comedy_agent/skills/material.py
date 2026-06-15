@@ -93,30 +93,46 @@ class MaterialSkill(ComedySkill):
             parts.append(topic.strip())
         return " ".join(parts)
 
+    _SEARCH_ENGINES: ClassVar[tuple[str, ...]] = ("duckduckgo", "searxng", "bing", "tavily")
+
     def _search(self, query: str, count: int) -> list[dict[str, Any]]:
-        """执行搜索：DuckDuckGo -> SearXNG -> Bing -> Tavily。"""
-        results = self._search_duckduckgo(query, count)
-        if results:
-            return results
+        """执行搜索。
 
-        searxng_url = getattr(settings, "searxng_url", "") or ""
-        if searxng_url:
-            results = self._search_searxng(query, count, searxng_url)
+        若配置了 ``material_search_engine``，则只使用该引擎；
+        否则按 DuckDuckGo -> SearXNG -> Bing -> Tavily 顺序回退。
+        """
+        forced = (getattr(settings, "material_search_engine", "") or "").lower().strip()
+        if forced:
+            return self._search_with_engine(query, count, forced)
+
+        for engine in self._SEARCH_ENGINES:
+            results = self._search_with_engine(query, count, engine)
             if results:
                 return results
+        return []
 
-        bing_key = getattr(settings, "bing_search_api_key", "") or ""
-        if bing_key:
-            results = self._search_bing(query, count, bing_key)
-            if results:
-                return results
-
-        tavily_key = getattr(settings, "tavily_api_key", "") or ""
-        if tavily_key:
-            results = self._search_tavily(query, count, tavily_key)
-            if results:
-                return results
-
+    def _search_with_engine(
+        self, query: str, count: int, engine: str
+    ) -> list[dict[str, Any]]:
+        """使用指定搜索引擎查询。"""
+        if engine == "duckduckgo":
+            return self._search_duckduckgo(query, count)
+        if engine == "searxng":
+            searxng_url = getattr(settings, "searxng_url", "") or ""
+            if searxng_url:
+                return self._search_searxng(query, count, searxng_url)
+            return []
+        if engine == "bing":
+            bing_key = getattr(settings, "bing_search_api_key", "") or ""
+            if bing_key:
+                return self._search_bing(query, count, bing_key)
+            return []
+        if engine == "tavily":
+            tavily_key = getattr(settings, "tavily_api_key", "") or ""
+            if tavily_key:
+                return self._search_tavily(query, count, tavily_key)
+            return []
+        logger.warning("未知搜索引擎: %s", engine)
         return []
 
     @staticmethod

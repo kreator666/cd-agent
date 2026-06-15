@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     bing_search_endpoint: str = Field(
         default="https://api.bing.microsoft.com/v7.0/search", alias="BING_SEARCH_ENDPOINT"
     )
+    # 强制指定素材搜索引擎；为空时使用默认回退链
+    material_search_engine: str = Field(default="", alias="MATERIAL_SEARCH_ENGINE")
 
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")

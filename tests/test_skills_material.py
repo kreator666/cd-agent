@@ -101,6 +101,26 @@ def test_search_bing_parses_json(skill: MaterialSkill) -> None:
     assert results[0]["href"] == "https://example.com/1"
 
 
+def test_search_forced_engine_skips_fallback_chain(skill: MaterialSkill) -> None:
+    """配置 MATERIAL_SEARCH_ENGINE=bing 时只调用 Bing，不走 DuckDuckGo。"""
+    mock_bing = [{"title": "Bing Only", "href": "https://bing.com", "body": "结果"}]
+    with (
+        patch(
+            "comedy_agent.skills.material.settings.material_search_engine", "bing"
+        ),
+        patch(
+            "comedy_agent.skills.material.settings.bing_search_api_key", "test-key"
+        ),
+        patch.object(skill, "_search_duckduckgo") as mock_ddgs,
+        patch.object(skill, "_search_bing", return_value=mock_bing) as mock_bing,
+    ):
+        results = skill._search("query", count=1)
+    assert len(results) == 1
+    assert results[0]["title"] == "Bing Only"
+    mock_ddgs.assert_not_called()
+    mock_bing.assert_called_once_with("query", 1, "test-key")
+
+
 def test_search_searxng_parses_json(skill: MaterialSkill) -> None:
     import json
     from unittest.mock import patch

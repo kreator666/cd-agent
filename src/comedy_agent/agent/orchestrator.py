@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -437,6 +437,30 @@ class AgentOrchestrator:
                 cleaned_lines.append(line)
         return "\n".join(cleaned_lines).strip()
 
+    # 参数提取阶段常见的 LLM 复制提示文字（视为无效值）
+    _PROMPT_CONTAMINATION_MARKERS: ClassVar[tuple[str, ...]] = (
+        "请只输出合法的 JSON",
+        "不要有任何解释",
+        "Markdown 代码块",
+        "请按目标平台的排版风格输出",
+        "你是一个参数提取助手",
+        "将以下用户请求转换为 JSON 参数",
+        "技能参数要求",
+        "用户请求：",
+        "请严格按照技能参数要求输出",
+        "请输出合法的 JSON",
+    )
+
+    @classmethod
+    def _is_contaminated_value(cls, value: Any) -> bool:
+        """判断 LLM 返回的参数值是否被提示文字污染。"""
+        if not isinstance(value, str):
+            return False
+        text = value.strip()
+        if not text:
+            return True
+        return any(marker in text for marker in cls._PROMPT_CONTAMINATION_MARKERS)
+
     def _extract_skill_args(
         self, skill: BaseTool, user_request: str
     ) -> dict[str, Any]:
@@ -492,10 +516,24 @@ class AgentOrchestrator:
                 else:
                     raise
 
-            # 过滤掉 schema 中不存在的字段
+            # 过滤掉 schema 中不存在的字段，并剔除被提示文字污染的值
             valid_fields = set(schema.model_fields.keys())
-            args = {k: v for k, v in args.items() if k in valid_fields}
-            return args
+            cleaned_args: dict[str, Any] = {}
+            for k, v in args.items():
+                if k not in valid_fields:
+                    continue
+                if self._is_contaminated_value(v):
+                    logger.debug("忽略被提示文字污染的参数 %s=%r", k, v)
+                    continue
+                cleaned_args[k] = v
+
+            # 如果清洗后丢失了第一个必填参数，则兜底：优先使用清洗后的实际请求内容，
+            # 即使为空也传入（由 Skill 自己决定是否提供空值提示，避免参数缺失导致验证报错）
+            if first_required and first_required not in cleaned_args:
+                fallback_value = self._clean_request_for_fallback(user_request)
+                cleaned_args[first_required] = fallback_value
+
+            return cleaned_args
         except Exception:
             logger.warning(
                 "LLM 参数解析失败，兜底处理：skill=%s, request=%s",

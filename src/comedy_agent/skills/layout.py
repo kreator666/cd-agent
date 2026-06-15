@@ -44,7 +44,8 @@ class LayoutSkill(ComedySkill):
         "1. 不改变原文的核心信息、事实和语义。\n"
         "2. 仅调整标题层级、段落节奏、重点标记、引用块、emoji 等排版元素。\n"
         "3. 输出可直接复制到对应平台编辑器中的 Markdown 文本。\n"
-        "4. 不要输出任何解释，只输出排版后的内容。"
+        "4. 不要输出任何解释、示例说明或提示文字，只输出排版后的内容。\n"
+        "5. 严禁把 system prompt 或用户问题中的句子（如'请只输出合法的 JSON'、'请按目标平台的排版风格输出'等）当作正文输出。"
     )
 
     # 各平台排版风格补充说明
@@ -55,6 +56,61 @@ class LayoutSkill(ComedySkill):
         "bilibili": "B站专栏风格：轻松活泼、适合年轻读者、可加入弹幕式吐槽或轻松副标题。",
     }
 
+    # 咨询意图关键词（用户问"可以排成什么样"、"有哪些平台"等）
+    _CONSULTATION_MARKERS: ClassVar[tuple[str, ...]] = (
+        "可以排成",
+        "能排成",
+        "排成什么样",
+        "什么样的",
+        "有哪些平台",
+        "有哪些格式",
+        "怎么排",
+        "如何排版",
+        "支持哪些",
+        "平台有哪些",
+    )
+
+    # 参数提取提示文字污染标记（不应作为正文排版）
+    _PROMPT_CONTAMINATION: ClassVar[tuple[str, ...]] = (
+        "请只输出合法的 JSON",
+        "不要有任何解释",
+        "Markdown 代码块",
+        "请按目标平台的排版风格输出",
+        "你是一个参数提取助手",
+        "将以下用户请求转换为 JSON 参数",
+        "技能参数要求",
+        "用户请求：",
+    )
+
+    @classmethod
+    def _is_consultation(cls, text: str) -> bool:
+        """判断用户输入是否为平台/排版咨询，而非实际要排版的内容。"""
+        return any(marker in text for marker in cls._CONSULTATION_MARKERS)
+
+    @classmethod
+    def _is_prompt_contamination(cls, text: str) -> bool:
+        """判断文本是否被参数提取提示文字污染。"""
+        return any(marker in text for marker in cls._PROMPT_CONTAMINATION)
+
+    @classmethod
+    def _platform_help(cls) -> str:
+        """返回平台说明与使用示例。"""
+        return (
+            "我可以把内容排版成以下平台格式：\n\n"
+            "1. **微信公众号**（wechat）\n"
+            "   适合：公众号推文。特点：清晰的小标题、重点加粗、引用块、分隔线，适合手机阅读。\n\n"
+            "2. **小红书**（xiaohongshu）\n"
+            "   适合：种草/短图文。特点：短段落、多 emoji、分段标签、口语化标题。\n\n"
+            "3. **知乎**（zhihu）\n"
+            "   适合：深度回答/专栏。特点：正式结构、论点清晰、结论小结。\n\n"
+            "4. **B站专栏**（bilibili）\n"
+            "   适合：轻松长文。特点：活泼副标题、弹幕式吐槽、年轻化表达。\n\n"
+            "使用方式：\n"
+            "• 直接发送需要排版的文章内容，我会默认按微信公众号排版。\n"
+            "• 想指定平台时可以说：「@排版 排成小红书」或「@排版 用知乎风格排版」。\n"
+            "• 提供素材后，也可以继续发「@排版 把上面的内容排成小红书」。"
+        )
+
     def _run(
         self,
         text: str,
@@ -62,8 +118,15 @@ class LayoutSkill(ComedySkill):
         user_id: str | None = None,
     ) -> str:
         platform = self._normalize_platform(platform)
-        if not text.strip():
-            return "请输入需要排版的内容。"
+        text = text.strip()
+
+        # 空文本或被提示文字污染：返回平台帮助信息
+        if not text or self._is_prompt_contamination(text):
+            return self._platform_help()
+
+        # 咨询意图：告诉用户有哪些平台，而不是对咨询句本身做形式化排版
+        if self._is_consultation(text):
+            return self._platform_help()
 
         platform_note = self.PLATFORM_NOTES.get(platform, self.PLATFORM_NOTES["wechat"])
         prompt = ChatPromptTemplate.from_messages([
@@ -81,9 +144,12 @@ class LayoutSkill(ComedySkill):
             llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
             chain = prompt | llm
             result = chain.invoke({})
-            if hasattr(result, "content"):
-                return str(result.content)
-            return str(result)
+            output = str(result.content) if hasattr(result, "content") else str(result)
+            # 如果模型把提示文字当作正文返回，则改走兜底格式
+            if self._is_prompt_contamination(output):
+                logger.warning("排版 LLM 输出被提示文字污染，使用兜底格式")
+                return self._fallback_format(text, platform)
+            return output
         except Exception as exc:  # noqa: BLE001
             logger.warning("排版 LLM 调用失败，使用兜底格式: %s", exc)
             return self._fallback_format(text, platform)

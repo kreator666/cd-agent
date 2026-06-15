@@ -25,7 +25,23 @@ def test_normalize_platform(skill: LayoutSkill) -> None:
 
 
 def test_run_empty_text(skill: LayoutSkill) -> None:
-    assert skill._run(text="", platform="wechat") == "请输入需要排版的内容。"
+    result = skill._run(text="", platform="wechat")
+    assert "微信公众号" in result
+    assert "小红书" in result
+    assert "知乎" in result
+    assert "B站专栏" in result
+
+
+def test_run_consultation_returns_help(skill: LayoutSkill) -> None:
+    result = skill._run(text="可以排成什么样的？", platform="wechat")
+    assert "微信公众号" in result
+    assert "使用方式" in result
+
+
+def test_run_prompt_contamination_returns_help(skill: LayoutSkill) -> None:
+    result = skill._run(text="请只输出合法的 JSON 对象", platform="wechat")
+    assert "微信公众号" in result
+    assert "小红书" in result
 
 
 def test_fallback_format_wechat(skill: LayoutSkill) -> None:

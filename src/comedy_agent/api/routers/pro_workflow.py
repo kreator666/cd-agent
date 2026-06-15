@@ -528,6 +528,32 @@ class ProWorkflowEngine:
                 f"搜索词：{user_query}"
             )
             reply_msg = f"🔍 正在调用 {display_name} 专家搜索「{user_query}」..."
+        elif canonical_name == "layout":
+            # 排版 skill：优先处理用户查询意图；若用户只是咨询平台/格式，直接返回帮助信息
+            # 若用户有明确的排版要求且已有正文，则把正文和要求一起传入
+            layout_query = user_query or current_text
+            if not layout_query:
+                return {
+                    "reply": "📝 请提供需要排版的内容，或问我「可以排成什么样的？」了解支持的平台。",
+                    "output": "",
+                    "skill_name": canonical_name,
+                }
+            from comedy_agent.skills.layout import LayoutSkill
+            if LayoutSkill._is_consultation(layout_query):
+                return {
+                    "reply": f"🔍 正在调用 {display_name} 专家...",
+                    "output": LayoutSkill._platform_help(),
+                    "skill_name": canonical_name,
+                }
+            if current_text and user_query:
+                prompt = (
+                    f"使用 {canonical_name} 技能。\n"
+                    f"文本：{current_text}\n"
+                    f"排版要求：{user_query}"
+                )
+            else:
+                prompt = f"使用 {canonical_name} 技能。\n文本：{layout_query}"
+            reply_msg = f"🔍 正在调用 {display_name} 专家..."
         else:
             prompt = f"使用 {canonical_name} 技能。\n文本：{current_text}"
             reply_msg = f"🔍 正在调用 {display_name} 专家..."

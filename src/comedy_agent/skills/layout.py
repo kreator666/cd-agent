@@ -82,6 +82,18 @@ class LayoutSkill(ComedySkill):
         "用户请求：",
     )
 
+    # 用户要求排版「最终结果 / 最终剧本」的关键词
+    _FINAL_RESULT_MARKERS: ClassVar[tuple[str, ...]] = (
+        "最终结果",
+        "最终剧本",
+        "生成结果",
+        "生成的剧本",
+        "最终生成",
+        "这篇文章最终结果",
+        "把最终结果",
+        "将最终结果",
+    )
+
     @classmethod
     def _is_consultation(cls, text: str) -> bool:
         """判断用户输入是否为平台/排版咨询，而非实际要排版的内容。"""
@@ -91,6 +103,32 @@ class LayoutSkill(ComedySkill):
     def _is_prompt_contamination(cls, text: str) -> bool:
         """判断文本是否被参数提取提示文字污染。"""
         return any(marker in text for marker in cls._PROMPT_CONTAMINATION)
+
+    @classmethod
+    def _is_final_result_request(cls, text: str) -> bool:
+        """判断用户是否要求排版工作流生成的最终结果/剧本。"""
+        return any(marker in text for marker in cls._FINAL_RESULT_MARKERS)
+
+    @classmethod
+    def _extract_platform_from_query(cls, query: str) -> str | None:
+        """从用户查询词中提取目标平台名称（标准 key）。"""
+        mapping: dict[str, str] = {
+            "微信公众号": "wechat",
+            "公众号": "wechat",
+            "微信": "wechat",
+            "wechat": "wechat",
+            "小红书": "xiaohongshu",
+            "xiaohongshu": "xiaohongshu",
+            "知乎": "zhihu",
+            "zhihu": "zhihu",
+            "bilibili": "bilibili",
+            "b站专栏": "bilibili",
+            "b站": "bilibili",
+        }
+        for name, platform in mapping.items():
+            if name in query.lower():
+                return platform
+        return None
 
     @classmethod
     def _platform_help(cls) -> str:

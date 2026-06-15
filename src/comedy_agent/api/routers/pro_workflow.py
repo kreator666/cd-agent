@@ -530,30 +530,63 @@ class ProWorkflowEngine:
             reply_msg = f"🔍 正在调用 {display_name} 专家搜索「{user_query}」..."
         elif canonical_name == "layout":
             # 排版 skill：优先处理用户查询意图；若用户只是咨询平台/格式，直接返回帮助信息
-            # 若用户有明确的排版要求且已有正文，则把正文和要求一起传入
-            layout_query = user_query or current_text
-            if not layout_query:
-                return {
-                    "reply": "📝 请提供需要排版的内容，或问我「可以排成什么样的？」了解支持的平台。",
-                    "output": "",
-                    "skill_name": canonical_name,
-                }
+            # 若用户要求排版「最终结果」，则必须使用已生成的 final_script
             from comedy_agent.skills.layout import LayoutSkill
-            if LayoutSkill._is_consultation(layout_query):
+
+            if LayoutSkill._is_consultation(user_query):
                 return {
                     "reply": f"🔍 正在调用 {display_name} 专家...",
                     "output": LayoutSkill._platform_help(),
                     "skill_name": canonical_name,
                 }
-            if current_text and user_query:
-                prompt = (
-                    f"使用 {canonical_name} 技能。\n"
-                    f"文本：{current_text}\n"
-                    f"排版要求：{user_query}"
-                )
+
+            # 判断用户是否明确要求排版最终剧本
+            wants_final = LayoutSkill._is_final_result_request(user_query)
+            final_script = outputs.get("final_script", "")
+
+            # 待排版正文：最终结果 > 当前维度输出/outline > 用户直接输入的内容
+            if wants_final:
+                if not final_script:
+                    return {
+                        "reply": "📝 你还没有生成最终剧本，请回复「生成」生成最终剧本后再进行排版。",
+                        "output": "",
+                        "skill_name": canonical_name,
+                    }
+                content_to_layout = final_script
             else:
-                prompt = f"使用 {canonical_name} 技能。\n文本：{layout_query}"
-            reply_msg = f"🔍 正在调用 {display_name} 专家..."
+                content_to_layout = current_text or user_query
+
+            if not content_to_layout:
+                return {
+                    "reply": "📝 请提供需要排版的内容，或问我「可以排成什么样的？」了解支持的平台。",
+                    "output": "",
+                    "skill_name": canonical_name,
+                }
+
+            platform = LayoutSkill._extract_platform_from_query(user_query) or "wechat"
+
+            # 直接调用 layout skill，避免 LLM 参数提取阶段把指令文字误当正文
+            skill = self.orch._find_skill(canonical_name)
+            if skill is None:
+                return {
+                    "reply": f"❌ {display_name} skill 未注册",
+                    "output": "",
+                    "skill_name": canonical_name,
+                }
+            try:
+                output = skill.invoke({"text": content_to_layout, "platform": platform})
+                return {
+                    "reply": f"🔍 正在调用 {display_name} 专家...",
+                    "output": output,
+                    "skill_name": canonical_name,
+                }
+            except Exception as e:
+                logger.error("排版 Skill 直接调用失败: %s", e, exc_info=True)
+                return {
+                    "reply": f"❌ {display_name} 调用失败：{e}",
+                    "output": "",
+                    "skill_name": canonical_name,
+                }
         else:
             prompt = f"使用 {canonical_name} 技能。\n文本：{current_text}"
             reply_msg = f"🔍 正在调用 {display_name} 专家..."

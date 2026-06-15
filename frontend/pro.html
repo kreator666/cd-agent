@@ -523,33 +523,15 @@ function addMention(name) {
 let mentionSelectedIndex = -1;
 
 function getMentionCandidates() {
-  // 核心维度（中文展示名）
-  const coreSlots = [
+  // 核心创作团队（仅 6 个维度）
+  return [
     { name: '话题', desc: '确定创作主题与背景' },
     { name: '态度', desc: '明确核心态度与立场' },
     { name: '偏见', desc: '挖掘独特视角与偏见' },
     { name: '情绪', desc: '设计情感节奏与曲线' },
     { name: '素材', desc: '搜索网络创作资料' },
     { name: '排版', desc: '转换为平台文章格式' },
-    { name: '风格', desc: '确定剧本体裁与风格' },
-    { name: '喜剧龙虾', desc: '调用中央调度器' },
   ];
-
-  // 从 allSkills 补充外部 Skill，避免重复核心维度
-  const coreNames = new Set(coreSlots.map(s => s.name));
-  const skillMap = {
-    topic: '话题', attitude: '态度', emotion: '情绪', genre: '风格',
-    material: '素材', layout: '排版', rule_persona: '人物画像',
-    script_composer: '剧本编排', style_mimic: '风格模仿'
-  };
-  (allSkills || []).forEach(s => {
-    const cn = skillMap[s.skill_type] || skillMap[s.name] || s.name;
-    if (!coreNames.has(cn)) {
-      coreSlots.push({ name: cn, desc: s.description || `调用 ${cn}` });
-      coreNames.add(cn);
-    }
-  });
-  return coreSlots;
 }
 
 function getMentionSearchTerm() {

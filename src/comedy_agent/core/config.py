@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # 素材搜索（可选回退）
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    searxng_url: str = Field(default="", alias="SEARXNG_URL")
 
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")

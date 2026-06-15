@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import urllib.parse
+import urllib.request
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -91,10 +94,16 @@ class MaterialSkill(ComedySkill):
         return " ".join(parts)
 
     def _search(self, query: str, count: int) -> list[dict[str, Any]]:
-        """执行搜索，优先 DuckDuckGo，备选 Tavily。"""
+        """执行搜索：DuckDuckGo -> SearXNG -> Tavily。"""
         results = self._search_duckduckgo(query, count)
         if results:
             return results
+
+        searxng_url = getattr(settings, "searxng_url", "") or ""
+        if searxng_url:
+            results = self._search_searxng(query, count, searxng_url)
+            if results:
+                return results
 
         tavily_key = getattr(settings, "tavily_api_key", "") or ""
         if tavily_key:
@@ -123,6 +132,44 @@ class MaterialSkill(ComedySkill):
                 ]
         except Exception as exc:  # noqa: BLE001
             logger.warning("DuckDuckGo 搜索失败: %s", exc)
+            return []
+
+    @staticmethod
+    def _search_searxng(query: str, count: int, base_url: str) -> list[dict[str, Any]]:
+        """使用 SearXNG 搜索。"""
+        try:
+            url = base_url.rstrip("/") + "/search"
+            params = {
+                "q": query,
+                "format": "json",
+                "language": "zh-CN",
+            }
+            url = f"{url}?{urllib.parse.urlencode(params)}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            return [
+                {
+                    "title": item.get("title", ""),
+                    "href": item.get("url", ""),
+                    "body": item.get("content", ""),
+                }
+                for item in data.get("results", [])
+                if item.get("title") or item.get("content")
+            ][:count]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("SearXNG 搜索失败: %s", exc)
             return []
 
     @staticmethod

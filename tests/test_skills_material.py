@@ -33,6 +33,20 @@ def test_search_duckduckgo_success(skill: MaterialSkill) -> None:
     assert results[0]["title"] == "标题1"
 
 
+def test_search_fallback_to_searxng(skill: MaterialSkill) -> None:
+    mock_searxng = [{"title": "SearXNG", "href": "https://searxng.example", "body": "结果"}]
+    with (
+        patch.object(skill, "_search_duckduckgo", return_value=[]),
+        patch(
+            "comedy_agent.skills.material.settings.searxng_url", "https://searxng.example"
+        ),
+        patch.object(skill, "_search_searxng", return_value=mock_searxng),
+    ):
+        results = skill._search("query", count=1)
+    assert len(results) == 1
+    assert results[0]["title"] == "SearXNG"
+
+
 def test_search_fallback_to_tavily(skill: MaterialSkill) -> None:
     mock_tavily = [{"title": "Tavily", "href": "https://tavily.com", "body": "结果"}]
     with (
@@ -45,6 +59,28 @@ def test_search_fallback_to_tavily(skill: MaterialSkill) -> None:
         results = skill._search("query", count=1)
     assert len(results) == 1
     assert results[0]["title"] == "Tavily"
+
+
+def test_search_searxng_parses_json(skill: MaterialSkill) -> None:
+    import json
+    from unittest.mock import patch
+
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(
+        {
+            "results": [
+                {"title": "标题1", "url": "https://example.com/1", "content": "摘要1"},
+                {"title": "标题2", "url": "https://example.com/2", "content": "摘要2"},
+            ]
+        }
+    ).encode("utf-8")
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_response):
+        results = skill._search_searxng("query", 2, "https://searxng.example")
+    assert len(results) == 2
+    assert results[0]["title"] == "标题1"
+    assert results[0]["href"] == "https://example.com/1"
 
 
 def test_fallback_format(skill: MaterialSkill) -> None:

@@ -195,6 +195,13 @@ class ProWorkflowEngine:
     # 核心工作流程维度（由 喜剧龙虾 内部处理，不直接调用外部 Skill）
     _CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
 
+    # 前端展示名称 -> Skill 注册名（处理 @素材 / @排版 等中文 mention）
+    _DISPLAY_TO_SKILL_NAME: ClassVar[dict[str, str]] = {
+        "素材": "material",
+        "排版": "layout",
+        "风格": "genre",
+    }
+
     def __init__(self, orch: Any, memory: Any, workflow: dict[str, Any] | None = None) -> None:
         self.orch = orch
         self.memory = memory
@@ -455,6 +462,10 @@ class ProWorkflowEngine:
         if self.orch is None:
             return None
 
+        # 中文展示名映射为 Skill 注册名，便于 Orchestrator 直接定位 Tool
+        display_name = skill_name
+        canonical_name = self._DISPLAY_TO_SKILL_NAME.get(skill_name, skill_name)
+
         slots = wf_state.get("slots", {})
         outputs = wf_state.get("outputs", {})
 
@@ -495,8 +506,8 @@ class ProWorkflowEngine:
             prompt = f"使用 script_composer 技能。\n上下文：\n{context_text}"
             reply_msg = "📝 正在生成剧本..."
         else:
-            prompt = f"使用 {skill_name} 技能。\n文本：{current_text}"
-            reply_msg = f"🔍 正在调用 {skill_name} 专家..."
+            prompt = f"使用 {canonical_name} 技能。\n文本：{current_text}"
+            reply_msg = f"🔍 正在调用 {display_name} 专家..."
 
         try:
             result = self.orch.run(prompt, user_id=user_id)
@@ -504,15 +515,15 @@ class ProWorkflowEngine:
         except Exception as e:
             logger.error("Skill 直接调用失败: %s", e, exc_info=True)
             return {
-                "reply": f"❌ {skill_name} 调用失败：{e}",
+                "reply": f"❌ {display_name} 调用失败：{e}",
                 "output": "",
-                "skill_name": skill_name,
+                "skill_name": canonical_name,
             }
 
         return {
             "reply": reply_msg,
             "output": output,
-            "skill_name": skill_name,
+            "skill_name": canonical_name,
         }
 
     # ------------------------------------------------------------------ #

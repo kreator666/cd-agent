@@ -228,6 +228,16 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .chat-send{width:32px;height:32px;border-radius:50%;background:var(--orange);color:#fff;display:grid;place-items:center;font-size:13px;flex-shrink:0;transition:.2s;border:none;}
 .chat-send:hover{transform:scale(1.08);filter:brightness(1.1);}
 .chat-send:disabled{opacity:.4;cursor:not-allowed;}
+.chat-input-wrapper{position:relative;}
+.mention-suggestions{position:absolute;left:0;right:44px;bottom:calc(100% + 8px);background:#fff;border:1.5px solid var(--line-dark);border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.12);max-height:260px;overflow-y:auto;z-index:100;display:none;}
+.mention-suggestions.active{display:block;}
+.mention-item{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;transition:.15s;border-bottom:1px solid var(--line);}
+.mention-item:last-child{border-bottom:none;}
+.mention-item:hover,.mention-item.selected{background:var(--light);}
+.mention-item .mention-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#ff8a38,#ff5e1f);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0;}
+.mention-item .mention-info{flex:1;min-width:0;}
+.mention-item .mention-name{font-size:13px;font-weight:700;color:var(--ink);}
+.mention-item .mention-desc{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
 
 /* Workflow action buttons */
 .wf-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
@@ -287,9 +297,12 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
           <button class="toolbar-btn" onclick="addMention('喜剧龙虾')" title="@喜剧龙虾">@喜剧龙虾</button>
           <span class="toolbar-info" id="chatBudgetHint"></span>
         </div>
-        <div class="chat-input-box">
-          <textarea id="chatInput" placeholder="输入你的创作需求，按 Enter 发送，Shift+Enter 换行..." rows="1"></textarea>
-          <button class="chat-send" id="chatSendBtn">➤</button>
+        <div class="chat-input-wrapper">
+          <div id="mentionSuggestions" class="mention-suggestions"></div>
+          <div class="chat-input-box">
+            <textarea id="chatInput" placeholder="输入你的创作需求，按 Enter 发送，Shift+Enter 换行..." rows="1"></textarea>
+            <button class="chat-send" id="chatSendBtn">➤</button>
+          </div>
         </div>
       </div>
 
@@ -504,6 +517,138 @@ function addMention(name) {
   // Auto resize
   input.style.height = 'auto';
   input.style.height = input.scrollHeight + 'px';
+}
+
+/* ========== @ Mention auto-complete ========== */
+let mentionSelectedIndex = -1;
+
+function getMentionCandidates() {
+  // 核心维度（中文展示名）
+  const coreSlots = [
+    { name: '话题', desc: '确定创作主题与背景' },
+    { name: '态度', desc: '明确核心态度与立场' },
+    { name: '偏见', desc: '挖掘独特视角与偏见' },
+    { name: '情绪', desc: '设计情感节奏与曲线' },
+    { name: '素材', desc: '搜索网络创作资料' },
+    { name: '排版', desc: '转换为平台文章格式' },
+    { name: '风格', desc: '确定剧本体裁与风格' },
+    { name: '喜剧龙虾', desc: '调用中央调度器' },
+  ];
+
+  // 从 allSkills 补充外部 Skill，避免重复核心维度
+  const coreNames = new Set(coreSlots.map(s => s.name));
+  const skillMap = {
+    topic: '话题', attitude: '态度', emotion: '情绪', genre: '风格',
+    material: '素材', layout: '排版', rule_persona: '人物画像',
+    script_composer: '剧本编排', style_mimic: '风格模仿'
+  };
+  (allSkills || []).forEach(s => {
+    const cn = skillMap[s.skill_type] || skillMap[s.name] || s.name;
+    if (!coreNames.has(cn)) {
+      coreSlots.push({ name: cn, desc: s.description || `调用 ${cn}` });
+      coreNames.add(cn);
+    }
+  });
+  return coreSlots;
+}
+
+function getMentionSearchTerm() {
+  const input = $('#chatInput');
+  const value = input.value;
+  const cursorPos = input.selectionStart || 0;
+  const textBeforeCursor = value.slice(0, cursorPos);
+  // 找到光标前最后一个 @ 的位置
+  const atIndex = textBeforeCursor.lastIndexOf('@');
+  if (atIndex === -1) return null;
+  // @ 前必须是行首或空格
+  const charBefore = textBeforeCursor[atIndex - 1];
+  if (charBefore !== undefined && !/\s/.test(charBefore)) return null;
+  const term = textBeforeCursor.slice(atIndex + 1);
+  // 如果 @ 后包含空格，说明已经完整，不继续提示
+  if (/\s/.test(term)) return null;
+  return { term, atIndex };
+}
+
+function renderMentionSuggestions() {
+  const info = getMentionSearchTerm();
+  const box = $('#mentionSuggestions');
+  if (!info) {
+    box.classList.remove('active');
+    box.innerHTML = '';
+    mentionSelectedIndex = -1;
+    return;
+  }
+  const { term } = info;
+  const termLower = term.toLowerCase();
+  const candidates = getMentionCandidates().filter(c =>
+    c.name.toLowerCase().includes(termLower) ||
+    (c.desc && c.desc.toLowerCase().includes(termLower))
+  );
+  if (candidates.length === 0) {
+    box.classList.remove('active');
+    box.innerHTML = '';
+    mentionSelectedIndex = -1;
+    return;
+  }
+  box.innerHTML = candidates.map((c, i) => `
+    <div class="mention-item ${i === 0 ? 'selected' : ''}" data-name="${escapeHtml(c.name)}" data-index="${i}">
+      <div class="mention-avatar">@</div>
+      <div class="mention-info">
+        <div class="mention-name">${escapeHtml(c.name)}</div>
+        <div class="mention-desc">${escapeHtml(c.desc)}</div>
+      </div>
+    </div>
+  `).join('');
+  box.classList.add('active');
+  mentionSelectedIndex = 0;
+
+  box.querySelectorAll('.mention-item').forEach(item => {
+    item.addEventListener('click', () => {
+      insertMention(item.dataset.name);
+    });
+    item.addEventListener('mouseenter', () => {
+      box.querySelectorAll('.mention-item').forEach(el => el.classList.remove('selected'));
+      item.classList.add('selected');
+      mentionSelectedIndex = parseInt(item.dataset.index, 10);
+    });
+  });
+}
+
+function insertMention(name) {
+  const input = $('#chatInput');
+  const value = input.value;
+  const cursorPos = input.selectionStart || 0;
+  const textBeforeCursor = value.slice(0, cursorPos);
+  const atIndex = textBeforeCursor.lastIndexOf('@');
+  if (atIndex === -1) return;
+  const before = value.slice(0, atIndex);
+  const after = value.slice(cursorPos);
+  input.value = before + '@' + name + ' ' + after;
+  hideMentionSuggestions();
+  input.focus();
+  // 移动光标到插入内容之后
+  const newPos = atIndex + name.length + 2; // @ + name + 空格
+  input.setSelectionRange(newPos, newPos);
+  input.style.height = 'auto';
+  input.style.height = input.scrollHeight + 'px';
+}
+
+function hideMentionSuggestions() {
+  const box = $('#mentionSuggestions');
+  box.classList.remove('active');
+  box.innerHTML = '';
+  mentionSelectedIndex = -1;
+}
+
+function moveMentionSelection(delta) {
+  const box = $('#mentionSuggestions');
+  if (!box.classList.contains('active')) return;
+  const items = box.querySelectorAll('.mention-item');
+  if (!items.length) return;
+  items[mentionSelectedIndex]?.classList.remove('selected');
+  mentionSelectedIndex = (mentionSelectedIndex + delta + items.length) % items.length;
+  items[mentionSelectedIndex].classList.add('selected');
+  items[mentionSelectedIndex].scrollIntoView({ block: 'nearest' });
 }
 
 function setProgress(steps) {
@@ -1267,11 +1412,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatInput.style.height = 'auto';
     chatInput.style.height = chatInput.scrollHeight + 'px';
     updateEstimate();
+    renderMentionSuggestions();
   });
   chatInput.addEventListener('keydown', e => {
+    const box = $('#mentionSuggestions');
+    if (box.classList.contains('active')) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveMentionSelection(1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveMentionSelection(-1);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = box.querySelector('.mention-item.selected');
+        if (selected) insertMention(selected.dataset.name);
+        return;
+      }
+      if (e.key === 'Escape') {
+        hideMentionSuggestions();
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendPrompt();
+    }
+  });
+  // 点击输入框外部隐藏提示
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.chat-input-wrapper')) {
+      hideMentionSuggestions();
     }
   });
   $('#chatSendBtn').addEventListener('click', sendPrompt);

@@ -57,3 +57,4 @@ uvicorn.pid
 # OS
 .DS_Store
 Thumbs.db
+frontend/avatars/

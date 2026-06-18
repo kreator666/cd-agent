@@ -6,15 +6,26 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from comedy_agent.memory.medium_term import SQLMemoryStore
 from comedy_agent.memory.models import (
+    BannedWordData,
     ConversationData,
     DocumentData,
+    EarningRecordData,
+    IPStyleData,
     KnowledgeCardData,
+    PersonaData,
+    PreferenceItem,
+    ProjectData,
+    SaltHistoryData,
     ScriptData,
+    SubmissionData,
+    TokenAccountData,
+    TokenConsumptionData,
     UserContext,
     UserProfileData,
 )
@@ -65,14 +76,26 @@ class UnifiedMemory(MemoryStore):
     ) -> UserProfileData:
         return self._store.get_or_create_user(user_id, nickname)
 
+    def get_user(self, user_id: str) -> UserProfileData | None:
+        return self._store.get_user(user_id)
+
+    def update_user_profile(
+        self, user_id: str, nickname: str | None = None, bio: str | None = None,
+        tags: list[str] | None = None, avatar_url: str | None = None,
+        is_verified: bool | None = None, knowledge_shared: bool | None = None,
+    ) -> UserProfileData | None:
+        return self._store.update_user_profile(user_id, nickname, bio, tags, avatar_url, is_verified, knowledge_shared)
+
     def save_conversation(
         self,
         user_id: str,
         session_id: str,
         messages: list[dict[str, Any]],
         summary: str | None = None,
+        source: str = "chat",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        self._store.save_conversation(user_id, session_id, messages, summary)
+        self._store.save_conversation(user_id, session_id, messages, summary, source, metadata)
 
     def load_conversation(
         self, user_id: str, session_id: str
@@ -88,13 +111,13 @@ class UnifiedMemory(MemoryStore):
         return self._store.delete_conversation(user_id, session_id)
 
     def save_preference(self, user_id: str, key: str, value: Any) -> None:
-        pass
+        self._store.save_preference(user_id, key, value)
 
     def load_preference(self, user_id: str, key: str) -> Any | None:
-        return None
+        return self._store.load_preference(user_id, key)
 
-    def list_preferences(self, user_id: str) -> list[Any]:
-        return []
+    def list_preferences(self, user_id: str) -> list[PreferenceItem]:
+        return self._store.list_preferences(user_id)
 
     def save_script(self, user_id: str, script: ScriptData) -> ScriptData:
         return self._store.save_script(user_id, script)
@@ -129,7 +152,7 @@ class UnifiedMemory(MemoryStore):
     def save_document(self, document: DocumentData) -> DocumentData:
         return self._store.save_document(document)
 
-    def list_documents(self, user_id: str) -> list[DocumentData]:
+    def list_documents(self, user_id: str | None = None) -> list[DocumentData]:
         return self._store.list_documents(user_id)
 
     def get_document(self, user_id: str, doc_id: str) -> DocumentData | None:
@@ -156,12 +179,184 @@ class UnifiedMemory(MemoryStore):
         return self._store.delete_knowledge_card(user_id, card_id)
 
     # ------------------------------------------------------------------ #
+    # Token 账户
+    # ------------------------------------------------------------------ #
+    def get_token_account(self, user_id: str) -> TokenAccountData | None:
+        return self._store.get_token_account(user_id)
+
+    def deduct_tokens(self, user_id: str, amount: int) -> bool:
+        return self._store.deduct_tokens(user_id, amount)
+
+    def recharge_tokens(self, user_id: str, amount: int) -> TokenAccountData:
+        return self._store.recharge_tokens(user_id, amount)
+
+    def save_consumption_record(
+        self, record: TokenConsumptionData
+    ) -> TokenConsumptionData:
+        return self._store.save_consumption_record(record)
+
+    def list_consumption_records(
+        self, user_id: str, limit: int = 50, offset: int = 0
+    ) -> list[TokenConsumptionData]:
+        return self._store.list_consumption_records(user_id, limit, offset)
+
+    # ------------------------------------------------------------------ #
+    # 项目
+    # ------------------------------------------------------------------ #
+    def save_project(self, user_id: str, project: ProjectData) -> ProjectData:
+        return self._store.save_project(user_id, project)
+
+    def load_project(self, user_id: str, project_id: str) -> ProjectData | None:
+        return self._store.load_project(user_id, project_id)
+
+    def list_projects(self, user_id: str) -> list[ProjectData]:
+        return self._store.list_projects(user_id)
+
+    def delete_project(self, user_id: str, project_id: str) -> bool:
+        return self._store.delete_project(user_id, project_id)
+
+    # ------------------------------------------------------------------ #
+    # 加点盐历史
+    # ------------------------------------------------------------------ #
+    def save_salt_history(self, history: SaltHistoryData) -> SaltHistoryData:
+        return self._store.save_salt_history(history)
+
+    def list_salt_history(self, user_id: str, project_id: str | None = None) -> list[SaltHistoryData]:
+        return self._store.list_salt_history(user_id, project_id)
+
+    # ------------------------------------------------------------------ #
+    # IP 风格模型
+    # ------------------------------------------------------------------ #
+    def save_ip_style(self, style: IPStyleData) -> IPStyleData:
+        return self._store.save_ip_style(style)
+
+    def load_ip_style(self, style_id: str) -> IPStyleData | None:
+        return self._store.load_ip_style(style_id)
+
+    def list_ip_styles(self, status: str | None = None) -> list[IPStyleData]:
+        return self._store.list_ip_styles(status)
+
+    def delete_ip_style(self, style_id: str) -> bool:
+        return self._store.delete_ip_style(style_id)
+
+    # ------------------------------------------------------------------ #
+    # 人物画像 (Persona)
+    # ------------------------------------------------------------------ #
+    def save_persona(self, persona: PersonaData) -> PersonaData:
+        return self._store.save_persona(persona)
+
+    def load_persona(self, persona_id: str) -> PersonaData | None:
+        return self._store.load_persona(persona_id)
+
+    def list_personas(
+        self, creator_id: str | None = None, org_id: str | None = None, is_active: bool | None = None
+    ) -> list[PersonaData]:
+        return self._store.list_personas(creator_id, org_id, is_active)
+
+    def delete_persona(self, persona_id: str) -> bool:
+        return self._store.delete_persona(persona_id)
+
+    # ------------------------------------------------------------------ #
+    # 关注 (Follow)
+    # ------------------------------------------------------------------ #
+    def follow(self, follower_id: str, following_id: str) -> FollowData:
+        return self._store.follow(follower_id, following_id)
+
+    def unfollow(self, follower_id: str, following_id: str) -> bool:
+        return self._store.unfollow(follower_id, following_id)
+
+    def is_following(self, follower_id: str, following_id: str) -> bool:
+        return self._store.is_following(follower_id, following_id)
+
+    def count_followers(self, user_id: str) -> int:
+        return self._store.count_followers(user_id)
+
+    def count_following(self, user_id: str) -> int:
+        return self._store.count_following(user_id)
+
+    def list_followers(self, user_id: str) -> list[UserProfileData]:
+        return self._store.list_followers(user_id)
+
+    def list_following(self, user_id: str) -> list[UserProfileData]:
+        return self._store.list_following(user_id)
+
+    def list_verified_users(self, limit: int = 10) -> list[dict[str, Any]]:
+        return self._store.list_verified_users(limit)
+
+    def list_shared_knowledge_users(self) -> list[UserProfileData]:
+        return self._store.list_shared_knowledge_users()
+
+    # ------------------------------------------------------------------ #
+    # 认证申请
+    # ------------------------------------------------------------------ #
+    def apply_verification(self, user_id: str, reason: str | None = None) -> dict[str, Any]:
+        return self._store.apply_verification(user_id, reason)
+
+    def get_user_verification(self, user_id: str) -> dict[str, Any] | None:
+        return self._store.get_user_verification(user_id)
+
+    def list_verification_applications(
+        self, status: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        return self._store.list_verification_applications(status, limit)
+
+    def review_verification_application(
+        self, app_id: int, approved: bool, reviewer_id: str, review_note: str | None = None
+    ) -> dict[str, Any] | None:
+        return self._store.review_verification_application(app_id, approved, reviewer_id, review_note)
+
+    # ------------------------------------------------------------------ #
+    # 投稿
+    # ------------------------------------------------------------------ #
+    def save_submission(self, submission: SubmissionData) -> SubmissionData:
+        return self._store.save_submission(submission)
+
+    def load_submission(self, submission_id: str) -> SubmissionData | None:
+        return self._store.load_submission(submission_id)
+
+    def list_submissions(
+        self, user_id: str | None = None, target_actor: str | None = None, status: str | None = None
+    ) -> list[SubmissionData]:
+        return self._store.list_submissions(user_id, target_actor, status)
+
+    def review_submission(self, submission_id: str, status: str, comment: str | None = None) -> bool:
+        return self._store.review_submission(submission_id, status, comment)
+
+    # ------------------------------------------------------------------ #
+    # 收益记录
+    # ------------------------------------------------------------------ #
+    def save_earning(self, record: EarningRecordData) -> EarningRecordData:
+        return self._store.save_earning(record)
+
+    def list_earnings(self, user_id: str | None = None, actor_name: str | None = None) -> list[EarningRecordData]:
+        return self._store.list_earnings(user_id, actor_name)
+
+    # ------------------------------------------------------------------ #
+    # 敏感词
+    # ------------------------------------------------------------------ #
+    def save_banned_word(self, word: BannedWordData) -> BannedWordData:
+        return self._store.save_banned_word(word)
+
+    def list_banned_words(self, category: str | None = None) -> list[BannedWordData]:
+        return self._store.list_banned_words(category)
+
+    def delete_banned_word(self, word_id: int) -> bool:
+        return self._store.delete_banned_word(word_id)
+
+    # ------------------------------------------------------------------ #
+    # 统计
+    # ------------------------------------------------------------------ #
+    def get_user_stats(self, user_id: str) -> dict[str, Any]:
+        return self._store.get_user_stats(user_id)
+
+    # ------------------------------------------------------------------ #
     # 高级接口：Token 预算控制的上下文文本
     # ------------------------------------------------------------------ #
     def build_context_text(
         self,
         user_id: str,
         max_tokens: int = 800,
+        include_preferences: bool = True,
         include_recent_conversations: bool = True,
         include_recent_scripts: bool = True,
         max_conversations: int = 2,
@@ -169,12 +364,13 @@ class UnifiedMemory(MemoryStore):
     ) -> str:
         """构建用户记忆上下文文本，用于注入 Agent System Prompt。
 
-        按优先级组装：近期会话 > 近期作品，
+        按优先级组装：用户偏好 > 近期会话 > 近期作品，
         超出 Token 预算时从低优先级内容开始截断。
 
         Args:
             user_id: 用户唯一标识。
             max_tokens: 上下文最大 Token 预算。
+            include_preferences: 是否包含用户偏好。
             include_recent_conversations: 是否包含近期会话。
             include_recent_scripts: 是否包含近期作品。
             max_conversations: 最大会话数。
@@ -186,7 +382,16 @@ class UnifiedMemory(MemoryStore):
         ctx = self.build_user_context(user_id, max_conversations=max_conversations)
         items: list[tuple[int, str]] = []  # (priority, text)
 
-        # 1. 近期会话（逐条加入，支持段内截断）
+        # 1. 用户偏好（最高优先级）
+        if include_preferences and ctx.preferences:
+            pref_items = []
+            for pref in ctx.preferences:
+                value_str = json.dumps(pref.value, ensure_ascii=False) if pref.value is not None else "null"
+                pref_items.append(f"- {pref.key}: {value_str}")
+            if pref_items:
+                items.append((1, "【用户偏好】\n" + "\n".join(pref_items)))
+
+        # 2. 近期会话（逐条加入，支持段内截断）
         if include_recent_conversations and ctx.recent_conversations:
             conv_items = []
             for conv in ctx.recent_conversations[:max_conversations]:

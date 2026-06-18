@@ -19,6 +19,12 @@ class UserProfileData(BaseModel):
 
     user_id: str = Field(description="用户唯一标识")
     nickname: str | None = Field(default=None, description="用户昵称")
+    bio: str | None = Field(default=None, description="个人简介")
+    tags: list[str] | None = Field(default=None, description="兴趣标签")
+    avatar_url: str | None = Field(default=None, description="头像 URL")
+    is_verified: bool = Field(default=False, description="是否认证大V")
+    knowledge_shared: bool = Field(default=False, description="知识库是否共享给其他用户")
+    follower_count: int = Field(default=0, description="粉丝数")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
 
@@ -31,13 +37,25 @@ class PreferenceItem(BaseModel):
 
 
 class ConversationData(BaseModel):
-    """会话数据（短期记忆）。"""
+    """会话数据（短期记忆）。
+
+    metadata 字段在极速版/专业版生成时扩展使用：
+    - ip_role_id: 极速版关联的 IP 角色 ID
+    - persona_id: 专业版关联的人物画像 ID
+    - combined_skill_ids: 专业版使用的 Skill 组合列表
+    - estimated_tokens: 预估 Token 数
+    - actual_tokens: 实际 Token 消耗
+    - intensity / salt_level: 加梗强度
+    - original_text / polished_text: 原文与改写文本
+    """
 
     session_id: str = Field(description="会话唯一标识")
     messages: list[dict[str, Any]] = Field(
         default_factory=list, description="消息列表 [(role, content), ...]"
     )
     summary: str | None = Field(default=None, description="对话摘要")
+    source: str = Field(default="chat", description="来源：chat / salt / actor / speed / pro")
+    metadata: dict[str, Any] | None = Field(default=None, description="额外元数据")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
     expires_at: datetime | None = Field(default=None, description="过期时间")
@@ -100,3 +118,165 @@ class UserContext(BaseModel):
     preferences: list[PreferenceItem] = Field(default_factory=list)
     recent_conversations: list[ConversationData] = Field(default_factory=list)
     recent_scripts: list[ScriptData] = Field(default_factory=list)
+
+
+# ------------------------------------------------------------------ #
+# Token 账户
+# ------------------------------------------------------------------ #
+class TokenAccountData(BaseModel):
+    """用户 Token 账户数据。"""
+
+    user_id: str = Field(description="用户唯一标识")
+    balance: int = Field(default=5000, description="Token 余额")
+    total_consumed: int = Field(default=0, description="累计消费")
+    total_recharged: int = Field(default=0, description="累计充值")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 项目
+# ------------------------------------------------------------------ #
+class ProjectData(BaseModel):
+    """项目数据。"""
+
+    project_id: str | None = Field(default=None, description="项目唯一标识，留空则自动生成")
+    user_id: str = Field(description="所属用户")
+    name: str = Field(description="项目名称")
+    project_type: str | None = Field(default=None, description="项目类型：standup / sketch / salt / mixed")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 加点盐历史
+# ------------------------------------------------------------------ #
+class SaltHistoryData(BaseModel):
+    """加点盐历史数据。"""
+
+    salt_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str = Field(description="所属用户")
+    project_id: str | None = Field(default=None, description="关联项目 ID")
+    original_text: str = Field(description="原始文本")
+    polished_text: str = Field(description="润色后文本")
+    salt_level: str = Field(description="盐度等级：light / medium / heavy")
+    token_cost: int = Field(default=0, description="消耗 Token 数")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
+# IP 风格模型
+# ------------------------------------------------------------------ #
+class IPStyleData(BaseModel):
+    """IP 风格模型数据（扩展为 IP 角色）。"""
+
+    style_id: str | None = Field(default=None, description="风格唯一标识，留空则自动生成")
+    actor_name: str = Field(description="演员名称")
+    version: str = Field(description="模型版本")
+    description: str = Field(description="风格描述")
+    prompt_snippet: str = Field(description="注入 Prompt 的片段")
+    status: str = Field(default="active", description="状态：active / testing / offline")
+    split_ratio: int = Field(default=70, description="演员分成比例")
+    usage_count: int = Field(default=0, description="累计调用次数")
+    # --- PRD v2 扩展字段 ---
+    avatar_url: str | None = Field(default=None, description="角色头像 URL")
+    homepage_background: str | None = Field(default=None, description="主页背景图 URL")
+    profile_url: str | None = Field(default=None, description="个人主页路径，如 /ip/lidan")
+    follower_count: int = Field(default=0, description="粉丝数")
+    is_official: bool = Field(default=False, description="是否官方认证角色")
+    skill_id: str | None = Field(default=None, description="关联的风格 Skill ID")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 人物画像
+# ------------------------------------------------------------------ #
+class PersonaData(BaseModel):
+    """人物画像数据。"""
+
+    persona_id: str | None = Field(default=None, description="画像唯一标识")
+    org_id: str | None = Field(default=None, description="组织 ID")
+    creator_id: str = Field(description="创建者用户 ID")
+    name: str = Field(description="画像名称")
+    description: str | None = Field(default=None, description="画像描述")
+    rule_content: dict[str, Any] = Field(
+        default_factory=dict, description="结构化写作约束"
+    )
+    skill_id: str | None = Field(default=None, description="关联的 rule 类型 Skill ID")
+    reference_files: list[dict[str, Any]] | None = Field(default=None, description="参考文件列表")
+    is_active: bool = Field(default=True, description="是否启用")
+    usage_count: int = Field(default=0, description="累计使用次数")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 投稿
+# ------------------------------------------------------------------ #
+class SubmissionData(BaseModel):
+    """投稿数据。"""
+
+    submission_id: str | None = Field(default=None, description="投稿唯一标识，留空则自动生成")
+    user_id: str = Field(description="投稿用户")
+    script_id: str = Field(description="关联作品 ID")
+    target_actor: str = Field(description="目标演员")
+    status: str = Field(default="pending", description="状态：pending / adopted / rejected")
+    actor_comment: str | None = Field(default=None, description="演员审核意见")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    updated_at: datetime | None = Field(default=None, description="更新时间")
+
+
+# ------------------------------------------------------------------ #
+# 收益记录
+# ------------------------------------------------------------------ #
+class EarningRecordData(BaseModel):
+    """收益记录数据。"""
+
+    record_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str | None = Field(default=None, description="关联用户（平台收益时为空）")
+    actor_name: str | None = Field(default=None, description="演员名称")
+    record_type: str = Field(description="记录类型：platform_fee / actor_split / withdrawal")
+    amount: int = Field(description="金额（单位：分）")
+    description: str | None = Field(default=None, description="说明")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
+# Token 消费记录
+# ------------------------------------------------------------------ #
+class TokenConsumptionData(BaseModel):
+    """模型调用 Token 消费记录数据。"""
+
+    consumption_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str = Field(description="用户 ID")
+    session_id: str | None = Field(default=None, description="关联会话 ID")
+    endpoint: str | None = Field(default=None, description="调用入口，如 /chat /salt /pro/generate")
+    model: str | None = Field(default=None, description="实际使用的模型名")
+    prompt_tokens: int = Field(default=0, description="输入 Token 数")
+    completion_tokens: int = Field(default=0, description="输出 Token 数")
+    total_tokens: int = Field(default=0, description="总 Token 数")
+    cost: int = Field(default=0, description="扣除的 Token 数")
+    description: str | None = Field(default=None, description="描述")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
+# 敏感词
+# ------------------------------------------------------------------ #
+class FollowData(BaseModel):
+    """关注关系数据。"""
+
+    follow_id: str | None = Field(default=None, description="关注记录 ID")
+    follower_id: str = Field(description="关注者用户 ID")
+    following_id: str = Field(description="被关注者用户 ID")
+    created_at: datetime | None = Field(default=None, description="关注时间")
+
+
+class BannedWordData(BaseModel):
+    """敏感词数据。"""
+
+    word_id: int | None = Field(default=None, description="敏感词 ID")
+    word: str = Field(description="敏感词内容")
+    category: str | None = Field(default=None, description="分类：political / competitor / vulgar")
+    added_by: str | None = Field(default=None, description="添加者用户 ID")
+    created_at: datetime | None = Field(default=None, description="创建时间")

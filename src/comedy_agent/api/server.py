@@ -18,7 +18,20 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
+from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.middleware import RateLimitMiddleware
+from comedy_agent.api.state import state
+from comedy_agent.api.routers.admin import require_admin, router as admin_router
+from comedy_agent.api.routers.export import router as export_router
+from comedy_agent.api.routers.ip_styles import router as ip_styles_router
+from comedy_agent.api.routers.projects import router as projects_router
+from comedy_agent.api.routers.pro import router as pro_router
+from comedy_agent.api.routers.pro_workflow import router as pro_workflow_router
+from comedy_agent.api.routers.salt import router as salt_router
+from comedy_agent.api.routers.speed import router as speed_router
+from comedy_agent.api.routers.submissions import router as submissions_router
+from comedy_agent.api.routers.users import router as users_router
+from comedy_agent.api.routers.wallet import router as wallet_router
 from comedy_agent.auth import get_current_user, router as auth_router
 from comedy_agent.core.config import settings
 from comedy_agent.core.observability import get_metrics, get_tracer, reset_observability, setup_langsmith
@@ -32,17 +45,7 @@ from comedy_agent.rag.feedback_loop import FeedbackLoop
 from comedy_agent.rag.ingest import KnowledgeIngestor
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
-from comedy_agent.skills import (
-    CrosstalkSkill,
-    JapaneseSketchSkill,
-    JokeAnalyzerSkill,
-    ManzaiSkill,
-    ScriptEvaluatorSkill,
-    SitcomSkill,
-    SketchSkill,
-    StandupSkill,
-)
-from comedy_agent.skills.loader import load_plugin_skills
+from comedy_agent.skills.loader import load_plugin_skills, load_single_skill
 from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.models.factory import ModelFactory
 
@@ -61,6 +64,7 @@ class ChatRequest(BaseModel):
     chat_history: list[tuple[str, str]] | None = Field(
         default=None, description="历史消息 [(role, content), ...]"
     )
+    source: str = Field(default="chat", description="来源标识：chat / actor")
 
 
 class SuggestionResponse(BaseModel):
@@ -317,27 +321,12 @@ class KnowledgeCardListResponse(BaseModel):
     cards: list[KnowledgeCardData] = Field(description="卡片列表")
 
 
-# ------------------------------------------------------------------ #
-# 应用生命周期
-# ------------------------------------------------------------------ #
-class AppState:
-    """全局应用状态（持有 Orchestrator 与 Memory 实例）。"""
-
-    def __init__(self) -> None:
-        self.orch: AgentOrchestrator | None = None
-        self.memory: UnifiedMemory | None = None
-
-
-state = AppState()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时加载 Prompt、Memory、可观测性与初始化 Orchestrator。"""
-    global _START_TIME
     import time
 
-    _START_TIME = time.time()
+    state.start_time = time.time()
 
     # 自动配置 LangSmith（若配置了 API Key）
     setup_langsmith()
@@ -371,16 +360,8 @@ async def lifespan(app: FastAPI):
 
     try:
         state.orch = AgentOrchestrator(memory=state.memory, retriever=retriever)
-        state.orch.register_skill(StandupSkill())
-        state.orch.register_skill(CrosstalkSkill())
-        state.orch.register_skill(SketchSkill())
-        state.orch.register_skill(SitcomSkill())
-        state.orch.register_skill(ManzaiSkill())
-        state.orch.register_skill(JapaneseSketchSkill())
-        state.orch.register_skill(JokeAnalyzerSkill())
-        state.orch.register_skill(ScriptEvaluatorSkill())
 
-        # 加载外部插件 Skill
+        # 从 skills/ 目录加载所有 Skill（内置 + 外部插件）
         for plugin in load_plugin_skills():
             state.orch.register_skill(plugin)
     except ModelConfigError as e:
@@ -412,6 +393,28 @@ app.add_middleware(
 
 # 挂载认证路由
 app.include_router(auth_router, prefix="/auth")
+app.include_router(wallet_router)
+app.include_router(projects_router)
+app.include_router(pro_router)
+app.include_router(pro_workflow_router)
+app.include_router(salt_router)
+app.include_router(speed_router)
+app.include_router(ip_styles_router)
+app.include_router(submissions_router)
+app.include_router(users_router)
+app.include_router(admin_router)
+app.include_router(export_router)
+
+# 禁止浏览器缓存前端静态资源，避免部署新版后页面仍显示旧版本
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 
 # 挂载前端静态文件（如果 frontend/ 目录存在）
 _frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
@@ -463,7 +466,7 @@ async def health() -> HealthResponse:
         version="0.1.0",
         memory_ready=state.memory is not None,
         orchestrator_ready=state.orch is not None,
-        uptime_seconds=time.time() - _START_TIME if _START_TIME else None,
+        uptime_seconds=time.time() - state.start_time if state.start_time else None,
     )
 
 
@@ -567,6 +570,8 @@ async def reload_skills(
     return SkillReloadResponse(**stats)
 
 
+CHAT_MIN_COST = 5
+
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
 async def chat(
     request: ChatRequest, user_id: str = Depends(get_current_user)
@@ -574,6 +579,10 @@ async def chat(
     """与 Agent 对话。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < CHAT_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {CHAT_MIN_COST}，余 {account.balance}）")
 
     tracer = get_tracer()
     metrics = get_metrics()
@@ -586,6 +595,8 @@ async def chat(
         # 生成或复用 session_id
         import uuid
         session_id = request.session_id or uuid.uuid4().hex[:16]
+
+        start_usage_tracking()
 
         with tracer.span(
             "api.chat",
@@ -615,6 +626,7 @@ async def chat(
                         session_id=session_id,
                         messages=messages,
                         summary=result["output"][:80] if result["output"] else None,
+                        source=request.source,
                     )
                 except Exception as save_err:
                     logger.warning("保存会话记录失败: %s", save_err)
@@ -650,12 +662,23 @@ async def chat(
                         prompt_template="使用 {skill_name} 技能，主题是【{topic}】，风格改成【{style}】",
                     )
 
+            # 按真实 Token 用量扣费并记录
+            charge_model_usage(
+                user_id=user_id,
+                endpoint="/chat",
+                description="Agent 对话",
+                session_id=session_id,
+                fallback_cost=CHAT_MIN_COST,
+            )
+
             return ChatResponse(
                 output=result["output"], session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+STANDUP_MIN_COST = 18
 
 @app.post("/skills/standup", response_model=StandupResponse, tags=["skills"])
 async def skill_standup(
@@ -664,6 +687,10 @@ async def skill_standup(
     """直接调用脱口秀创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < STANDUP_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {STANDUP_MIN_COST}，余 {account.balance}）")
 
     # 优先复用 orchestrator 中已注册的 Skill，保证模型上下文一致
     skill = None
@@ -672,15 +699,16 @@ async def skill_standup(
             skill = tool
             break
 
-    # 若未注册，则新建（兼容测试与边缘场景）
+    # 若未注册，则从 skills/ 目录动态加载
     if skill is None:
-        skill = StandupSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "standup")
 
     # 若前端指定了模型，覆盖 Skill 的模型
     if request.model is not None:
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "topic": request.topic,
@@ -693,10 +721,18 @@ async def skill_standup(
                 "debug": request.debug,
             }
         )
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/standup",
+            description="脱口秀创作",
+            fallback_cost=STANDUP_MIN_COST,
+        )
         return StandupResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+SKETCH_MIN_COST = 18
 
 @app.post("/skills/sketch", response_model=SketchResponse, tags=["skills"])
 async def skill_sketch(
@@ -705,6 +741,10 @@ async def skill_sketch(
     """直接调用小品创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < SKETCH_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {SKETCH_MIN_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -713,12 +753,13 @@ async def skill_sketch(
             break
 
     if skill is None:
-        skill = SketchSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "sketch")
 
     if request.model is not None:
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "theme": request.theme,
@@ -730,10 +771,18 @@ async def skill_sketch(
                 "user_id": user_id,
             }
         )
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/sketch",
+            description="小品创作",
+            fallback_cost=SKETCH_MIN_COST,
+        )
         return SketchResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+MANZAI_MIN_COST = 18
 
 @app.post("/skills/manzai", response_model=ManzaiResponse, tags=["skills"])
 async def skill_manzai(
@@ -742,6 +791,10 @@ async def skill_manzai(
     """直接调用漫才创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < MANZAI_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {MANZAI_MIN_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -750,12 +803,13 @@ async def skill_manzai(
             break
 
     if skill is None:
-        skill = ManzaiSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "manzai")
 
     if request.model is not None:
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "topic": request.topic,
@@ -766,10 +820,18 @@ async def skill_manzai(
                 "user_id": user_id,
             }
         )
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/manzai",
+            description="漫才创作",
+            fallback_cost=MANZAI_MIN_COST,
+        )
         return ManzaiResponse(content=content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+JAPANESE_SKETCH_MIN_COST = 18
 
 @app.post("/skills/japanese-sketch", response_model=JapaneseSketchResponse, tags=["skills"])
 async def skill_japanese_sketch(
@@ -778,6 +840,10 @@ async def skill_japanese_sketch(
     """直接调用日式短剧创作 Skill。"""
     if state.orch is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
+    if state.memory is not None:
+        account = state.memory.get_token_account(user_id)
+        if account.balance < JAPANESE_SKETCH_MIN_COST:
+            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {JAPANESE_SKETCH_MIN_COST}，余 {account.balance}）")
 
     skill = None
     for tool in state.orch.tools:
@@ -786,12 +852,13 @@ async def skill_japanese_sketch(
             break
 
     if skill is None:
-        skill = JapaneseSketchSkill()
+        skill = load_single_skill(Path(settings.skills_dir) / "japanese_sketch")
 
     if request.model is not None:
         skill.model_name = request.model
 
     try:
+        start_usage_tracking()
         content = skill.invoke(
             {
                 "theme": request.theme,
@@ -803,6 +870,12 @@ async def skill_japanese_sketch(
                 "punchline_density": request.punchline_density,
                 "user_id": user_id,
             }
+        )
+        charge_model_usage(
+            user_id=user_id,
+            endpoint="/skills/japanese-sketch",
+            description="日式短剧创作",
+            fallback_cost=JAPANESE_SKETCH_MIN_COST,
         )
         return JapaneseSketchResponse(content=content)
     except Exception as e:
@@ -961,6 +1034,8 @@ async def list_conversations(
             {
                 "session_id": c.session_id,
                 "summary": c.summary,
+                "source": c.source,
+                "metadata": c.metadata,
                 "message_count": len(c.messages),
                 "created_at": c.created_at.isoformat() if c.created_at else None,
                 "updated_at": c.updated_at.isoformat() if c.updated_at else None,
@@ -985,6 +1060,8 @@ async def get_conversation(
         "session_id": conv.session_id,
         "messages": conv.messages,
         "summary": conv.summary,
+        "source": conv.source,
+        "metadata": conv.metadata,
         "created_at": conv.created_at.isoformat() if conv.created_at else None,
         "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
     }
@@ -1015,8 +1092,9 @@ async def upload_documents(
     chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
     topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
     user_id: str = Depends(get_current_user),
+    _admin: str = Depends(require_admin),
 ) -> list[DocumentUploadResponse]:
-    """上传文档到个人知识库。支持多文件上传，自动解析并入库。"""
+    """上传文档到系统知识库。仅管理员可维护。支持多文件上传，自动解析并入库。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
@@ -1117,10 +1195,10 @@ async def upload_documents(
 async def list_documents(
     user_id: str = Depends(get_current_user),
 ) -> DocumentListResponse:
-    """列出当前用户上传的文档。"""
+    """列出系统知识库中的所有文档（共享可见）。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
-    docs = state.memory.list_documents(user_id)
+    docs = state.memory.list_documents()  # user_id=None 返回所有文档
     return DocumentListResponse(documents=docs)
 
 
@@ -1128,8 +1206,9 @@ async def list_documents(
 async def delete_document(
     doc_id: str,
     user_id: str = Depends(get_current_user),
+    _admin: str = Depends(require_admin),
 ) -> SuccessResponse:
-    """删除指定文档，同时清理向量库中的对应内容。"""
+    """删除指定文档，同时清理向量库中的对应内容。仅管理员可维护。"""
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
@@ -1144,6 +1223,176 @@ async def delete_document(
             persist_path=str(settings.vector_db_path),
         )
         # ChromaDB 元数据过滤：匹配 doc_id 或 source_doc_id
+        filter_conditions = {
+            "$or": [
+                {"doc_id": doc_id},
+                {"source_doc_id": doc_id},
+            ]
+        }
+        matched = user_vector_store.get_by_filter(filter_conditions)
+        if matched:
+            ids_to_delete = [m.metadata.get("doc_id") for m in matched if m.metadata.get("doc_id")]
+            if ids_to_delete:
+                user_vector_store.delete(ids_to_delete)
+    except Exception:
+        logger.warning("清理向量库文档失败: %s", doc_id, exc_info=True)
+
+    # 删除本地文件
+    upload_dir = Path(settings.data_dir) / "uploads" / user_id
+    file_path = upload_dir / doc.filename
+    if file_path.exists():
+        file_path.unlink()
+
+    # 删除数据库记录
+    ok = state.memory.delete_document(user_id, doc_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    return SuccessResponse(success=True)
+
+
+# ------------------------------------------------------------------ #
+# 大V专属知识库路由
+# ------------------------------------------------------------------ #
+@app.post("/me/knowledge/upload", response_model=list[DocumentUploadResponse], tags=["knowledge"])
+async def upload_verified_knowledge(
+    files: list[UploadFile] = File(...),
+    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
+    style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
+    chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
+    topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
+    user_id: str = Depends(get_current_user),
+) -> list[DocumentUploadResponse]:
+    """大V用户上传专属知识库文档。仅认证大V（is_verified=True）可上传。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    # 检查是否为大V
+    user = state.memory.get_user(user_id)
+    if user is None or not user.is_verified:
+        raise HTTPException(status_code=403, detail="仅认证大V可上传专属知识库")
+
+    results: list[DocumentUploadResponse] = []
+    upload_dir = Path(settings.data_dir) / "uploads" / user_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    for file in files:
+        safe_name = Path(file.filename or "unknown").name
+        save_path = upload_dir / safe_name
+        counter = 1
+        original_save_path = save_path
+        while save_path.exists():
+            stem = original_save_path.stem
+            suffix = original_save_path.suffix
+            save_path = upload_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+        content = await file.read()
+        save_path.write_bytes(content)
+
+        doc = DocumentData(
+            user_id=user_id,
+            filename=safe_name,
+            kind=kind,
+            style=style,
+            chunk_strategy=chunk_strategy,
+            topic=topic,
+            status="pending",
+        )
+        doc = state.memory.save_document(doc)
+
+        try:
+            ingestor = KnowledgeIngestor(
+                retriever=None,
+                chunk_strategy=chunk_strategy,
+            )
+            user_vector_store = VectorStore(
+                collection_name=f"user_knowledge_{user_id}",
+                persist_path=str(settings.vector_db_path),
+            )
+            user_retriever = ComedyRetriever(vector_store=user_vector_store)
+            ingestor.retriever = user_retriever
+            result = ingestor.ingest_file(save_path, kind=kind, style=style)
+
+            doc.status = "ingested"
+            doc.chunk_count = result.get("chunks", 0)
+            state.memory.save_document(doc)
+
+            results.append(
+                DocumentUploadResponse(
+                    doc_id=doc.doc_id,
+                    filename=safe_name,
+                    kind=kind,
+                    style=style,
+                    chunk_strategy=chunk_strategy,
+                    topic=topic,
+                    status="ingested",
+                    chunks=result.get("chunks", 0),
+                )
+            )
+        except Exception as e:
+            err_text = str(e)
+            if "429" in err_text and "quota" in err_text.lower():
+                err_text = "OpenAI API 配额不足，请切换 Embedding 模型（如 hf-local）或充值"
+            elif "429" in err_text:
+                err_text = "API 请求过于频繁，请稍后再试"
+            elif "401" in err_text or "Unauthorized" in err_text:
+                err_text = "API Key 无效或未配置"
+            elif "Connection" in err_text or "Timeout" in err_text:
+                err_text = "网络连接超时，请检查网络或切换本地模型"
+            doc.status = "failed"
+            doc.error_msg = err_text
+            state.memory.save_document(doc)
+            results.append(
+                DocumentUploadResponse(
+                    doc_id=doc.doc_id,
+                    filename=safe_name,
+                    kind=kind,
+                    style=style,
+                    chunk_strategy=chunk_strategy,
+                    topic=topic,
+                    status="failed",
+                    chunks=0,
+                )
+            )
+    return results
+
+
+@app.get("/me/knowledge", response_model=DocumentListResponse, tags=["knowledge"])
+async def list_my_knowledge(
+    user_id: str = Depends(get_current_user),
+) -> DocumentListResponse:
+    """列出当前大V用户的专属知识库文档。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None or not user.is_verified:
+        raise HTTPException(status_code=403, detail="仅认证大V可查看专属知识库")
+    docs = state.memory.list_documents(user_id=user_id)
+    return DocumentListResponse(documents=docs)
+
+
+@app.delete("/me/knowledge/{doc_id}", response_model=SuccessResponse, tags=["knowledge"])
+async def delete_my_knowledge(
+    doc_id: str,
+    user_id: str = Depends(get_current_user),
+) -> SuccessResponse:
+    """大V用户删除自己的专属知识库文档。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None or not user.is_verified:
+        raise HTTPException(status_code=403, detail="仅认证大V可管理专属知识库")
+
+    doc = state.memory.get_document(user_id, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    # 清理向量库
+    try:
+        user_vector_store = VectorStore(
+            collection_name=f"user_knowledge_{user_id}",
+            persist_path=str(settings.vector_db_path),
+        )
         filter_conditions = {
             "$or": [
                 {"doc_id": doc_id},

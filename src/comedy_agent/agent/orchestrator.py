@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -81,6 +81,9 @@ class AgentOrchestrator:
                 skill.model_name = self.model_name
             if self.retriever is not None:
                 skill.retriever = self.retriever
+            if self.memory is not None:
+                skill.memory = self.memory
+            skill.orchestrator = self
         self.tools.append(skill)
         self._agent = None
         logger.info("Registered skill: %s", skill.name)
@@ -221,6 +224,41 @@ class AgentOrchestrator:
             logger.debug("用户个人知识库检索失败", exc_info=True)
             return []
 
+    def _retrieve_shared_knowledge(
+        self, query: str, top_k_per_user: int = 2, max_users: int = 5
+    ) -> list[Any]:
+        """检索所有已共享的大V知识库。
+
+        Args:
+            query: 检索查询。
+            top_k_per_user: 每个共享用户召回数量。
+            max_users: 最多检索的共享用户数量。
+
+        Returns:
+            合并去重后的文档列表。
+        """
+        if self.memory is None:
+            return []
+        try:
+            shared_users = self.memory.list_shared_knowledge_users()
+        except Exception:
+            logger.debug("获取共享知识库用户列表失败", exc_info=True)
+            return []
+
+        all_docs: list[Any] = []
+        for user in shared_users[:max_users]:
+            try:
+                store = self._get_user_vector_store(user.user_id)
+                docs = store.search(query, top_k=top_k_per_user)
+                # 标注来源为大V用户
+                for doc in docs:
+                    if hasattr(doc, "metadata") and doc.metadata is not None:
+                        doc.metadata["shared_from"] = user.nickname or user.user_id
+                all_docs.extend(docs)
+            except Exception:
+                logger.debug("共享知识库检索失败: %s", user.user_id, exc_info=True)
+        return all_docs
+
     def debug_retrieval(
         self, query: str, user_id: str | None = None
     ) -> dict[str, Any]:
@@ -315,6 +353,10 @@ class AgentOrchestrator:
             except Exception:
                 logger.debug("默认知识库检索失败，跳过注入", exc_info=True)
 
+        # 2.3 共享的大V知识库
+        shared_docs = self._retrieve_shared_knowledge(user_input, top_k_per_user=2, max_users=5)
+        all_docs.extend(shared_docs)
+
         # 去重并格式化
         if all_docs:
             seen: set[str] = set()
@@ -371,12 +413,60 @@ class AgentOrchestrator:
                 return tool
         return None
 
+    @staticmethod
+    def _clean_request_for_fallback(user_request: str) -> str:
+        """去除常见的技能指令前缀，保留用户实际输入内容。"""
+        # 去除 "使用 xxx 技能。" / "用 xxx 技能。" / "使用 xxx 技能来" 等前缀
+        cleaned = re.sub(
+            r"^(?:使用|用)\s*\w+(?:\s*技能)?\s*(?:来|去)?\s*[。：:.]?\s*",
+            "",
+            user_request,
+            flags=re.IGNORECASE,
+        )
+        # 去除 "搜索词：" / "创作话题：" / "文本：" / "Text:" 等前缀（逐行处理）
+        lines = cleaned.splitlines()
+        cleaned_lines: list[str] = []
+        for line in lines:
+            line = re.sub(
+                r"^\s*(?:文本|text|搜索词|query|关键词|创作话题|topic)\s*[：:]\s*",
+                "",
+                line,
+                flags=re.IGNORECASE,
+            )
+            if line.strip():
+                cleaned_lines.append(line)
+        return "\n".join(cleaned_lines).strip()
+
+    # 参数提取阶段常见的 LLM 复制提示文字（视为无效值）
+    _PROMPT_CONTAMINATION_MARKERS: ClassVar[tuple[str, ...]] = (
+        "请只输出合法的 JSON",
+        "不要有任何解释",
+        "Markdown 代码块",
+        "请按目标平台的排版风格输出",
+        "你是一个参数提取助手",
+        "将以下用户请求转换为 JSON 参数",
+        "技能参数要求",
+        "用户请求：",
+        "请严格按照技能参数要求输出",
+        "请输出合法的 JSON",
+    )
+
+    @classmethod
+    def _is_contaminated_value(cls, value: Any) -> bool:
+        """判断 LLM 返回的参数值是否被提示文字污染。"""
+        if not isinstance(value, str):
+            return False
+        text = value.strip()
+        if not text:
+            return True
+        return any(marker in text for marker in cls._PROMPT_CONTAMINATION_MARKERS)
+
     def _extract_skill_args(
         self, skill: BaseTool, user_request: str
     ) -> dict[str, Any]:
         """用 LLM 将用户请求解析为技能参数。
 
-        若解析失败则兜底：将用户请求作为第一个必填参数传入。
+        若解析失败则兜底：将清洗后的用户实际输入作为第一个必填参数传入。
         """
         schema = getattr(skill, "args_schema", None)
         if schema is None:
@@ -426,20 +516,35 @@ class AgentOrchestrator:
                 else:
                     raise
 
-            # 过滤掉 schema 中不存在的字段
+            # 过滤掉 schema 中不存在的字段，并剔除被提示文字污染的值
             valid_fields = set(schema.model_fields.keys())
-            args = {k: v for k, v in args.items() if k in valid_fields}
-            return args
+            cleaned_args: dict[str, Any] = {}
+            for k, v in args.items():
+                if k not in valid_fields:
+                    continue
+                if self._is_contaminated_value(v):
+                    logger.debug("忽略被提示文字污染的参数 %s=%r", k, v)
+                    continue
+                cleaned_args[k] = v
+
+            # 如果清洗后丢失了第一个必填参数，则兜底：优先使用清洗后的实际请求内容，
+            # 即使为空也传入（由 Skill 自己决定是否提供空值提示，避免参数缺失导致验证报错）
+            if first_required and first_required not in cleaned_args:
+                fallback_value = self._clean_request_for_fallback(user_request)
+                cleaned_args[first_required] = fallback_value
+
+            return cleaned_args
         except Exception:
             logger.warning(
                 "LLM 参数解析失败，兜底处理：skill=%s, request=%s",
                 skill.name,
                 user_request[:100],
             )
-            # 兜底：第一个必填参数
+            # 兜底：第一个必填参数，先清洗掉技能指令前缀
+            fallback_value = self._clean_request_for_fallback(user_request)
             if first_required:
-                return {first_required: user_request}
-            return {"input": user_request}
+                return {first_required: fallback_value}
+            return {"input": fallback_value}
 
     def _invoke_directive_skill(
         self,

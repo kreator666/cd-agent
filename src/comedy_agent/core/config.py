@@ -31,6 +31,20 @@ class Settings(BaseSettings):
         default="https://maas-openapi.wanjiedata.com/api/v1", alias="WJ_BASE_URL"
     )
 
+    # 素材搜索：RSS 新闻源列表（逗号分隔）
+    news_rss_feeds: str = Field(
+        default=(
+            "https://www.chinanews.com.cn/rss/scroll-news.xml,"
+            "https://www.chinanews.com.cn/rss/china.xml,"
+            "https://www.chinanews.com.cn/rss/world.xml,"
+            "https://www.chinanews.com.cn/rss/finance.xml,"
+            "https://www.ithome.com/rss/,"
+            "https://36kr.com/feed,"
+            "https://rss.mifaw.com/articles/5c8bb11a3c41f61efd36683e/5c919d543882afa09dff3fa3"
+        ),
+        alias="NEWS_RSS_FEEDS",
+    )
+
     # 默认模型
     default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")
     default_embedding_model: str = Field(

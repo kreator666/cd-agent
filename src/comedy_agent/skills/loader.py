@@ -1,8 +1,9 @@
 """Skill 插件加载器 —— 从 skills/ 目录动态加载外部 Skill。
 
-支持两种加载模式：
-1. 声明式 Skill：SKILL.md + prompt.txt → 自动生成 Tool
-2. 代码式 Skill：SKILL.md + prompt.txt + skill.py → 导入自定义实现
+支持三种加载模式：
+1. 声明式 Skill：SKILL.md → 自动生成 Tool（提示词内嵌在 Markdown 中）
+2. 代码式 Skill：SKILL.md + skill.py → 导入自定义实现
+3. 兼容模式：SKILL.md + prompt.txt → 旧版声明式（向后兼容）
 """
 
 from __future__ import annotations
@@ -10,9 +11,11 @@ from __future__ import annotations
 import importlib.util
 import logging
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import BaseModel, Field, create_model
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -37,53 +40,130 @@ class SkillMeta:
         parameters: list[dict[str, Any]],
         skill_dir: Path,
         task_type: str = "creative",
+        system_prompt: str = "",
+        prompt_template: str = "",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         self.name = name
         self.description = description
         self.parameters = parameters
         self.skill_dir = skill_dir
         self.task_type = task_type
-        self.prompt_template: str = ""
+        self.system_prompt = system_prompt
+        self.prompt_template = prompt_template
+        self.metadata = metadata or {}
 
     @classmethod
     def from_markdown(cls, text: str, skill_dir: Path) -> "SkillMeta":
-        """从 SKILL.md 文本解析元数据。"""
-        # 提取标题作为 name
-        name_match = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
-        name = name_match.group(1).strip() if name_match else skill_dir.name
+        """从 SKILL.md 文本解析元数据。
 
-        # 提取 ## 描述 段落
-        desc_match = re.search(
-            r"^##\s+描述\s*\n+(.+?)(?=\n^##|\Z)", text, re.MULTILINE | re.DOTALL
-        )
-        description = (
-            desc_match.group(1).strip().replace("\n", " ") if desc_match else name
-        )
+        支持两种格式：
+        1. OKX 规范：YAML frontmatter + Markdown body
+        2. 旧版格式：纯 Markdown，通过 ## 标题提取
+        """
+        # 尝试解析 YAML frontmatter
+        frontmatter: dict[str, Any] = {}
+        body = text
 
-        # 提取任务类型
-        task_type = "creative"
-        task_match = re.search(
-            r"^##\s+任务类型\s*\n+(.+?)(?=\n^##|\Z)", text, re.MULTILINE | re.DOTALL
-        )
-        if task_match:
-            task_type = task_match.group(1).strip().lower()
-            # 取第一行第一个有效词
-            first_word = task_type.split()[0] if task_type.split() else "creative"
-            if first_word in ("creative", "analytical", "fast"):
-                task_type = first_word
+        fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", text, re.DOTALL)
+        if fm_match:
+            try:
+                frontmatter = yaml.safe_load(fm_match.group(1)) or {}
+                body = fm_match.group(2)
+            except yaml.YAMLError as e:
+                logger.warning("YAML frontmatter 解析失败: %s，回退到旧版解析", e)
+                frontmatter = {}
+
+        # 从 frontmatter 或 body 中提取 name
+        name = frontmatter.get("name", "")
+        if not name:
+            name_match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
+            name = name_match.group(1).strip() if name_match else skill_dir.name
+
+        # 从 frontmatter 或 body 中提取 description
+        description = frontmatter.get("description", "")
+        if not description:
+            desc_match = re.search(
+                r"^##\s+描述\s*\n+(.+?)(?=\n^##|\Z)", body, re.MULTILINE | re.DOTALL
+            )
+            description = (
+                desc_match.group(1).strip().replace("\n", " ") if desc_match else name
+            )
+
+        # 从 frontmatter 或 body 中提取 task_type
+        task_type = frontmatter.get("task_type", "")
+        if not task_type:
+            task_type = frontmatter.get("metadata", {}).get("task_type", "")
+        if not task_type:
+            task_match = re.search(
+                r"^##\s+任务类型\s*\n+(.+?)(?=\n^##|\Z)", body, re.MULTILINE | re.DOTALL
+            )
+            if task_match:
+                task_type = task_match.group(1).strip().lower()
+                first_word = task_type.split()[0] if task_type.split() else "creative"
+                if first_word in ("creative", "analytical", "fast"):
+                    task_type = first_word
+                else:
+                    task_type = "creative"
             else:
                 task_type = "creative"
 
-        # 提取参数表格
+        # 从 body 中提取参数表格
         parameters: list[dict[str, Any]] = []
         param_match = re.search(
-            r"^##\s+参数\s*\n+(.*?)(\n^##|\Z)", text, re.MULTILINE | re.DOTALL
+            r"^##\s+参数\s*\n+(.*?)(\n^##|\Z)", body, re.MULTILINE | re.DOTALL
         )
         if param_match:
             table_text = param_match.group(1).strip()
             parameters = _parse_param_table(table_text)
 
-        return cls(name=name, description=description, parameters=parameters, skill_dir=skill_dir, task_type=task_type)
+        # 从 body 中提取系统提示词
+        system_prompt = ""
+        sp_match = re.search(
+            r"^##\s+系统提示词\s*\n+```.*?\n(.*?)```",
+            body,
+            re.MULTILINE | re.DOTALL,
+        )
+        if sp_match:
+            system_prompt = sp_match.group(1).strip()
+        else:
+            # 尝试无代码块的格式
+            sp_match2 = re.search(
+                r"^##\s+系统提示词\s*\n+(.+?)(?=\n^##|\Z)",
+                body,
+                re.MULTILINE | re.DOTALL,
+            )
+            if sp_match2:
+                system_prompt = sp_match2.group(1).strip()
+
+        # 从 body 中提取提示词模板
+        prompt_template = ""
+        pt_match = re.search(
+            r"^##\s+提示词模板\s*\n+```.*?\n(.*?)```",
+            body,
+            re.MULTILINE | re.DOTALL,
+        )
+        if pt_match:
+            prompt_template = pt_match.group(1).strip()
+        else:
+            pt_match2 = re.search(
+                r"^##\s+提示词模板\s*\n+(.+?)(?=\n^##|\Z)",
+                body,
+                re.MULTILINE | re.DOTALL,
+            )
+            if pt_match2:
+                prompt_template = pt_match2.group(1).strip()
+
+        return cls(
+            name=name,
+            description=description,
+            parameters=parameters,
+            skill_dir=skill_dir,
+            task_type=task_type,
+            system_prompt=system_prompt,
+            prompt_template=prompt_template,
+            metadata=frontmatter.get("metadata", {}),
+        )
 
 
 def _parse_param_table(table_text: str) -> list[dict[str, Any]]:
@@ -175,16 +255,19 @@ def _create_declarative_skill(meta: SkillMeta) -> type[ComedySkill]:
 
     _schema_cls = _build_args_schema(meta.parameters)
 
+    # 使用 SKILL.md 中的系统提示词，或回退到默认值
+    _system_prompt = meta.system_prompt or (
+        "你是一位专业的喜剧创作助手。请根据用户要求，"
+        "严格按照给定的 Prompt 模板生成内容。"
+    )
+
     class DeclarativeSkill(ComedySkill):
         name: str = meta.name
         description: str = meta.description
         args_schema: type[BaseModel] = _schema_cls
         task_type: str = meta.task_type
 
-        SYSTEM_PROMPT: str = (
-            "你是一位专业的喜剧创作助手。请根据用户要求，"
-            "严格按照给定的 Prompt 模板生成内容。"
-        )
+        SYSTEM_PROMPT: str = _system_prompt
 
         def _run(self, **kwargs: Any) -> str:
             prompt_text = meta.prompt_template
@@ -231,7 +314,17 @@ def _load_code_skill(skill_dir: Path, meta: SkillMeta) -> type[ComedySkill] | No
         return None
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+
+    # 将 meta 注入模块，让 skill.py 能访问 SKILL.md 解析结果
+    module._skill_meta = meta  # type: ignore[attr-defined]
+
+    # 必须先放入 sys.modules，否则 skill.py 中 sys.modules[__name__] 会 KeyError
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
 
     # 优先查找名为 Skill 的类，或第一个继承 ComedySkill 的类
     skill_cls: type[ComedySkill] | None = getattr(module, "Skill", None)
@@ -255,6 +348,10 @@ def _load_code_skill(skill_dir: Path, meta: SkillMeta) -> type[ComedySkill] | No
         skill_cls.name = meta.name
     if not getattr(skill_cls, "description", None):
         skill_cls.description = meta.description
+
+    # 如果类没有 SYSTEM_PROMPT 且 meta 中有系统提示词，注入之
+    if not getattr(skill_cls, "SYSTEM_PROMPT", None) and meta.system_prompt:
+        skill_cls.SYSTEM_PROMPT = meta.system_prompt
 
     return skill_cls
 
@@ -289,7 +386,6 @@ def load_plugin_skills(skills_dir: Path | str | None = None) -> list[ComedySkill
             continue
 
         skill_md = subdir / "SKILL.md"
-        prompt_txt = subdir / "prompt.txt"
 
         if not skill_md.exists():
             logger.debug("跳过 %s: 缺少 SKILL.md", subdir.name)
@@ -302,11 +398,10 @@ def load_plugin_skills(skills_dir: Path | str | None = None) -> list[ComedySkill
             logger.error("解析 %s 失败: %s", skill_md, e)
             continue
 
-        # 读取 prompt 模板
+        # 兼容旧版：如果存在 prompt.txt，用它覆盖 SKILL.md 中的模板
+        prompt_txt = subdir / "prompt.txt"
         if prompt_txt.exists():
             meta.prompt_template = prompt_txt.read_text(encoding="utf-8")
-        else:
-            logger.warning("%s 缺少 prompt.txt，将使用空模板", subdir.name)
 
         # 判断加载模式
         skill_py = subdir / "skill.py"
@@ -335,8 +430,20 @@ _BUILTIN_SKILL_NAMES = {
     "crosstalk_generator",
     "sketch_generator",
     "sitcom_generator",
+    "manzai_generator",
+    "japanese_sketch_generator",
     "joke_analyzer",
     "script_evaluator",
+    "add_salt",
+    "style_mimic",
+    "topic",
+    "attitude",
+    "emotion",
+    "genre",
+    "rule_persona",
+    "script_composer",
+    "material",
+    "layout",
 }
 
 
@@ -398,7 +505,6 @@ def load_single_skill(skill_dir: Path) -> ComedySkill | None:
         ComedySkill 实例，加载失败返回 None。
     """
     skill_md = skill_dir / "SKILL.md"
-    prompt_txt = skill_dir / "prompt.txt"
 
     if not skill_md.exists():
         logger.error("缺少 SKILL.md: %s", skill_dir)
@@ -410,10 +516,10 @@ def load_single_skill(skill_dir: Path) -> ComedySkill | None:
         logger.error("解析 %s 失败: %s", skill_md, e)
         return None
 
+    # 兼容旧版 prompt.txt
+    prompt_txt = skill_dir / "prompt.txt"
     if prompt_txt.exists():
         meta.prompt_template = prompt_txt.read_text(encoding="utf-8")
-    else:
-        logger.warning("%s 缺少 prompt.txt", skill_dir.name)
 
     skill_py = skill_dir / "skill.py"
     try:

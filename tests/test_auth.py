@@ -41,6 +41,7 @@ def client():
             from comedy_agent.memory.unified import UnifiedMemory
 
             state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
+            state.memory._store = auth_store
             yield c
 
     state.orch = None
@@ -157,7 +158,7 @@ class TestProtectedRoutes:
         token = login_resp.json()["access_token"]
 
         response = client.get(
-            "/auth/me",
+            "/me",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200

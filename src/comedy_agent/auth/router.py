@@ -87,11 +87,4 @@ async def login(request: LoginRequest) -> TokenResponse:
     return TokenResponse(access_token=token, user_id=request.user_id)
 
 
-@router.get("/me", response_model=UserResponse)
-async def me(user_id: str = Depends(get_current_user)) -> UserResponse:
-    """获取当前登录用户信息。"""
-    store = SQLMemoryStore()
-    user = store.get_user(user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="用户不存在")
-    return UserResponse(user_id=user.user_id, nickname=user.nickname)
+

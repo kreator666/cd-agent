@@ -59,11 +59,11 @@ class TestCLI:
     def test_skill_standup(self, capsys):
         """skill standup 直接调用 Skill。"""
         with patch(
-            "comedy_agent.api.cli.StandupSkill"
-        ) as mock_skill_cls:
+            "comedy_agent.api.cli.load_single_skill"
+        ) as mock_loader:
             mock_skill = MagicMock()
             mock_skill.invoke.return_value = "段子内容"
-            mock_skill_cls.return_value = mock_skill
+            mock_loader.return_value = mock_skill
 
             code = main([
                 "skill", "standup",
@@ -82,6 +82,7 @@ class TestCLI:
                     "style": "自嘲",
                     "duration": 5,
                     "audience": "互联网人",
+                    "debug": False,
                 }
             )
 

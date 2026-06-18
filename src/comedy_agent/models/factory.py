@@ -14,6 +14,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from comedy_agent.core.config import settings
 from comedy_agent.core.observability import get_metrics
+from comedy_agent.models.usage_tracker import UsageCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +341,10 @@ class ModelFactory:
         metrics.record("model.calls", 1, tags={"model": name, "task_type": task_type or "none"})
 
         if name in cls._llm_registry:
-            return cls._llm_registry[name](**kwargs)
+            llm = cls._llm_registry[name](**kwargs)
+            if isinstance(llm, BaseChatModel):
+                llm.callbacks = [UsageCallbackHandler(model_name=name)]
+            return llm
 
         # 兜底：Ollama 支持任意本地模型名
         if name.startswith("ollama-"):
@@ -349,7 +353,9 @@ class ModelFactory:
                     f"模型 '{name}' 需要 ollama 支持，但 langchain-community 未安装"
                 )
             model_id = name.replace("ollama-", "")
-            return ChatOllama(model=model_id, **kwargs)
+            llm = ChatOllama(model=model_id, **kwargs)
+            llm.callbacks = [UsageCallbackHandler(model_name=name)]
+            return llm
 
         raise ValueError(
             f"未知模型 '{name}'。可用模型: {cls.list_models()}"
@@ -411,11 +417,12 @@ class ModelFactory:
             },
         )
 
-        return RunnableWithFallbacks(
+        runnable = RunnableWithFallbacks(
             runnable=primary,
             fallbacks=fallbacks,
             exceptions_to_handle=exceptions,
         )
+        return runnable
 
     @classmethod
     def get_embedding_model(

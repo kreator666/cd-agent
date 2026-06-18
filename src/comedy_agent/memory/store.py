@@ -10,11 +10,20 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from comedy_agent.memory.models import (
+    BannedWordData,
     ConversationData,
     DocumentData,
+    EarningRecordData,
+    IPStyleData,
     KnowledgeCardData,
+    PersonaData,
     PreferenceItem,
+    ProjectData,
+    SaltHistoryData,
     ScriptData,
+    SubmissionData,
+    TokenAccountData,
+    TokenConsumptionData,
     UserContext,
     UserProfileData,
 )
@@ -51,6 +60,8 @@ class MemoryStore(ABC):
         session_id: str,
         messages: list[dict[str, Any]],
         summary: str | None = None,
+        source: str = "chat",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """保存会话记录。
 
@@ -59,6 +70,8 @@ class MemoryStore(ABC):
             session_id: 会话唯一标识。
             messages: 消息列表，格式为 ``[{"role": "human", "content": "..."}, ...]``。
             summary: 可选的对话摘要。
+            source: 来源标识，如 chat / salt / actor。
+            metadata: 额外元数据。
         """
         ...
 
@@ -261,11 +274,11 @@ class MemoryStore(ABC):
         ...
 
     @abstractmethod
-    def list_documents(self, user_id: str) -> list[DocumentData]:
+    def list_documents(self, user_id: str | None = None) -> list[DocumentData]:
         """列出用户上传的所有文档。
 
         Args:
-            user_id: 用户唯一标识。
+            user_id: 用户唯一标识。为 None 时返回所有文档。
 
         Returns:
             list[DocumentData]: 文档列表，按创建时间倒序。
@@ -352,5 +365,235 @@ class MemoryStore(ABC):
 
         Returns:
             bool: 是否成功删除。
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # Token 账户
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def get_token_account(self, user_id: str) -> TokenAccountData | None:
+        """获取用户 Token 账户。"""
+        ...
+
+    @abstractmethod
+    def deduct_tokens(self, user_id: str, amount: int) -> bool:
+        """扣减用户 Token 余额。
+
+        Returns:
+            bool: 是否扣减成功（余额不足时返回 False）。
+        """
+        ...
+
+    @abstractmethod
+    def recharge_tokens(self, user_id: str, amount: int) -> TokenAccountData:
+        """充值用户 Token 余额。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 项目
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_project(self, user_id: str, project: ProjectData) -> ProjectData:
+        """保存或更新项目。"""
+        ...
+
+    @abstractmethod
+    def load_project(self, user_id: str, project_id: str) -> ProjectData | None:
+        """读取指定项目。"""
+        ...
+
+    @abstractmethod
+    def list_projects(self, user_id: str) -> list[ProjectData]:
+        """列出用户所有项目，按更新时间倒序。"""
+        ...
+
+    @abstractmethod
+    def delete_project(self, user_id: str, project_id: str) -> bool:
+        """删除项目。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 加点盐历史
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_salt_history(self, history: SaltHistoryData) -> SaltHistoryData:
+        """保存加点盐历史记录。"""
+        ...
+
+    @abstractmethod
+    def list_salt_history(self, user_id: str, project_id: str | None = None) -> list[SaltHistoryData]:
+        """列出用户的加点盐历史。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # IP 风格模型
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_ip_style(self, style: IPStyleData) -> IPStyleData:
+        """保存或更新 IP 风格模型。"""
+        ...
+
+    @abstractmethod
+    def load_ip_style(self, style_id: str) -> IPStyleData | None:
+        """读取指定 IP 风格模型。"""
+        ...
+
+    @abstractmethod
+    def list_ip_styles(self, status: str | None = None) -> list[IPStyleData]:
+        """列出 IP 风格模型，支持按状态过滤。"""
+        ...
+
+    @abstractmethod
+    def delete_ip_style(self, style_id: str) -> bool:
+        """删除 IP 风格模型。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 人物画像 (Persona)
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_persona(self, persona: PersonaData) -> PersonaData:
+        """保存或更新人物画像。"""
+        ...
+
+    @abstractmethod
+    def load_persona(self, persona_id: str) -> PersonaData | None:
+        """读取指定人物画像。"""
+        ...
+
+    @abstractmethod
+    def list_personas(
+        self, creator_id: str | None = None, org_id: str | None = None, is_active: bool | None = None
+    ) -> list[PersonaData]:
+        """列出人物画像，支持按创建者、组织、状态过滤。"""
+        ...
+
+    @abstractmethod
+    def delete_persona(self, persona_id: str) -> bool:
+        """删除人物画像。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 关注 (Follow)
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def follow(self, follower_id: str, following_id: str) -> FollowData:
+        """关注用户。"""
+        ...
+
+    @abstractmethod
+    def unfollow(self, follower_id: str, following_id: str) -> bool:
+        """取消关注。"""
+        ...
+
+    @abstractmethod
+    def is_following(self, follower_id: str, following_id: str) -> bool:
+        """检查是否已关注。"""
+        ...
+
+    @abstractmethod
+    def count_followers(self, user_id: str) -> int:
+        """统计粉丝数。"""
+        ...
+
+    @abstractmethod
+    def count_following(self, user_id: str) -> int:
+        """统计关注数。"""
+        ...
+
+    @abstractmethod
+    def list_followers(self, user_id: str) -> list[UserProfileData]:
+        """列出粉丝列表。"""
+        ...
+
+    @abstractmethod
+    def list_following(self, user_id: str) -> list[UserProfileData]:
+        """列出关注列表。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 投稿
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_submission(self, submission: SubmissionData) -> SubmissionData:
+        """保存投稿。"""
+        ...
+
+    @abstractmethod
+    def load_submission(self, submission_id: str) -> SubmissionData | None:
+        """读取指定投稿。"""
+        ...
+
+    @abstractmethod
+    def list_submissions(
+        self, user_id: str | None = None, target_actor: str | None = None, status: str | None = None
+    ) -> list[SubmissionData]:
+        """列出投稿，支持按用户、目标演员、状态过滤。"""
+        ...
+
+    @abstractmethod
+    def review_submission(self, submission_id: str, status: str, comment: str | None = None) -> bool:
+        """审核投稿。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 收益记录
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_earning(self, record: EarningRecordData) -> EarningRecordData:
+        """保存收益记录。"""
+        ...
+
+    @abstractmethod
+    def list_earnings(self, user_id: str | None = None, actor_name: str | None = None) -> list[EarningRecordData]:
+        """列出收益记录。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # Token 消费记录
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_consumption_record(self, record: TokenConsumptionData) -> TokenConsumptionData:
+        """保存 Token 消费记录。"""
+        ...
+
+    @abstractmethod
+    def list_consumption_records(
+        self, user_id: str, limit: int = 50, offset: int = 0
+    ) -> list[TokenConsumptionData]:
+        """列出用户 Token 消费记录，按创建时间倒序。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 敏感词
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_banned_word(self, word: BannedWordData) -> BannedWordData:
+        """保存敏感词。"""
+        ...
+
+    @abstractmethod
+    def list_banned_words(self, category: str | None = None) -> list[BannedWordData]:
+        """列出敏感词，支持按分类过滤。"""
+        ...
+
+    @abstractmethod
+    def delete_banned_word(self, word_id: int) -> bool:
+        """删除敏感词。"""
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 统计
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def get_user_stats(self, user_id: str) -> dict[str, Any]:
+        """获取用户使用统计。
+
+        Args:
+            user_id: 用户唯一标识。
+
+        Returns:
+            dict: 包含 generations, actor_usage, salt_usage, earnings 的统计字典。
         """
         ...

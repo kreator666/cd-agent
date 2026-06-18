@@ -142,3 +142,42 @@ class TestQuestionDetection:
     def test_is_not_question(self):
         assert self.skill._is_question("职场PUA") is False
         assert self.skill._is_question("写一个关于加班的段子") is False
+
+
+class TestArtifactsAndAttachments:
+    """测试 artifact / attachment 解析。"""
+
+    def setup_method(self):
+        self.skill = Skill()
+
+    def test_parse_json_output_with_artifacts(self):
+        raw = json.dumps({
+            "reply": "已生成调研报告",
+            "next_role": "用户",
+            "artifacts": [
+                {"id": "r1", "type": "research", "title": "调研", "content": "报告内容", "op": "create", "created_by": "素材调研员"}
+            ],
+            "attachments": [
+                {"id": "a1", "name": "素材", "summary": "摘要", "full_text": "全文"}
+            ]
+        }, ensure_ascii=False)
+        parsed = self.skill._parse_json_output(raw)
+        assert len(parsed["artifacts"]) == 1
+        assert parsed["artifacts"][0]["type"] == "research"
+        assert len(parsed["attachments"]) == 1
+
+    def test_build_context_includes_attachment_summary(self):
+        attachments = [
+            {"id": "a1", "name": "素材报告", "summary": "这是摘要", "full_text": "这是全文内容", "mime_type": "text/plain"}
+        ]
+        context = self.skill._build_context(
+            role="总编",
+            slots={"话题": "职场"},
+            outputs={},
+            attachments=attachments,
+            decision_nodes=[],
+            conversation_history=[],
+            user_input="生成",
+        )
+        assert "素材报告" in context["attachment_summary"]
+        assert "这是摘要" in context["attachment_summary"]

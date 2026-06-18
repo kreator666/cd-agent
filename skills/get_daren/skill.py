@@ -227,13 +227,25 @@ class Skill(ComedySkill):
             outputs_update[parsed.get("tool_name", "tool")] = parsed["tool_output"]
             parsed["outputs_update"] = outputs_update
 
-        # 10. 处理 artifacts（写入 outputs 兼容旧逻辑）
+        # 10. 处理 artifacts（写入 outputs 兼容旧逻辑），长 artifact 同时生成 attachment
         artifacts = parsed.get("artifacts", [])
+        new_attachments = list(parsed.get("attachments", []))
         if artifacts:
             # 将 artifact 内容同步到 outputs 中，便于旧版前端读取
             for art in artifacts:
                 outputs_update[f"artifact_{art.get('type')}_{art.get('id')}"] = art.get("content", "")
+                # 长内容自动生成 attachment，便于下游角色引用
+                content = art.get("content", "")
+                if len(content) > 500 and not any(a.get("name") == art.get("title") for a in new_attachments):
+                    new_attachments.append({
+                        "id": f"att_{uuid.uuid4().hex[:6]}",
+                        "name": art.get("title") or f"{art.get('type')}_{art.get('id')}",
+                        "summary": content[:300] + "..." if len(content) > 300 else content,
+                        "full_text": content,
+                        "mime_type": "text/plain",
+                    })
             parsed["outputs_update"] = outputs_update
+            parsed["attachments"] = new_attachments
 
         # 11. 记录决策节点
         self._record_decision_node(

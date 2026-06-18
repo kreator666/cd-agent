@@ -144,6 +144,41 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 /* Empty state in editor */
 .editor-empty{color:#999;text-align:center;padding:60px 20px;font-size:16px;font-weight:600;}
 
+/* Artifacts panel (V3) */
+.artifacts-panel{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding-top:8px;}
+.artifacts-empty{color:#999;text-align:center;padding:60px 20px;font-size:16px;font-weight:600;}
+.artifact-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 2px 12px rgba(0,0,0,.04);animation:appear .45s cubic-bezier(.2,.8,.2,1);transition:.2s;}
+.artifact-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-1px);}
+.artifact-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.artifact-meta{display:flex;align-items:center;gap:10px;}
+.artifact-type{font-size:11px;font-weight:800;padding:4px 10px;border-radius:8px;text-transform:uppercase;letter-spacing:.02em;}
+.artifact-type.outline{background:#dbeafe;color:#1e40af;}
+.artifact-type.research{background:#fef3c7;color:#92400e;}
+.artifact-type.script{background:#dcfce7;color:#166534;}
+.artifact-type.review{background:#fce7f3;color:#9d174d;}
+.artifact-type.section{background:#f3e8ff;color:#6b21a8;}
+.artifact-title{font-size:15px;font-weight:780;color:#232323;}
+.artifact-by{font-size:12px;color:#888;font-weight:600;}
+.artifact-content{color:#4a4a4a;font-size:16px;line-height:1.9;font-weight:650;}
+.artifact-content p{margin:0 0 12px;}
+.artifact-content p:last-child{margin-bottom:0;}
+.artifact-content.generated{background:linear-gradient(90deg,rgba(255,118,74,.08),rgba(255,255,255,0));border-radius:14px;padding-left:12px!important;margin-left:-12px!important;}
+.artifact-content .typing::after{content:"▋";color:#ff764a;animation:blink .85s steps(1) infinite;margin-left:2px}
+.artifact-tools{display:flex;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);}
+.artifact-tools button{font-size:12px;font-weight:700;color:#666;padding:6px 12px;border-radius:8px;background:#f5f6f8;transition:.2s;}
+.artifact-tools button:hover{background:#ffe8e0;color:#ff764a;}
+.artifact-version{font-size:11px;color:#aaa;font-weight:650;}
+
+/* TODO board */
+.todo-board{background:#f8f9fb;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;}
+.todo-board-title{font-size:13px;color:#888;font-weight:700;margin-bottom:10px;}
+.todo-item{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:14px;font-weight:600;}
+.todo-item.done{color:#999;text-decoration:line-through;}
+.todo-item.blocked{color:#bbb;}
+.todo-item .todo-role{font-size:11px;color:#ff764a;background:#fff2ed;padding:2px 8px;border-radius:6px;margin-left:auto;}
+.todo-check{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:1.8px solid #e3e6ea;background:#fff;font-size:11px;}
+.todo-check.done{background:#15171a;border-color:#15171a;color:#fff;}
+
 /* Budget warning in prompt */
 .budget-hint{position:absolute;right:0;top:-28px;font-size:12px;color:#ff764a;font-weight:650;display:none;}
 .budget-hint.show{display:block;}
@@ -317,9 +352,9 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
         <button title="关闭" data-tool="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <button class="history" data-action="history"><svg viewBox="0 0 24 24"><path d="M7 7a7 7 0 1 1-1.4 8"/><path d="M7 3v4h4"/><path d="M12 8v5l3 2"/></svg>查看历史记录</button>
-      <article class="editor" id="editor">
-        <div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>
-      </article>
+      <div class="artifacts-panel" id="artifactsPanel">
+        <div class="artifacts-empty">在左侧与写作团队对话，生成的内容将以卡片形式展示在这里。</div>
+      </div>
     </section>
   </main>
 
@@ -409,6 +444,8 @@ let currentConversationId = null;
 let conversations = [];
 let isGenerating = false;
 let workflowSessionId = null;
+let artifactsState = {}; // { id -> artifact object }
+let currentRole = '主持人';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -468,6 +505,36 @@ function loadConversations() {
 function getSkillTypeLabel(type) {
   const map = { topic: '话题', attitude: '态度', emotion: '情绪', genre: '风格', material: '素材', layout: '排版' };
   return map[type] || type;
+}
+
+function getRoleLabel(role) {
+  const map = {
+    '主持人': '创作导演',
+    '话题专家': '话题专家',
+    '态度专家': '态度专家',
+    '偏见专家': '偏见专家',
+    '情绪专家': '情绪专家',
+    '素材调研员': '素材调研员',
+    '排版专员': '排版专员',
+    '总编': '总编',
+    '喜剧龙虾': '创作向导'
+  };
+  return map[role] || role;
+}
+
+function getRoleGradient(role) {
+  const map = {
+    '主持人': 'background:linear-gradient(135deg,#f1d6a4,#1e1e1e)',
+    '话题专家': 'background:linear-gradient(135deg,#dbeafe,#3b82f6)',
+    '态度专家': 'background:linear-gradient(135deg,#dcfce7,#22c55e)',
+    '偏见专家': 'background:linear-gradient(135deg,#f3e8ff,#9333ea)',
+    '情绪专家': 'background:linear-gradient(135deg,#fce7f3,#ec4899)',
+    '素材调研员': 'background:linear-gradient(135deg,#fef9c3,#eab308)',
+    '排版专员': 'background:linear-gradient(135deg,#e0f2fe,#0ea5e9)',
+    '总编': 'background:linear-gradient(135deg,#ffedd5,#f97316)',
+    '喜剧龙虾': 'background:linear-gradient(135deg,#eee,#ba7a5a)'
+  };
+  return map[role] || 'background:linear-gradient(135deg,#eee,#ba7a5a)';
 }
 
 function getSkillGradient(type) {
@@ -851,8 +918,9 @@ function newConversation() {
   // Reset outline preview
   $('#outlinePreview').textContent = '等待 喜剧龙虾 收集...';
 
-  // Clear editor
-  $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
+  // Clear artifacts panel
+  clearArtifacts();
+  currentRole = '主持人';
 
   // Refresh UI state
   updatePersonaUI();
@@ -868,19 +936,23 @@ function newConversation() {
 function saveCurrentConversation() {
   if (!currentConversationId) return;
   const title = $('#pageTitle').textContent;
-  const editorHtml = $('#editor').innerHTML;
+  const artifactsHtml = $('#artifactsPanel').innerHTML;
+  const artifactsData = JSON.stringify(artifactsState);
   const chatHtml = $('#chatMessages').innerHTML;
   const existing = conversations.find(c => c.id === currentConversationId);
   const conv = {
     id: currentConversationId,
     title,
     updatedAt: Date.now(),
-    editorHtml,
+    editorHtml: artifactsHtml,
+    artifactsHtml,
+    artifactsData,
     chatHtml,
     outline: '',
     personaId: selectedPersonaId,
     skillIds: Array.from(selectedSkills),
     sessionId: workflowSessionId,
+    currentRole,
   };
   if (existing) {
     Object.assign(existing, conv);
@@ -905,9 +977,10 @@ function renderHistory() {
   });
 }
 
-function isPartialEditorOutput(html) {
+function isPartialArtifactsOutput(html) {
   if (!html) return true;
   // 空状态或打字中（class="generated typing"）均为不完整输出
+  if (html.includes('artifacts-empty')) return true;
   if (html.includes('editor-empty')) return true;
   if (html.includes('generated typing')) return true;
   const tmp = document.createElement('div');
@@ -927,33 +1000,64 @@ async function loadConversation(id) {
   // 恢复服务端会话 ID，保证刷新后继续同一工作流
   workflowSessionId = c.sessionId || null;
 
-  // 如果本地未保存最终剧本，或保存的是打字中的半成品/空状态，尝试从服务端会话恢复
-  const needsRecovery = !c.editorHtml || isPartialEditorOutput(c.editorHtml);
-  console.log('[history] editorHtml length=', (c.editorHtml || '').length, 'sessionId=', c.sessionId, 'needsRecovery=', needsRecovery);
+  // 如果本地未保存完整结果，或保存的是打字中的半成品/空状态，尝试从服务端会话恢复
+  const artifactsHtml = c.artifactsHtml || c.editorHtml;
+  const needsRecovery = !artifactsHtml || isPartialArtifactsOutput(artifactsHtml);
+  console.log('[history] artifactsHtml length=', (artifactsHtml || '').length, 'sessionId=', c.sessionId, 'needsRecovery=', needsRecovery);
   if (needsRecovery && c.sessionId) {
     try {
       console.log('[history] fetching /pro/chat/' + c.sessionId);
       const res = await apiFetch(`/pro/chat/${encodeURIComponent(c.sessionId)}`);
       const sessionData = await res.json();
       const outputs = sessionData?.metadata?.workflow?.outputs || {};
-      console.log('[history] final_script length=', (outputs.final_script || '').length);
-      if (outputs.final_script) {
-        c.editorHtml = outputs.final_script.split('\n').filter(p => p.trim()).map(p => `<p class="generated">${escapeHtml(p)}</p>`).join('');
+      const wfArtifacts = sessionData?.metadata?.workflow?.artifacts || [];
+      console.log('[history] final_script length=', (outputs.final_script || '').length, 'artifacts count=', wfArtifacts.length);
+      // 优先使用服务端保存的 artifacts 列表
+      if (wfArtifacts.length > 0) {
+        artifactsState = {};
+        $('#artifactsPanel').innerHTML = '';
+        renderArtifacts(wfArtifacts);
+        c.artifactsHtml = $('#artifactsPanel').innerHTML;
+        c.artifactsData = JSON.stringify(artifactsState);
+      } else if (outputs.final_script) {
+        // 兼容旧会话：从 final_script 重建 script artifact
+        artifactsState = {};
+        $('#artifactsPanel').innerHTML = '';
+        renderArtifacts([{
+          id: 'script_main',
+          type: 'script',
+          title: '最终剧本',
+          content: outputs.final_script,
+          op: 'create',
+          version: 1,
+          created_by: '总编'
+        }]);
+        c.artifactsHtml = $('#artifactsPanel').innerHTML;
+        c.artifactsData = JSON.stringify(artifactsState);
       }
     } catch (err) {
       console.error('[history] 恢复会话最终剧本失败', err);
     }
   } else if (needsRecovery && !c.sessionId) {
     console.warn('[history] 需要恢复但缺少 sessionId，无法从服务端拉取');
-    c.editorHtml = '<div class="editor-empty">该历史记录缺少会话信息，无法从服务端恢复完整结果。<br>请继续对话或新建对话重新生成。</div>';
+    c.artifactsHtml = '<div class="artifacts-empty">该历史记录缺少会话信息，无法从服务端恢复完整结果。<br>请继续对话或新建对话重新生成。</div>';
   }
 
-  // 恢复右侧编辑器
-  if (c.editorHtml) {
-    $('#editor').innerHTML = c.editorHtml;
+  // 恢复右侧 Artifacts 工作台
+  if (c.artifactsHtml) {
+    $('#artifactsPanel').innerHTML = c.artifactsHtml;
+  } else if (c.editorHtml) {
+    $('#artifactsPanel').innerHTML = c.editorHtml;
   } else {
-    $('#editor').innerHTML = '<div class="editor-empty">在左侧与写作团队对话，生成的剧本将显示在这里。</div>';
+    $('#artifactsPanel').innerHTML = '<div class="artifacts-empty">在左侧与写作团队对话，生成的内容将以卡片形式展示在这里。</div>';
   }
+  // 恢复 artifact 状态对象
+  try {
+    artifactsState = c.artifactsData ? JSON.parse(c.artifactsData) : {};
+  } catch {
+    artifactsState = {};
+  }
+  currentRole = c.currentRole || '主持人';
 
   // 恢复左侧聊天消息
   if (c.chatHtml) {
@@ -1024,6 +1128,14 @@ async function sendPrompt() {
     agentMsg.classList.remove('typing');
     agentMsg.remove();
 
+    // 记录当前角色
+    if (data.current_role) currentRole = data.current_role;
+
+    // Render artifacts 到右侧面板
+    if (data.artifacts && data.artifacts.length > 0) {
+      renderArtifacts(data.artifacts);
+    }
+
     // Render workflow response (支持链式多步骤)
     renderWorkflowSteps(data);
 
@@ -1033,9 +1145,10 @@ async function sendPrompt() {
       $('#pageTitle').textContent = topicText;
     }
 
-    // 非最终剧本场景立即保存；final_script 场景等待 typewriteScript 动画完成后再保存
+    // 非最终剧本场景立即保存；final_script / typewriteArtifact 场景等待动画完成后再保存
     const hasFinalScript = data.steps && data.steps.some(s => s.type === 'final_script');
-    if (!hasFinalScript) {
+    const hasScriptArtifact = data.artifacts && data.artifacts.some(a => a.type === 'script');
+    if (!hasFinalScript && !hasScriptArtifact) {
       saveCurrentConversation();
     }
   } catch (err) {
@@ -1082,15 +1195,20 @@ function renderWorkflowStep(step, bindEvents = false) {
   const type = step.type;
   const content = step.content;
   const skillName = step.skill_name || '喜剧龙虾';
+  const roleName = step.current_role || currentRole || '喜剧龙虾';
+  const roleLabel = getRoleLabel(roleName);
+  const roleGradient = getRoleGradient(roleName);
 
   if (type === 'guide') {
-    // 后端 reply 已包含结构化内容（流程列表 + 确认 + 下一步提示），不再单独渲染 checklist
+    // 后端 reply 已包含结构化内容（流程列表 + 确认 + 下一步提示）
+    // 同时渲染 TODO 看板（如果有）
+    const todoHtml = renderTodoBoard(step.todo_board);
     const actionsHtml = (step.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
     const contentHtml = content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
-    const html = `${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
-    const msgDiv = addChatMessage('agent', '喜剧龙虾', '创作向导', html);
+    const html = `${todoHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const msgDiv = addChatMessage('agent', roleName, roleLabel, html, { gradient: roleGradient });
     if (bindEvents) {
       msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1115,13 +1233,13 @@ function renderWorkflowStep(step, bindEvents = false) {
     const desc = skillInfo.description || '';
     const descHtml = desc ? `<p style="font-size:13px;color:#888;margin-bottom:8px;font-weight:600;">💡 ${escapeHtml(desc)}</p>` : '';
     const fullContent = descHtml + (content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`);
-    addChatMessage('agent', skillName, label, fullContent, { gradient });
+    addChatMessage('agent', roleName, roleLabel, fullContent, { gradient: roleGradient || gradient });
   } else if (type === 'final_script') {
     typewriteScript(content);
-    addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });
+    addChatMessage('agent', roleName, roleLabel, '✅ 最终剧本已生成，请查看右侧面板。', { gradient: roleGradient });
     toast('剧本生成完成');
   } else if (type === 'error') {
-    addChatMessage('agent', '喜剧龙虾', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
+    addChatMessage('agent', roleName, roleLabel, `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
   }
 }
 
@@ -1129,14 +1247,18 @@ function renderWorkflowResponse(data) {
   const type = data.type;
   const content = data.content;
   const skillName = data.skill_name || '喜剧龙虾';
+  const roleName = data.current_role || currentRole || '喜剧龙虾';
+  const roleLabel = getRoleLabel(roleName);
+  const roleGradient = getRoleGradient(roleName);
 
   if (type === 'guide') {
     // 引导消息 + 快捷操作
+    const todoHtml = renderTodoBoard(data.todo_board);
     const actionsHtml = (data.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
-    const html = `<p>${escapeHtml(content)}</p>${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
-    const msgDiv = addChatMessage('agent', '喜剧龙虾', '创作向导', html);
+    const html = `${todoHtml}<p>${escapeHtml(content)}</p>${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const msgDiv = addChatMessage('agent', roleName, roleLabel, html, { gradient: roleGradient });
     // 绑定快捷按钮点击事件
     msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1161,22 +1283,129 @@ function renderWorkflowResponse(data) {
     const desc = skillInfo.description || '';
     const descHtml = desc ? `<p style="font-size:13px;color:#888;margin-bottom:8px;font-weight:600;">💡 ${escapeHtml(desc)}</p>` : '';
     const fullContent = descHtml + (content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`);
-    addChatMessage('agent', skillName, label, fullContent, { gradient });
+    addChatMessage('agent', roleName, roleLabel, fullContent, { gradient: roleGradient || gradient });
   } else if (type === 'final_script') {
     typewriteScript(content);
-    addChatMessage('agent', '剧本编排', '最终输出', '✅ 最终剧本已生成，请查看右侧面板。', { gradient: 'background:linear-gradient(135deg,#18a058,#4caf50)' });
+    addChatMessage('agent', roleName, roleLabel, '✅ 最终剧本已生成，请查看右侧面板。', { gradient: roleGradient });
     toast('剧本生成完成');
   } else if (type === 'error') {
-    addChatMessage('agent', '喜剧龙虾', '错误', `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
+    addChatMessage('agent', roleName, roleLabel, `<span style="color:#e94560;">${escapeHtml(content)}</span>`);
   }
 }
 
-function typewriteScript(text) {
-  const editor = $('#editor');
-  editor.innerHTML = '';
+/* ========== Artifacts Panel (V3) ========== */
+function renderArtifacts(artifacts) {
+  if (!artifacts || artifacts.length === 0) return;
+  const panel = $('#artifactsPanel');
+  // 移除空状态
+  const empty = panel.querySelector('.artifacts-empty');
+  if (empty) empty.remove();
+
+  artifacts.forEach(art => applyArtifactOp(art));
+}
+
+function applyArtifactOp(art) {
+  if (!art || !art.id) return;
+  const existing = artifactsState[art.id];
+
+  if (!existing || art.op === 'create') {
+    // 新建或覆盖
+    artifactsState[art.id] = { ...art, version: art.version || 1 };
+    createArtifactCard(artifactsState[art.id]);
+    if (art.type === 'script') {
+      typewriteArtifact(art.id, art.content);
+    }
+  } else if (art.op === 'append') {
+    artifactsState[art.id].content += '\n\n' + (art.content || '');
+    artifactsState[art.id].version = (art.version || existing.version + 1);
+    updateArtifactCardContent(art.id);
+  } else if (art.op === 'update') {
+    artifactsState[art.id].content = art.content || existing.content;
+    artifactsState[art.id].version = (art.version || existing.version + 1);
+    updateArtifactCardContent(art.id);
+  }
+}
+
+function createArtifactCard(artifact) {
+  const panel = $('#artifactsPanel');
+  let card = panel.querySelector(`[data-artifact-id="${artifact.id}"]`);
+  if (card) {
+    updateArtifactCardContent(artifact.id);
+    return card;
+  }
+
+  card = document.createElement('div');
+  card.className = 'artifact-card';
+  card.dataset.artifactId = artifact.id;
+  card.innerHTML = `
+    <div class="artifact-header">
+      <div class="artifact-meta">
+        <span class="artifact-type ${escapeHtml(artifact.type)}">${escapeHtml(getArtifactTypeLabel(artifact.type))}</span>
+        <span class="artifact-title">${escapeHtml(artifact.title || '未命名')}</span>
+      </div>
+      <span class="artifact-version">v${artifact.version || 1}</span>
+    </div>
+    <div class="artifact-by">由 ${escapeHtml(artifact.created_by || 'AI')} 生成</div>
+    <div class="artifact-content" id="artifact-content-${artifact.id}">${formatArtifactContent(artifact.content)}</div>
+    <div class="artifact-tools">
+      <button onclick="copyArtifact('${artifact.id}')">复制</button>
+      <button onclick="downloadArtifact('${artifact.id}')">下载</button>
+    </div>
+  `;
+  panel.appendChild(card);
+  return card;
+}
+
+function updateArtifactCardContent(id) {
+  const artifact = artifactsState[id];
+  if (!artifact) return;
+  const contentEl = $(`#artifact-content-${id}`);
+  if (contentEl) {
+    contentEl.innerHTML = formatArtifactContent(artifact.content);
+  }
+  const card = $(`[data-artifact-id="${id}"]`);
+  if (card) {
+    const versionEl = card.querySelector('.artifact-version');
+    if (versionEl) versionEl.textContent = `v${artifact.version}`;
+  }
+}
+
+function formatArtifactContent(content) {
+  if (!content) return '<p></p>';
+  if (content.startsWith('<')) return content;
+  return content.split('\n').map(line => line.trim() ? `<p>${escapeHtml(line)}</p>` : '').join('');
+}
+
+function getArtifactTypeLabel(type) {
+  const map = { outline: '大纲', research: '调研', script: '剧本', review: '审稿', section: '小节' };
+  return map[type] || type;
+}
+
+function copyArtifact(id) {
+  const artifact = artifactsState[id];
+  if (!artifact) return;
+  navigator.clipboard.writeText(artifact.content).then(() => toast('已复制到剪贴板'));
+}
+
+function downloadArtifact(id) {
+  const artifact = artifactsState[id];
+  if (!artifact) return;
+  const blob = new Blob([artifact.content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${artifact.title || artifact.id}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function typewriteArtifact(id, text) {
+  const contentEl = $(`#artifact-content-${id}`);
+  if (!contentEl) return;
+  contentEl.innerHTML = '';
   const paragraphs = text.split('\n').filter(p => p.trim());
   if (paragraphs.length === 0) {
-    editor.innerHTML = '<div class="editor-empty">生成内容为空</div>';
+    contentEl.innerHTML = '<p>生成内容为空</p>';
     return;
   }
 
@@ -1188,7 +1417,7 @@ function typewriteScript(text) {
     if (pIdx >= paragraphs.length) return;
     currentP = document.createElement('p');
     currentP.className = 'generated typing';
-    editor.appendChild(currentP);
+    contentEl.appendChild(currentP);
     charIdx = 0;
     typeChar();
   }
@@ -1207,13 +1436,43 @@ function typewriteScript(text) {
         setTimeout(nextParagraph, 80);
       } else {
         $('#pageTitle').classList.remove('editing');
-        // 打字动画完成后保存完整内容
         saveCurrentConversation();
       }
     }
   }
 
   nextParagraph();
+}
+
+// 兼容旧版：当 final_script 以 content 返回时，同步生成 script artifact
+function typewriteScript(text) {
+  const art = {
+    id: 'script_main',
+    type: 'script',
+    title: '最终剧本',
+    content: text,
+    op: artifactsState['script_main'] ? 'update' : 'create',
+    version: (artifactsState['script_main']?.version || 0) + 1,
+    created_by: '总编'
+  };
+  renderArtifacts([art]);
+}
+
+function renderTodoBoard(todoBoard) {
+  if (!todoBoard || todoBoard.length === 0) return '';
+  const items = todoBoard.map(item => {
+    const doneClass = item.done ? 'done' : '';
+    const blockedClass = item.blocked ? 'blocked' : '';
+    const check = item.done ? '✓' : '';
+    const roleTag = item.role ? `<span class="todo-role">${escapeHtml(item.role)}</span>` : '';
+    return `<div class="todo-item ${doneClass} ${blockedClass}"><span class="todo-check ${doneClass}">${check}</span><span>${escapeHtml(item.label)}</span>${roleTag}</div>`;
+  }).join('');
+  return `<div class="todo-board"><div class="todo-board-title">📋 创作流程</div>${items}</div>`;
+}
+
+function clearArtifacts() {
+  artifactsState = {};
+  $('#artifactsPanel').innerHTML = '<div class="artifacts-empty">在左侧与写作团队对话，生成的内容将以卡片形式展示在这里。</div>';
 }
 
 /* ========== Persona Modal ========== */
@@ -1437,13 +1696,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   $$('.window-tools button').forEach(b => b.addEventListener('click', () => {
     const tool = b.dataset.tool;
     if (tool === 'copy') {
-      const text = $('#editor').innerText;
-      if (!text || text.includes('在左侧与写作团队对话')) return;
+      // 复制所有 artifact 内容拼接
+      const texts = Object.values(artifactsState).map(a => `【${a.title}】\n${a.content}`);
+      const text = texts.join('\n\n---\n\n');
+      if (!text) return;
       navigator.clipboard && navigator.clipboard.writeText(text);
       toast('正文已复制');
     }
     if (tool === 'save') { saveCurrentConversation(); toast('已保存到对话历史'); }
-    if (tool === 'download') { toast('下载功能即将上线'); }
+    if (tool === 'download') {
+      const texts = Object.values(artifactsState).map(a => `【${a.title}】\n${a.content}`);
+      const text = texts.join('\n\n---\n\n');
+      if (!text) { toast('暂无可下载内容'); return; }
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = ($('#pageTitle').textContent || '剧本') + '.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('已开始下载');
+    }
     if (tool === 'close') {
       $('#rightPanel').animate([{ opacity: 1, transform: 'translateX(0)' }, { opacity: .35, transform: 'translateX(24px)' }, { opacity: 1, transform: 'translateX(0)' }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }

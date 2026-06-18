@@ -161,6 +161,39 @@ class ProChatRequest(BaseModel):
     model: str | None = Field(default=None, description="使用的模型名称")
 
 
+class Artifact(BaseModel):
+    """工作台（Artifacts）中的内容单元。"""
+
+    id: str = Field(description="artifact 唯一 ID")
+    type: str = Field(description="类型：outline / research / script / review / section")
+    title: str = Field(description="标题")
+    content: str = Field(description="内容")
+    op: str = Field(default="create", description="操作：create / append / update")
+    version: int = Field(default=1, description="版本号")
+    created_by: str = Field(description="生成该内容的角色名")
+
+
+class Attachment(BaseModel):
+    """角色间传递的附件。"""
+
+    id: str = Field(description="附件唯一 ID")
+    name: str = Field(description="附件名称")
+    summary: str = Field(default="", description="长文档摘要")
+    full_text: str = Field(description="全文内容")
+    mime_type: str = Field(default="text/plain", description="MIME 类型")
+
+
+class TodoItem(BaseModel):
+    """TODO 看板条目。"""
+
+    id: str = Field(description="条目 ID")
+    label: str = Field(description="显示文本")
+    done: bool = Field(default=False, description="是否完成")
+    optional: bool = Field(default=False, description="是否可选")
+    blocked: bool = Field(default=False, description="是否被阻塞")
+    role: str | None = Field(default=None, description="负责角色")
+
+
 class ProChatResponse(BaseModel):
     """专业版对话响应。"""
 
@@ -169,6 +202,8 @@ class ProChatResponse(BaseModel):
     content: str = Field(description="响应内容")
     workflow_state: str = Field(description="当前工作流状态")
     skill_name: str | None = Field(default=None, description="当前调用的 Skill 名称")
+    current_role: str | None = Field(default=None, description="当前发言角色")
+    next_role: str | None = Field(default=None, description="下一个该发言的角色")
     next_actions: list[dict[str, Any]] | None = Field(
         default=None, description="下一步可执行操作"
     )
@@ -178,8 +213,17 @@ class ProChatResponse(BaseModel):
     checklist: list[dict[str, Any]] | None = Field(
         default=None, description="当前流程检查清单"
     )
+    todo_board: list[TodoItem] | None = Field(
+        default=None, description="结构化 TODO 看板"
+    )
     slots: dict[str, Any] | None = Field(
         default=None, description="当前已收集的槽位"
+    )
+    artifacts: list[Artifact] | None = Field(
+        default=None, description="工作台内容更新"
+    )
+    attachments: list[Attachment] | None = Field(
+        default=None, description="角色间传递的附件"
     )
 
 
@@ -290,11 +334,17 @@ class ProWorkflowEngine:
         guiding_cfg = self.workflow.get("states", {}).get("guiding", {"action": "guide"})
         result = self._execute_state(guiding_cfg, wf_state, message, user_id)
 
-        # 7. 更新 slots/outputs
+        # 7. 更新 slots/outputs / current_role / artifacts / attachments
         if result.get("slots_update"):
             wf_state.setdefault("slots", {}).update(result["slots_update"])
         if result.get("outputs_update"):
             wf_state.setdefault("outputs", {}).update(result["outputs_update"])
+        if result.get("role"):
+            wf_state["current_role"] = result["role"]
+        if result.get("artifacts"):
+            wf_state.setdefault("artifacts", []).extend(result["artifacts"])
+        if result.get("attachments"):
+            wf_state.setdefault("attachments", []).extend(result["attachments"])
 
         # 8. 记录日志
         wf_state.setdefault("log", []).append({
@@ -315,14 +365,21 @@ class ProWorkflowEngine:
         else:
             response_type = "guide"
 
-        # 11. 构建 checklist
+        # 11. 构建 checklist 和 todo_board
         checklist = self._build_checklist(wf_state)
+        todo_board = self._build_todo_board(wf_state.get("slots", {}))
+        wf_state["todo_board"] = todo_board
 
         steps.append({
             "type": response_type,
             "content": reply,
             "skill_name": "get_daren",
             "checklist": checklist,
+            "todo_board": todo_board,
+            "current_role": wf_state.get("current_role"),
+            "next_role": result.get("next_role"),
+            "artifacts": result.get("artifacts", []),
+            "attachments": result.get("attachments", []),
         })
 
         # 12. 保存会话并返回
@@ -347,10 +404,24 @@ class ProWorkflowEngine:
     def _init_state(self) -> dict[str, Any]:
         return {
             "current_state": self.workflow.get("initial_state", ""),
+            "current_role": "主持人",
             "slots": {},
             "outputs": {},
+            "attachments": [],
+            "decision_nodes": [],
+            "todo_board": self._build_todo_board({}),
             "log": [],
         }
+
+    def _build_todo_board(self, slots: dict[str, Any]) -> list[dict[str, Any]]:
+        """根据核心槽位构建 TODO 看板。"""
+        return [
+            {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False, "blocked": False, "role": "话题专家"},
+            {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False, "blocked": not bool(slots.get("话题")), "role": "态度专家"},
+            {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False, "blocked": not bool(slots.get("态度")), "role": "偏见专家"},
+            {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False, "blocked": not bool(slots.get("偏见")), "role": "情绪专家"},
+            {"id": "aggregate", "label": "生成最终剧本", "done": False, "optional": False, "blocked": not all(slots.get(s) for s in self._CORE_SLOTS), "role": "总编"},
+        ]
 
     def _execute_state(
         self,
@@ -379,6 +450,9 @@ class ProWorkflowEngine:
                     "user_input": user_input,
                     "conversation_history": wf_state.get("log", [])[-10:],
                     "user_id": user_id,
+                    "current_role": wf_state.get("current_role", "主持人"),
+                    "attachments": wf_state.get("attachments", []),
+                    "decision_nodes": wf_state.get("decision_nodes", []),
                 }
             )
         except Exception as e:
@@ -415,11 +489,24 @@ class ProWorkflowEngine:
                     "advance": bool(data.get("advance", False)),
                     "slots_update": data.get("slots_update", {}),
                     "outputs_update": data.get("outputs_update", {}),
+                    "role": data.get("role"),
+                    "next_role": data.get("next_role"),
+                    "artifacts": data.get("artifacts", []),
+                    "attachments": data.get("attachments", []),
                 }
             except json.JSONDecodeError:
                 pass
 
-        return {"reply": raw, "advance": False, "slots_update": {}, "outputs_update": {}}
+        return {
+            "reply": raw,
+            "advance": False,
+            "slots_update": {},
+            "outputs_update": {},
+            "role": None,
+            "next_role": None,
+            "artifacts": [],
+            "attachments": [],
+        }
 
     def _build_select_actions(self, state_cfg: dict[str, Any]) -> list[dict[str, Any]]:
         """为 select 动作构建选项按钮。"""
@@ -659,6 +746,9 @@ class ProWorkflowEngine:
         user_id: str,
     ) -> dict[str, Any]:
         """构建并返回最终响应。"""
+        # 同步更新 TODO 看板
+        wf_state["todo_board"] = self._build_todo_board(wf_state.get("slots", {}))
+
         metadata = {"workflow": wf_state}
         if persona_id:
             metadata["persona_id"] = persona_id
@@ -671,7 +761,7 @@ class ProWorkflowEngine:
             metadata=metadata,
         )
 
-        last_step = steps[-1] if steps else {"type": "guide", "content": "", "skill_name": None, "next_actions": None, "checklist": None}
+        last_step = steps[-1] if steps else {"type": "guide", "content": "", "skill_name": None, "next_actions": None, "checklist": None, "artifacts": None, "attachments": None, "next_role": None}
 
         return {
             "session_id": session_id,
@@ -679,10 +769,15 @@ class ProWorkflowEngine:
             "content": last_step.get("content", ""),
             "workflow_state": wf_state.get("current_state", "done"),
             "skill_name": last_step.get("skill_name"),
+            "current_role": wf_state.get("current_role"),
+            "next_role": last_step.get("next_role") or wf_state.get("current_role"),
             "next_actions": last_step.get("next_actions"),
             "checklist": last_step.get("checklist") or checklist,
+            "todo_board": wf_state.get("todo_board", []),
             "steps": steps,
             "slots": wf_state.get("slots", {}),
+            "artifacts": last_step.get("artifacts") or [],
+            "attachments": wf_state.get("attachments", []),
         }
 
     @staticmethod
@@ -729,9 +824,9 @@ async def pro_chat(
     """
     engine = _get_engine()
 
-    # 模型切换
-    if request.model and state.orch:
-        state.orch.set_model(request.model)
+    # 模型切换：专业版默认使用 deepseek-v4-pro，用户可显式覆盖
+    if state.orch:
+        state.orch.set_model(request.model or "deepseek-v4-pro")
 
     result = engine.process(
         session_id=request.session_id,

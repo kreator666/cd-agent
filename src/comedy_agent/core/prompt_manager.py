@@ -94,9 +94,9 @@ class PromptManager:
         """批量加载目录下的所有 ``.txt`` / ``.md`` 文件。
 
         文件命名约定：
-        - ``{name}.txt`` → 注册为 ``name`` 的 ``default`` 版本
-        - ``{name}_v2.txt`` → 注册为 ``name`` 的 ``v2`` 版本
-        - ``{name}/default.txt`` → 注册为 ``name`` 的 ``default`` 版本
+        - ``{name}.txt`` / ``{name}.md`` → 注册为 ``name`` 的 ``default`` 版本
+        - ``{name}_v2.txt`` / ``{name}_v2.md`` → 注册为 ``name`` 的 ``v2`` 版本
+        - ``{name}/default.txt`` / ``{name}/default.md`` → 注册为 ``name`` 的 ``default`` 版本
 
         Args:
             dir_path: Prompt 目录，默认为 ``settings.data_dir / "prompts"``。
@@ -112,12 +112,13 @@ class PromptManager:
             return 0
 
         loaded = 0
-        for f in sorted(root.rglob("*.txt")):
+        prompt_files = sorted(root.rglob("*.txt")) + sorted(root.rglob("*.md"))
+        for f in prompt_files:
             relative = f.relative_to(root)
             # 处理子目录结构：name/version.txt
             parts = relative.with_suffix("").parts
             if len(parts) >= 2:
-                name = parts[0]
+                name = "/".join(parts[:-1])
                 version = parts[-1]
             else:
                 # 处理文件名结构：name_v2.txt 或 name.txt

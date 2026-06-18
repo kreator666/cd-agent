@@ -1235,7 +1235,10 @@ function renderWorkflowStep(step, bindEvents = false) {
     const fullContent = descHtml + (content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`);
     addChatMessage('agent', roleName, roleLabel, fullContent, { gradient: roleGradient || gradient });
   } else if (type === 'final_script') {
-    typewriteScript(content);
+    // renderArtifacts 已在 sendPrompt 中处理 artifact 打字机；旧版无 artifacts 时兜底
+    if (!step.artifacts) {
+      typewriteScript(content);
+    }
     addChatMessage('agent', roleName, roleLabel, '✅ 最终剧本已生成，请查看右侧面板。', { gradient: roleGradient });
     toast('剧本生成完成');
   } else if (type === 'error') {
@@ -1285,7 +1288,9 @@ function renderWorkflowResponse(data) {
     const fullContent = descHtml + (content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`);
     addChatMessage('agent', roleName, roleLabel, fullContent, { gradient: roleGradient || gradient });
   } else if (type === 'final_script') {
-    typewriteScript(content);
+    if (!data.artifacts) {
+      typewriteScript(content);
+    }
     addChatMessage('agent', roleName, roleLabel, '✅ 最终剧本已生成，请查看右侧面板。', { gradient: roleGradient });
     toast('剧本生成完成');
   } else if (type === 'error') {

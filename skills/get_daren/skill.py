@@ -95,6 +95,14 @@ ROLE_REGISTRY: dict[str, dict[str, Any]] = {
     },
 }
 
+# 槽位中文名 -> 状态机状态 ID
+SLOT_TO_STATE: dict[str, str] = {
+    "话题": "topic_filling",
+    "态度": "attitude_filling",
+    "偏见": "bias_filling",
+    "情绪": "emotion_filling",
+}
+
 # 中文 mention -> 角色名
 MENTION_TO_ROLE: dict[str, str] = {
     "话题": "话题专家",
@@ -156,28 +164,47 @@ class Skill(ComedySkill):
         slots = slots or {}
         outputs = outputs or {}
         conversation_history = conversation_history or []
-        current_role = current_role or "主持人"
+        current_role = workflow_step.get("role", current_role or "主持人")
         attachments = attachments or []
         decision_nodes = decision_nodes or []
+
+        action = workflow_step.get("action", "guide")
+        current_state = workflow_step.get("state_id", "guiding")
 
         # 1. 意图分类：用户想做什么？
         intent = self._classify_intent(user_input, current_role, slots)
 
-        # 2. 确定当前角色
-        target_role = self._determine_target_role(intent, current_role, slots)
+        # 2. 状态机特殊分支
+        if action == "ask":
+            # 询问生成模式
+            return self._handle_ask_generate_mode(user_input, current_state)
+
+        if action == "generate":
+            # 生成剧本
+            mode = workflow_step.get("mode", "one_shot")
+            if mode == "section":
+                return self._handle_generate_section(slots, outputs, user_id, attachments, user_input, current_state)
+            return self._handle_generate_one_shot(slots, outputs, user_id, attachments, current_state)
+
+        if action == "done":
+            # 已完成，处理后续指令（修改/排版/保存）
+            return self._handle_done_state(user_input, slots, outputs, user_id, attachments, current_role)
 
         # 3. 触发词检测（生成）
         if intent.get("trigger_generate"):
-            return self._handle_generate(slots, outputs, user_id, attachments, current_role)
+            return self._handle_generate(slots, outputs, user_id, attachments, current_role, current_state)
 
-        # 4. 工具调用（素材 / 排版）
+        # 4. 确定当前角色
+        target_role = self._determine_target_role(intent, current_role, slots)
+
+        # 5. 工具调用（素材 / 排版）
         tool_name = ROLE_REGISTRY.get(target_role, {}).get("tool")
         if tool_name and intent.get("want_tool_call"):
             return self._handle_tool_call(
                 tool_name, user_input, slots, outputs, user_id, target_role, attachments
             )
 
-        # 5. 槽位自动填充：非提问句式且话题为空时，自动识别为话题
+        # 6. 槽位自动填充：非提问句式且话题为空时，自动识别为话题
         if not slots.get("话题") and user_input.strip() and not self._is_question(user_input):
             target_role = "话题专家"
             intent = {
@@ -187,7 +214,7 @@ class Skill(ComedySkill):
                 "mentioned_role": None,
             }
 
-        # 6. 渲染角色提示词并调用 LLM
+        # 7. 渲染角色提示词并调用 LLM
         context = self._build_context(
             target_role, slots, outputs, attachments, decision_nodes, conversation_history, user_input
         )
@@ -201,14 +228,14 @@ class Skill(ComedySkill):
             logger.error("角色 %s LLM 调用失败: %s", target_role, e, exc_info=True)
             parsed = self._fallback_reply(target_role, intent, slots)
 
-        # 7. 校验与修正 next_role（不能 cue 自己）
+        # 8. 校验与修正 next_role（不能 cue 自己）
         next_role = parsed.get("next_role", "")
         if not next_role or next_role == target_role:
             next_role = ROLE_REGISTRY.get(target_role, {}).get("next_default", "用户")
         parsed["next_role"] = next_role
         parsed["role"] = target_role
 
-        # 8. 处理槽位填充
+        # 9. 处理槽位填充
         slots_update = {}
         if intent.get("type") == "fill_slot" and intent.get("slot_name"):
             slot_name = intent["slot_name"]
@@ -221,13 +248,16 @@ class Skill(ComedySkill):
             slots_update[parsed["slot_name"]] = parsed["slot_value"]
             parsed["slots_update"] = slots_update
 
-        # 9. 更新 outputs（工具输出等）
+        # 10. 计算下一状态
+        state_update = self._compute_next_state(current_state, slots_update, slots, intent)
+
+        # 11. 更新 outputs（工具输出等）
         outputs_update = parsed.get("outputs_update", {})
         if parsed.get("tool_output"):
             outputs_update[parsed.get("tool_name", "tool")] = parsed["tool_output"]
             parsed["outputs_update"] = outputs_update
 
-        # 10. 处理 artifacts（写入 outputs 兼容旧逻辑），长 artifact 同时生成 attachment
+        # 12. 处理 artifacts（写入 outputs 兼容旧逻辑），长 artifact 同时生成 attachment
         artifacts = parsed.get("artifacts", [])
         new_attachments = list(parsed.get("attachments", []))
         if artifacts:
@@ -247,7 +277,7 @@ class Skill(ComedySkill):
             parsed["outputs_update"] = outputs_update
             parsed["attachments"] = new_attachments
 
-        # 11. 记录决策节点
+        # 13. 记录决策节点
         self._record_decision_node(
             decision_nodes,
             node_type="role_switch" if target_role != current_role else "chat",
@@ -257,10 +287,11 @@ class Skill(ComedySkill):
                 "intent": intent,
                 "slot_filled": list(slots_update.keys()),
                 "artifacts": [a.get("id") for a in artifacts],
+                "state_update": state_update,
             },
         )
 
-        # 12. 构造最终返回（兼容旧格式 + 新格式）
+        # 14. 构造最终返回（兼容旧格式 + 新格式）
         result = {
             "reply": parsed.get("reply", ""),
             "advance": bool(slots_update),
@@ -271,9 +302,48 @@ class Skill(ComedySkill):
             "artifacts": artifacts,
             "attachments": parsed.get("attachments", []),
             "current_role": target_role,
+            "state_update": state_update,
         }
 
         return json.dumps(result, ensure_ascii=False)
+
+    def _compute_next_state(
+        self,
+        current_state: str,
+        slots_update: dict[str, Any],
+        slots: dict[str, Any],
+        intent: dict[str, Any],
+    ) -> dict[str, Any]:
+        """根据当前状态和槽位变化计算下一状态。"""
+        # 如果有 @mention 或语义跳转，保持 guiding 让角色自由调度
+        if intent.get("mentioned_role") or intent.get("semantic_role"):
+            return {"current_state": "guiding"}
+
+        # collect 动作填完槽位后按顺序推进
+        if current_state == "topic_filling" and slots_update.get("话题"):
+            return {"current_state": "attitude_filling"}
+        if current_state == "attitude_filling" and slots_update.get("态度"):
+            return {"current_state": "bias_filling"}
+        if current_state == "bias_filling" and slots_update.get("偏见"):
+            return {"current_state": "emotion_filling"}
+        if current_state == "emotion_filling" and slots_update.get("情绪"):
+            return {"current_state": "ask_generate_mode"}
+
+        # 在 guiding 状态下，如果某个槽位被填充，自动推进到下一个未填充槽位
+        if current_state == "guiding" and slots_update:
+            filled_slot = next(iter(slots_update.keys()))
+            slot_order = list(self.CORE_SLOTS)
+            idx = slot_order.index(filled_slot) if filled_slot in slot_order else -1
+            if idx >= 0 and idx + 1 < len(slot_order):
+                next_slot = slot_order[idx + 1]
+                if not slots.get(next_slot):
+                    return {"current_state": SLOT_TO_STATE.get(next_slot, "guiding")}
+            # 所有槽位已填满
+            if all(slots.get(s) for s in self.CORE_SLOTS):
+                return {"current_state": "ask_generate_mode"}
+
+        # 默认保持当前状态
+        return {"current_state": current_state}
 
     # ------------------------------------------------------------------ #
     # 意图分类
@@ -661,54 +731,349 @@ class Skill(ComedySkill):
         user_id: str | None,
         attachments: list[dict[str, Any]],
         current_role: str,
+        current_state: str,
     ) -> str:
-        """处理生成触发词。"""
+        """处理生成触发词。强制卡点：四槽位填满才能进入生成阶段。"""
         missing = [s for s in self.CORE_SLOTS if not slots.get(s)]
         if missing:
             next_role = SLOT_TO_ROLE.get(missing[0], "主持人")
+            next_state = SLOT_TO_STATE.get(missing[0], "guiding")
             return json.dumps(
                 {
                     "reply": f"⚠️ 还有以下维度未填写：{'、'.join(missing)}。请先补全后再生成。",
                     "next_role": next_role,
                     "slots_update": {},
                     "outputs_update": {},
+                    "state_update": {"current_state": next_state},
                 },
                 ensure_ascii=False,
             )
 
-        # 四维度已齐：询问生成方式
-        if outputs.get("final_script"):
-            # 已生成过，重新生成
-            return self._do_generate(slots, outputs, user_id, attachments, mode="one_shot")
-
+        # 四维度已齐：进入询问生成方式状态
         return json.dumps(
             {
-                "reply": "📝 四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？",
+                "reply": "📝 四个维度已集齐。你希望「一次性生成」完整剧本，还是「按小节生成」逐段输出？",
                 "next_role": "用户",
-                "action": "ask_generate_mode",
-                "slots_update": {},
-                "outputs_update": {},
+                "current_role": "总编",
+                "state_update": {"current_state": "ask_generate_mode"},
             },
             ensure_ascii=False,
         )
 
-    def _do_generate(
+    def _handle_ask_generate_mode(self, user_input: str, current_state: str) -> str:
+        """解析用户选择的生成模式，进入对应生成状态。"""
+        mode = self._parse_generate_mode(user_input)
+
+        if mode == "one_shot":
+            return json.dumps(
+                {
+                    "reply": "📝 收到，正在一次性生成完整剧本...",
+                    "next_role": "总编",
+                    "state_update": {"current_state": "generating_one_shot"},
+                },
+                ensure_ascii=False,
+            )
+
+        if mode == "section":
+            return json.dumps(
+                {
+                    "reply": "📝 收到，将按小节逐段生成。我会先输出第一节。",
+                    "next_role": "总编",
+                    "state_update": {"current_state": "generating_section", "section_index": 0, "section_outline": []},
+                },
+                ensure_ascii=False,
+            )
+
+        # 未识别，继续询问（带快捷按钮）
+        return json.dumps(
+            {
+                "reply": "请选择生成方式：回复「一次性」生成完整剧本，或「按小节」逐段输出。",
+                "next_role": "用户",
+                "current_role": "总编",
+                "next_actions": [
+                    {"action": "set_generate_mode", "label": "📝 一次性生成", "value": "一次性"},
+                    {"action": "set_generate_mode", "label": "📑 按小节生成", "value": "按小节"},
+                ],
+                "state_update": {"current_state": "ask_generate_mode"},
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
+    def _parse_generate_mode(user_input: str) -> str | None:
+        """解析用户选择的生成模式。"""
+        text = user_input.strip().lower()
+        one_shot_keywords = ("一次性", "一次", "完整", "全部", "整体", "one", "全部生成")
+        section_keywords = ("按小节", "小节", "分段", "逐段", "一节一节", "section", "一部分")
+
+        # 先检查是否有明确否定词
+        if any(k in text for k in one_shot_keywords) and "不" not in text[:10]:
+            return "one_shot"
+        if any(k in text for k in section_keywords) and "不" not in text[:10]:
+            return "section"
+
+        # 简短回复兜底
+        if text in ("1", "一", "一次性"):
+            return "one_shot"
+        if text in ("2", "二", "按小节"):
+            return "section"
+
+        return None
+
+    def _handle_generate_one_shot(
         self,
         slots: dict[str, Any],
         outputs: dict[str, Any],
         user_id: str | None,
         attachments: list[dict[str, Any]],
-        mode: str = "one_shot",
+        current_state: str,
     ) -> str:
-        """调用 standup_generator 生成最终剧本。"""
+        """一次性生成完整剧本。"""
+        final = self._generate_script_content(slots, outputs, user_id, attachments, section=None)
+
+        artifact = {
+            "id": "script_main",
+            "type": "script",
+            "title": "最终剧本",
+            "content": final,
+            "op": "create" if "script_main" not in outputs else "update",
+            "version": 1 if "script_main" not in outputs else 2,
+            "created_by": "总编",
+        }
+
+        return json.dumps(
+            {
+                "reply": "✅ 完整剧本已生成，请查看右侧工作台。",
+                "next_role": "用户",
+                "current_role": "总编",
+                "state_update": {"current_state": "done"},
+                "slots_update": {},
+                "outputs_update": {"final_script": final, "script_main": final},
+                "artifacts": [artifact],
+            },
+            ensure_ascii=False,
+        )
+
+    def _handle_generate_section(
+        self,
+        slots: dict[str, Any],
+        outputs: dict[str, Any],
+        user_id: str | None,
+        attachments: list[dict[str, Any]],
+        user_input: str,
+        current_state: str,
+    ) -> str:
+        """按小节生成剧本。"""
+        section_index = outputs.get("section_index", 0)
+        section_outline = outputs.get("section_outline", [])
+        generated_sections = outputs.get("generated_sections", [])
+
+        # 第一次进入：生成章节大纲
+        if not section_outline:
+            section_outline = self._generate_section_outline(slots, attachments)
+            outputs["section_outline"] = section_outline
+
+        # 处理用户指令
+        cmd = self._parse_section_command(user_input)
+        if cmd == "finish":
+            return json.dumps(
+                {
+                    "reply": "✅ 按小节生成已结束。完整剧本在右侧工作台。",
+                    "next_role": "用户",
+                    "current_role": "总编",
+                    "state_update": {"current_state": "done"},
+                    "slots_update": {},
+                    "outputs_update": {"final_script": "\n\n".join(generated_sections), **outputs},
+                },
+                ensure_ascii=False,
+            )
+
+        if cmd == "retry" and section_index > 0:
+            section_index -= 1
+            generated_sections = generated_sections[:-1]
+
+        if section_index >= len(section_outline):
+            return json.dumps(
+                {
+                    "reply": "✅ 所有小节已生成完毕。回复「完成」结束，或继续补充修改。",
+                    "next_role": "用户",
+                    "current_role": "总编",
+                    "state_update": {"current_state": "generating_section"},
+                    "slots_update": {},
+                    "outputs_update": outputs,
+                },
+                ensure_ascii=False,
+            )
+
+        section_title = section_outline[section_index]
+        section_content = self._generate_script_content(
+            slots, outputs, user_id, attachments, section=(section_index, section_title, section_outline, generated_sections)
+        )
+        generated_sections.append(f"## {section_title}\n\n{section_content}")
+
+        # 更新 artifact（追加小节）
+        full_script = "\n\n".join(generated_sections)
+        artifact = {
+            "id": "script_main",
+            "type": "script",
+            "title": "最终剧本",
+            "content": f"## {section_title}\n\n{section_content}",
+            "op": "create" if section_index == 0 and "script_main" not in outputs else "append",
+            "version": (section_index + 1),
+            "created_by": "总编",
+        }
+
+        next_index = section_index + 1
+        outputs_update = {
+            **outputs,
+            "section_index": next_index,
+            "generated_sections": generated_sections,
+            "final_script": full_script,
+            "script_main": full_script,
+        }
+
+        is_last = next_index >= len(section_outline)
+        reply = f"✅ 第 {section_index + 1} 节「{section_title}」已生成。"
+        actions = [
+            {"action": "continue_section", "label": "▶️ 继续", "value": "继续"},
+            {"action": "retry_section", "label": "🔄 修改上一节", "value": "修改"},
+            {"action": "finish_section", "label": "✅ 完成", "value": "完成"},
+        ]
+        if is_last:
+            reply += " 所有小节已完成，回复「完成」结束生成。"
+        else:
+            reply += " 回复「继续」生成下一节，或「修改」重生成本节。"
+
+        return json.dumps(
+            {
+                "reply": reply,
+                "next_role": "用户",
+                "current_role": "总编",
+                "next_actions": actions,
+                "state_update": {"current_state": "generating_section"},
+                "slots_update": {},
+                "outputs_update": outputs_update,
+                "artifacts": [artifact],
+            },
+            ensure_ascii=False,
+        )
+
+    def _handle_done_state(
+        self,
+        user_input: str,
+        slots: dict[str, Any],
+        outputs: dict[str, Any],
+        user_id: str | None,
+        attachments: list[dict[str, Any]],
+        current_role: str,
+    ) -> str:
+        """已生成完成后的后续处理：修改、排版、保存等。"""
+        text = user_input.strip().lower()
+
+        if any(k in text for k in ("排版", "公众号", "小红书", "知乎", "b站")):
+            return self._handle_tool_call("layout", user_input, slots, outputs, user_id, "排版专员", attachments)
+
+        if any(k in text for k in ("修改", "重写", "再来")):
+            return json.dumps(
+                {
+                    "reply": "📝 好的，请告诉我需要修改哪里，或者回复「重新生成」从头开始。",
+                    "next_role": "用户",
+                    "current_role": "总编",
+                    "state_update": {"current_state": "done"},
+                },
+                ensure_ascii=False,
+            )
+
+        if any(k in text for k in ("重新生成", "再来一次")):
+            # 清空已有输出，回到询问生成方式
+            outputs.clear()
+            return json.dumps(
+                {
+                    "reply": "📝 已清空之前的剧本。请选择生成方式：「一次性」或「按小节」。",
+                    "next_role": "用户",
+                    "current_role": "总编",
+                    "state_update": {"current_state": "ask_generate_mode"},
+                    "outputs_update": {"final_script": None, "script_main": None},
+                },
+                ensure_ascii=False,
+            )
+
+        return json.dumps(
+            {
+                "reply": "剧本已完成。你可以说「排版成公众号格式」或「修改某一部分」。",
+                "next_role": "用户",
+                "current_role": "总编",
+                "state_update": {"current_state": "done"},
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
+    def _parse_section_command(user_input: str) -> str:
+        """解析按小节生成时的用户指令。"""
+        text = user_input.strip().lower()
+        if any(k in text for k in ("完成", "结束", "done", "finish", "好了")):
+            return "finish"
+        if any(k in text for k in ("修改", "重来", "重生成", "retry", "上一节")):
+            return "retry"
+        if any(k in text for k in ("继续", "下一节", "next", "go on")):
+            return "continue"
+        # 默认继续
+        return "continue"
+
+    def _generate_section_outline(
+        self,
+        slots: dict[str, Any],
+        attachments: list[dict[str, Any]],
+    ) -> list[str]:
+        """生成按小节创作的章节大纲。"""
+        context_parts = [f"【{s}】{slots[s]}" for s in self.CORE_SLOTS]
+        for att in attachments:
+            full_text = att.get("full_text", "")
+            summary = att.get("summary", "")
+            display = summary if summary else (full_text[:500] + "..." if len(full_text) > 500 else full_text)
+            context_parts.append(f"【{att.get('name', '参考')}】\n{display}")
+
+        system_prompt = (
+            "你是一位资深喜剧编剧。请根据以下创作维度，为剧本设计 3-5 个小节标题。"
+            "只输出小节标题列表，每行一个，不要编号、不要解释。"
+        )
+        user_prompt = "创作维度：\n\n" + "\n\n".join(context_parts)
+
+        try:
+            outline_text = self._call_llm(system_prompt, user_prompt)
+            outlines = [line.strip() for line in outline_text.strip().split("\n") if line.strip()]
+            # 清理可能的编号前缀
+            outlines = [re.sub(r"^\d+[.、]\s*", "", o) for o in outlines]
+            return outlines[:6] or ["开场", "发展", "高潮", "结尾"]
+        except Exception as e:
+            logger.warning("生成章节大纲失败: %s", e)
+            return ["开场", "发展", "高潮", "结尾"]
+
+    def _generate_script_content(
+        self,
+        slots: dict[str, Any],
+        outputs: dict[str, Any],
+        user_id: str | None,
+        attachments: list[dict[str, Any]],
+        section: tuple[int, str, list[str], list[str]] | None = None,
+    ) -> str:
+        """调用 standup_generator 或 LLM 直接生成剧本内容。"""
         context_parts = [f"【{s}】{slots[s]}" for s in self.CORE_SLOTS]
 
-        # 读取相关附件
         for att in attachments:
             full_text = att.get("full_text", "")
             summary = att.get("summary", "")
             display = summary if summary else (full_text[:800] + "..." if len(full_text) > 800 else full_text)
             context_parts.append(f"【{att.get('name', '参考')}】\n{display}")
+
+        if section:
+            idx, title, outline, previous = section
+            context_parts.append(f"【当前小节】第 {idx + 1} 节：{title}")
+            context_parts.append(f"【章节大纲】{' / '.join(outline)}")
+            if previous:
+                context_parts.append("【已生成内容】\n" + "\n\n".join(previous[-2:]))
+            context_parts.append("请只输出当前小节的内容，不要输出其他小节的标题或内容。")
 
         topic = "\n\n".join(context_parts)
 
@@ -736,26 +1101,7 @@ class Skill(ComedySkill):
             logger.error("最终生成失败: %s", e, exc_info=True)
             final = f"生成失败：{e}"
 
-        artifact = {
-            "id": "script_main",
-            "type": "script",
-            "title": "最终剧本",
-            "content": final,
-            "op": "create" if "script_main" not in outputs else "update",
-            "version": 1 if "script_main" not in outputs else 2,
-            "created_by": "总编",
-        }
-
-        return json.dumps(
-            {
-                "reply": "✅ 剧本已生成，请查看右侧工作台。",
-                "next_role": "用户",
-                "slots_update": {},
-                "outputs_update": {"final_script": final, "script_main": final},
-                "artifacts": [artifact],
-            },
-            ensure_ascii=False,
-        )
+        return final
 
     # ------------------------------------------------------------------ #
     # 决策节点

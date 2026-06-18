@@ -33,32 +33,70 @@ router = APIRouter(tags=["pro"])
 _WORKFLOW_FILE = Path(__file__).resolve().parent.parent.parent.parent.parent / "data" / "pro_workflow.json"
 
 _DEFAULT_WORKFLOW: dict[str, Any] = {
-    "initial_state": "awaiting_outline",
+    "initial_state": "guiding",
     "states": {
-        "awaiting_outline": {
-            "action": "collect",
-            "slot": "outline",
-            "message": "📋 你好，我是 喜剧龙虾。请告诉我你想创作什么内容？一句话描述主题即可，例如：实习生被领导刁难后逆袭的职场段子。",
-        },
-        "awaiting_genre": {
-            "action": "select",
-            "skill_type": "genre",
-            "message": "🎭 请选择剧本体裁，这将决定整体的创作风格。",
-        },
         "guiding": {
             "action": "guide",
+            "role": "主持人",
             "message": "请按照流程表格的指引，@对应的写作团队成员完成创作。",
         },
-        "aggregating": {
-            "action": "aggregate",
-            "message": "📝 正在汇总各专家意见，生成最终剧本...",
+        "topic_filling": {
+            "action": "collect",
+            "slot": "话题",
+            "role": "话题专家",
+            "message": "请描述你想创作的主题场景。",
+        },
+        "attitude_filling": {
+            "action": "collect",
+            "slot": "态度",
+            "role": "态度专家",
+            "message": "请给出你对这个话题的态度。",
+        },
+        "bias_filling": {
+            "action": "collect",
+            "slot": "偏见",
+            "role": "偏见专家",
+            "message": "请给出一个独特视角或偏见。",
+        },
+        "emotion_filling": {
+            "action": "collect",
+            "slot": "情绪",
+            "role": "情绪专家",
+            "message": "请描述情感节奏变化。",
+        },
+        "ask_generate_mode": {
+            "action": "ask",
+            "role": "总编",
+            "message": "四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？",
+        },
+        "generating_one_shot": {
+            "action": "generate",
+            "mode": "one_shot",
+            "role": "总编",
+            "message": "正在生成完整剧本...",
+        },
+        "generating_section": {
+            "action": "generate",
+            "mode": "section",
+            "role": "总编",
+            "message": "正在按小节生成剧本...",
+        },
+        "done": {
+            "action": "done",
+            "role": "总编",
+            "message": "剧本已生成完成。",
         },
     },
     "transitions": {
-        "awaiting_outline": {"next": "awaiting_genre"},
-        "awaiting_genre": {"next": "guiding"},
-        "guiding": {"next": "aggregating"},
-        "aggregating": {"next": None},
+        "guiding": {"next": "guiding"},
+        "topic_filling": {"next": "attitude_filling"},
+        "attitude_filling": {"next": "bias_filling"},
+        "bias_filling": {"next": "emotion_filling"},
+        "emotion_filling": {"next": "ask_generate_mode"},
+        "ask_generate_mode": {"next": None},
+        "generating_one_shot": {"next": "done"},
+        "generating_section": {"next": "generating_section"},
+        "done": {"next": None},
     },
 }
 
@@ -331,16 +369,21 @@ class ProWorkflowEngine:
                 return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
         # 6. 调用 喜剧龙虾 skill（核心维度、生成指令、无 @mention 均走这里）
-        guiding_cfg = self.workflow.get("states", {}).get("guiding", {"action": "guide"})
-        result = self._execute_state(guiding_cfg, wf_state, message, user_id)
+        # 根据当前状态机状态选择对应配置
+        current_state_id = wf_state.get("current_state", self.workflow.get("initial_state", "guiding"))
+        state_cfg = dict(self.workflow.get("states", {}).get(current_state_id, {"action": "guide"}))
+        state_cfg["state_id"] = current_state_id
+        result = self._execute_state(state_cfg, wf_state, message, user_id)
 
-        # 7. 更新 slots/outputs / current_role / artifacts / attachments
+        # 7. 更新 slots/outputs / current_role / artifacts / attachments / current_state
         if result.get("slots_update"):
             wf_state.setdefault("slots", {}).update(result["slots_update"])
         if result.get("outputs_update"):
             wf_state.setdefault("outputs", {}).update(result["outputs_update"])
         if result.get("role"):
             wf_state["current_role"] = result["role"]
+        if result.get("state_update"):
+            wf_state.update(result["state_update"])
         if result.get("artifacts"):
             wf_state.setdefault("artifacts", []).extend(result["artifacts"])
         if result.get("attachments"):
@@ -361,7 +404,9 @@ class ProWorkflowEngine:
         # 10. 确定响应类型
         if "final_script" in result.get("outputs_update", {}):
             response_type = "final_script"
-            wf_state["current_state"] = "done"
+            # 若后端未显式指定下一状态，则默认为 done
+            if not result.get("state_update", {}).get("current_state"):
+                wf_state["current_state"] = "done"
         else:
             response_type = "guide"
 
@@ -493,6 +538,7 @@ class ProWorkflowEngine:
                     "next_role": data.get("next_role"),
                     "artifacts": data.get("artifacts", []),
                     "attachments": data.get("attachments", []),
+                    "state_update": data.get("state_update", {}),
                 }
             except json.JSONDecodeError:
                 pass
@@ -506,6 +552,7 @@ class ProWorkflowEngine:
             "next_role": None,
             "artifacts": [],
             "attachments": [],
+            "state_update": {},
         }
 
     def _build_select_actions(self, state_cfg: dict[str, Any]) -> list[dict[str, Any]]:

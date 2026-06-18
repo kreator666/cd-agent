@@ -129,6 +129,112 @@ class TestOutputParsing:
         assert parsed["reply"] == "just plain text"
 
 
+class TestGenerateMode:
+    """测试生成模式解析与状态流转。"""
+
+    def setup_method(self):
+        self.skill = Skill()
+
+    def test_parse_generate_mode_one_shot(self):
+        assert self.skill._parse_generate_mode("一次性") == "one_shot"
+        assert self.skill._parse_generate_mode("完整生成") == "one_shot"
+        assert self.skill._parse_generate_mode("1") == "one_shot"
+
+    def test_parse_generate_mode_section(self):
+        assert self.skill._parse_generate_mode("按小节") == "section"
+        assert self.skill._parse_generate_mode("分段输出") == "section"
+        assert self.skill._parse_generate_mode("2") == "section"
+
+    def test_parse_generate_mode_unknown(self):
+        assert self.skill._parse_generate_mode("不知道") is None
+
+    def test_parse_section_command(self):
+        assert self.skill._parse_section_command("完成") == "finish"
+        assert self.skill._parse_section_command("修改上一节") == "retry"
+        assert self.skill._parse_section_command("继续") == "continue"
+        assert self.skill._parse_section_command("随便说点") == "continue"
+
+    def test_compute_next_state_slot_filling(self):
+        result = self.skill._compute_next_state("topic_filling", {"话题": "职场"}, {}, {})
+        assert result["current_state"] == "attitude_filling"
+
+    def test_compute_next_state_all_slots_filled(self):
+        slots = {"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "从愤怒到释然"}
+        result = self.skill._compute_next_state("emotion_filling", {"情绪": "从愤怒到释然"}, slots, {})
+        assert result["current_state"] == "ask_generate_mode"
+
+    def test_compute_next_state_guiding_fill_slot(self):
+        slots = {"话题": "职场"}
+        result = self.skill._compute_next_state("guiding", {"话题": "职场"}, slots, {})
+        assert result["current_state"] == "attitude_filling"
+
+    def test_compute_next_state_guiding_all_filled(self):
+        slots = {"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "从愤怒到释然"}
+        result = self.skill._compute_next_state("guiding", {"情绪": "从愤怒到释然"}, slots, {})
+        assert result["current_state"] == "ask_generate_mode"
+
+    def test_handle_generate_missing_slots(self):
+        result = json.loads(self.skill._handle_generate(
+            slots={"话题": "职场"},
+            outputs={},
+            user_id=None,
+            attachments=[],
+            current_role="主持人",
+            current_state="guiding",
+        ))
+        assert "态度" in result["reply"]
+        assert result["state_update"]["current_state"] == "attitude_filling"
+
+    def test_handle_ask_generate_mode_one_shot(self):
+        result = json.loads(self.skill._handle_ask_generate_mode("一次性", "ask_generate_mode"))
+        assert result["state_update"]["current_state"] == "generating_one_shot"
+
+    def test_handle_ask_generate_mode_section(self):
+        result = json.loads(self.skill._handle_ask_generate_mode("按小节", "ask_generate_mode"))
+        assert result["state_update"]["current_state"] == "generating_section"
+        assert result["state_update"]["section_index"] == 0
+
+    def test_handle_generate_section_first(self, monkeypatch):
+        def fake_outline(slots, attachments):
+            return ["开场", "发展", "高潮", "结尾"]
+
+        def fake_content(slots, outputs, user_id, attachments, section=None):
+            return "这是第一节内容。"
+
+        monkeypatch.setattr(self.skill, "_generate_section_outline", fake_outline)
+        monkeypatch.setattr(self.skill, "_generate_script_content", fake_content)
+
+        result = json.loads(self.skill._handle_generate_section(
+            slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
+            outputs={},
+            user_id=None,
+            attachments=[],
+            user_input="继续",
+            current_state="generating_section",
+        ))
+        assert result["state_update"]["current_state"] == "generating_section"
+        assert result["outputs_update"]["section_index"] == 1
+        assert len(result["artifacts"]) == 1
+        assert result["artifacts"][0]["op"] == "create"
+
+    def test_handle_generate_section_finish(self):
+        outputs = {
+            "section_outline": ["开场", "发展"],
+            "section_index": 2,
+            "generated_sections": ["## 开场\\n\\nabc", "## 发展\\n\\ndef"],
+        }
+        result = json.loads(self.skill._handle_generate_section(
+            slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
+            outputs=outputs,
+            user_id=None,
+            attachments=[],
+            user_input="完成",
+            current_state="generating_section",
+        ))
+        assert result["state_update"]["current_state"] == "done"
+        assert "final_script" in result["outputs_update"]
+
+
 class TestQuestionDetection:
     """测试提问句式判断。"""
 

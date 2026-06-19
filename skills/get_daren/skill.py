@@ -571,9 +571,17 @@ class Skill(ComedySkill):
     # LLM 调用与输出解析
     # ------------------------------------------------------------------ #
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
-        """调用 LLM。"""
+        """调用 LLM。
+
+        system_prompt / user_prompt 都是已经渲染完成的最终字符串，其中包含
+        JSON 示例、已收集槽位等字面花括号。ChatPromptTemplate 默认会把这些
+        花括号当作模板变量解析，因此需要先转义为 {{ / }}。
+        """
         from comedy_agent.models.factory import ModelFactory
         from langchain_core.prompts import ChatPromptTemplate
+
+        system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+        user_prompt = user_prompt.replace("{", "{{").replace("}", "}}")
 
         messages = [
             ("system", system_prompt),

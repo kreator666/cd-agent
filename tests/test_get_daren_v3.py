@@ -287,3 +287,48 @@ class TestArtifactsAndAttachments:
         )
         assert "素材报告" in context["attachment_summary"]
         assert "这是摘要" in context["attachment_summary"]
+
+
+class TestPromptEscaping:
+    """测试 LLM 调用前花括号转义，防止 ChatPromptTemplate 误解析。"""
+
+    def setup_method(self):
+        self.skill = Skill()
+
+    def test_call_llm_escapes_json_braces(self, monkeypatch):
+        """system_prompt / user_prompt 中的 JSON 花括号应被正确转义。"""
+        from langchain_core.prompts import ChatPromptTemplate
+        original_from_messages = ChatPromptTemplate.from_messages
+        captured = {}
+
+        def fake_from_messages(messages):
+            captured["messages"] = messages
+            return original_from_messages([
+                ("system", "you are a bot"),
+                ("human", "hello"),
+            ])
+
+        monkeypatch.setattr("langchain_core.prompts.ChatPromptTemplate.from_messages", fake_from_messages)
+
+        from langchain_core.runnables import RunnableLambda
+
+        def fake_invoke(messages):
+            class Result:
+                content = "fake"
+            return Result()
+
+        monkeypatch.setattr(
+            "comedy_agent.models.factory.ModelFactory.get_model_with_fallback",
+            lambda *args, **kwargs: RunnableLambda(fake_invoke),
+        )
+
+        system = '{\n  "reply": "示例",\n  "next_role": "用户"\n}'
+        user = '{"persona_id": "p1", "slots": {"话题": "职场"}}'
+        result = self.skill._call_llm(system, user)
+
+        assert result == "fake"
+        sys_msg, human_msg = captured["messages"]
+        assert sys_msg[0] == "system"
+        assert "{{" in sys_msg[1] and "}}" in sys_msg[1]
+        assert human_msg[0] == "human"
+        assert "{{" in human_msg[1] and "}}" in human_msg[1]

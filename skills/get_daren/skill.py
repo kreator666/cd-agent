@@ -171,6 +171,12 @@ class Skill(ComedySkill):
         action = workflow_step.get("action", "guide")
         current_state = workflow_step.get("state_id", "guiding")
 
+        # 0. 选项引用消解：如果用户回复的是选项编号，从上下文中解析出实际内容
+        resolved_input = self._resolve_option_reference(user_input, conversation_history)
+        if resolved_input:
+            logger.debug("选项引用消解：%r -> %r", user_input, resolved_input)
+            user_input = resolved_input
+
         # 1. 意图分类：用户想做什么？
         intent = self._classify_intent(user_input, current_role, slots)
 
@@ -344,6 +350,129 @@ class Skill(ComedySkill):
 
         # 默认保持当前状态
         return {"current_state": current_state}
+
+    # ------------------------------------------------------------------ #
+    # 选项引用消解
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _extract_last_assistant_reply(conversation_history: list[dict[str, Any]]) -> str:
+        """从对话历史中提取最后一条助手回复的纯文本内容。"""
+        for message in reversed(conversation_history):
+            role = message.get("role", "").lower()
+            if role in ("assistant", "agent", "ai", "model"):
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, dict):
+                    return content.get("reply", "") or content.get("text", "") or str(content)
+        return ""
+
+    @staticmethod
+    def _parse_options(text: str) -> dict[str, str]:
+        """从文本中解析有序选项，返回 {label_lower: option_text}。
+
+        支持格式：
+        - 数字：1) / 1. / 1、/ (1) / ①
+        - 字母：a) / a. / A. / (a)
+        - 中文：一、/ 第一 / 第一个
+        """
+        options: dict[str, str] = {}
+        if not text:
+            return options
+
+        # 数字选项：1) / 1. / 1、/ (1)
+        # 先按行切分，再匹配行首选项
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # 1) xxx / 1. xxx / 1、xxx / (1) xxx
+            m = re.match(r"^[(（]?\s*(\d+)[)）\.．、]\s*(.+)$", line)
+            if m:
+                label = m.group(1)
+                options[label] = m.group(2).strip()
+                options[str(int(label))] = m.group(2).strip()
+                continue
+            # ①②③...
+            m = re.match(r"^([①②③④⑤⑥⑦⑧⑨⑩])\s*(.+)$", line)
+            if m:
+                label = m.group(1)
+                options[label] = m.group(2).strip()
+                idx = "①②③④⑤⑥⑦⑧⑨⑩".index(label) + 1
+                options[str(idx)] = m.group(2).strip()
+                continue
+            # a) / a. / A. / (a)
+            m = re.match(r"^[(（]?\s*([a-dA-D])[)）\.．、]\s*(.+)$", line)
+            if m:
+                label = m.group(1).lower()
+                options[label] = m.group(2).strip()
+                options[label.upper()] = m.group(2).strip()
+                continue
+            # 一、xxx / 第一 xxx / 第一个 xxx
+            m = re.match(r"^(第\s*[一二三四五]\s*[个位]|[一二三四五]、)\s*(.+)$", line)
+            if m:
+                cn_map = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5"}
+                label = m.group(1)
+                options[label] = m.group(2).strip()
+                for ch, num in cn_map.items():
+                    if ch in label:
+                        options[num] = m.group(2).strip()
+                        break
+
+        return options
+
+    @staticmethod
+    def _parse_option_selector(text: str) -> str | None:
+        """判断用户输入是否在选择某个选项，返回标准化标签或 None。"""
+        text = text.strip()
+        if not text:
+            return None
+
+        # 纯数字/字母，如 "1", "a", "A"
+        if re.match(r"^\d+$", text):
+            return text
+        if re.match(r"^[a-dA-D]$", text):
+            return text.lower()
+
+        # 选项1 / 选A / 第一个 / 第一 / ①
+        patterns = [
+            (r"^(?:选|选择|选项)?\s*([a-dA-D])\s*$", True),
+            (r"^(?:选|选择|选项)?\s*(\d+)\s*$", False),
+            (r"^第\s*([一二三四五])\s*(?:个|位)?$", False),
+            (r"^([一二三四五])$", False),
+            (r"^([①②③④⑤⑥⑦⑧⑨⑩])$", False),
+        ]
+        for pattern, lower in patterns:
+            m = re.match(pattern, text)
+            if m:
+                value = m.group(1)
+                return value.lower() if lower else value
+
+        return None
+
+    def _resolve_option_reference(
+        self,
+        user_input: str,
+        conversation_history: list[dict[str, Any]],
+    ) -> str | None:
+        """如果用户回复的是选项编号，从上次助手回复中解析出对应选项内容。"""
+        selector = self._parse_option_selector(user_input)
+        if not selector:
+            return None
+
+        last_reply = self._extract_last_assistant_reply(conversation_history)
+        if not last_reply:
+            return None
+
+        options = self._parse_options(last_reply)
+        if not options:
+            return None
+
+        # 中文数字映射
+        cn_map = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5"}
+        selector = cn_map.get(selector, selector)
+
+        return options.get(selector)
 
     # ------------------------------------------------------------------ #
     # 意图分类

@@ -332,3 +332,66 @@ class TestPromptEscaping:
         assert "{{" in sys_msg[1] and "}}" in sys_msg[1]
         assert human_msg[0] == "human"
         assert "{{" in human_msg[1] and "}}" in human_msg[1]
+
+
+class TestOptionResolution:
+    """测试选项引用消解：用户回复选项编号时从上下文中解析实际内容。"""
+
+    def setup_method(self):
+        self.skill = Skill()
+
+    def test_parse_numeric_options(self):
+        text = "请选择：\n1) 职场\n2) 校园\n3) 家庭"
+        options = self.skill._parse_options(text)
+        assert options["1"] == "职场"
+        assert options["2"] == "校园"
+        assert options["3"] == "家庭"
+
+    def test_parse_letter_options(self):
+        text = "A. 长方形\nB. 圆形\nC. 三角形"
+        options = self.skill._parse_options(text)
+        assert options["a"] == "长方形"
+        assert options["b"] == "圆形"
+        assert options["c"] == "三角形"
+        assert options["B"] == "圆形"
+
+    def test_parse_chinese_numeric_options(self):
+        text = "一、选项一\n二、选项二\n三、选项三"
+        options = self.skill._parse_options(text)
+        assert options["1"] == "选项一"
+        assert options["2"] == "选项二"
+
+    def test_parse_option_selector(self):
+        assert self.skill._parse_option_selector("1") == "1"
+        assert self.skill._parse_option_selector("a") == "a"
+        assert self.skill._parse_option_selector("A") == "a"
+        assert self.skill._parse_option_selector("选项2") == "2"
+        assert self.skill._parse_option_selector("选B") == "b"
+        assert self.skill._parse_option_selector("第一个") == "一"
+        assert self.skill._parse_option_selector("①") == "①"
+        assert self.skill._parse_option_selector("随便说说") is None
+
+    def test_resolve_option_reference_numeric(self):
+        history = [
+            {"role": "assistant", "content": "请选择场景：\n1) 职场\n2) 校园\n3) 家庭"},
+        ]
+        result = self.skill._resolve_option_reference("1", history)
+        assert result == "职场"
+
+    def test_resolve_option_reference_letter(self):
+        history = [
+            {"role": "assistant", "content": "A. 愤怒\nB. 开心\nC. 无奈"},
+        ]
+        result = self.skill._resolve_option_reference("选B", history)
+        assert result == "开心"
+
+    def test_resolve_option_reference_no_history(self):
+        result = self.skill._resolve_option_reference("1", [])
+        assert result is None
+
+    def test_resolve_option_reference_no_options(self):
+        history = [
+            {"role": "assistant", "content": "你好，请自由发挥。"},
+        ]
+        result = self.skill._resolve_option_reference("1", history)
+        assert result is None

@@ -373,7 +373,7 @@ class ProWorkflowEngine:
         current_state_id = wf_state.get("current_state", self.workflow.get("initial_state", "guiding"))
         state_cfg = dict(self.workflow.get("states", {}).get(current_state_id, {"action": "guide"}))
         state_cfg["state_id"] = current_state_id
-        result = self._execute_state(state_cfg, wf_state, message, user_id)
+        result = self._execute_state(state_cfg, wf_state, message, user_id, messages)
 
         # 7. 更新 slots/outputs / current_role / artifacts / attachments / current_state
         if result.get("slots_update"):
@@ -474,6 +474,7 @@ class ProWorkflowEngine:
         wf_state: dict[str, Any],
         user_input: str,
         user_id: str,
+        messages: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """调用 喜剧龙虾 skill 执行当前状态动作。"""
         if self.orch is None:

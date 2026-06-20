@@ -841,20 +841,24 @@ class ProWorkflowEngine:
 
 
 # ------------------------------------------------------------------ #
-# 全局引擎实例（lazy init）
+# 全局引擎实例（lazy init + 配置热重载）
 # ------------------------------------------------------------------ #
 _workflow_engine: ProWorkflowEngine | None = None
+_workflow_mtime: float | None = None
 
 
 def _get_engine() -> ProWorkflowEngine:
-    global _workflow_engine
-    if _workflow_engine is None:
-        if state.orch is None or state.memory is None:
-            raise HTTPException(status_code=503, detail="服务未就绪")
+    global _workflow_engine, _workflow_mtime
+    if state.orch is None or state.memory is None:
+        raise HTTPException(status_code=503, detail="服务未就绪")
+
+    mtime = _WORKFLOW_FILE.stat().st_mtime if _WORKFLOW_FILE.exists() else 0.0
+    if _workflow_engine is None or mtime != _workflow_mtime:
         workflow = _load_workflow()
         _workflow_engine = ProWorkflowEngine(
             orch=state.orch, memory=state.memory, workflow=workflow
         )
+        _workflow_mtime = mtime
     return _workflow_engine
 
 
@@ -980,7 +984,8 @@ async def admin_update_workflow(
     _save_workflow(config)
 
     # 刷新引擎实例
-    global _workflow_engine
+    global _workflow_engine, _workflow_mtime
     _workflow_engine = None
+    _workflow_mtime = None
 
     return {"success": True}

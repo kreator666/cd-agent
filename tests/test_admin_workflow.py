@@ -141,6 +141,10 @@ class TestAdminWorkflow:
                 "calling_emotion": {"action": "call", "skill": "emotion", "message": "调用情绪专家"},
                 "calling_rule_persona": {"action": "call", "skill": "rule_persona", "message": "应用人物画像"},
                 "aggregating": {"action": "aggregate", "message": "生成最终剧本"},
+                "ask_generate_mode": {"action": "ask", "role": "总编", "message": "四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？"},
+                "generating_one_shot": {"action": "generate", "mode": "one_shot", "role": "总编", "message": "正在生成完整剧本..."},
+                "generating_section": {"action": "generate", "mode": "section", "role": "总编", "message": "正在按小节生成剧本..."},
+                "done": {"action": "done", "role": "总编", "message": "剧本已生成完成。"},
             },
             "transitions": {
                 "awaiting_outline": {"next": "awaiting_genre"},
@@ -149,7 +153,11 @@ class TestAdminWorkflow:
                 "calling_attitude": {"next": "calling_emotion"},
                 "calling_emotion": {"next": "calling_rule_persona"},
                 "calling_rule_persona": {"next": "aggregating"},
-                "aggregating": {"next": None},
+                "aggregating": {"next": "ask_generate_mode"},
+                "ask_generate_mode": {"next": None},
+                "generating_one_shot": {"next": "done"},
+                "generating_section": {"next": "generating_section"},
+                "done": {"next": None},
             },
         }
         res = client.put("/admin/workflow", headers=_admin_headers(), json=default_config)

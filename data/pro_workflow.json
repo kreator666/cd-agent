@@ -49,6 +49,34 @@
       "slot": null,
       "skill_type": null,
       "skill": null
+    },
+    "ask_generate_mode": {
+      "action": "ask",
+      "message": "四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
+    },
+    "generating_one_shot": {
+      "action": "generate",
+      "message": "正在生成完整剧本...",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
+    },
+    "generating_section": {
+      "action": "generate",
+      "message": "正在按小节生成剧本...",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
+    },
+    "done": {
+      "action": "done",
+      "message": "剧本已生成完成。",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
     }
   },
   "transitions": {
@@ -71,6 +99,18 @@
       "next": "aggregating"
     },
     "aggregating": {
+      "next": "ask_generate_mode"
+    },
+    "ask_generate_mode": {
+      "next": null
+    },
+    "generating_one_shot": {
+      "next": "done"
+    },
+    "generating_section": {
+      "next": "generating_section"
+    },
+    "done": {
       "next": null
     }
   }

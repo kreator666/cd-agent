@@ -182,8 +182,10 @@ class Skill(ComedySkill):
 
         # 2. 状态机特殊分支
         if action == "ask":
-            # 询问生成模式
-            return self._handle_ask_generate_mode(user_input, current_state)
+            # 询问生成模式，识别后直接生成，不再只给确认语
+            return self._handle_ask_generate_mode(
+                user_input, current_state, slots, outputs, user_id, attachments
+            )
 
         if action == "generate":
             # 生成剧本
@@ -941,28 +943,24 @@ class Skill(ComedySkill):
             ensure_ascii=False,
         )
 
-    def _handle_ask_generate_mode(self, user_input: str, current_state: str) -> str:
-        """解析用户选择的生成模式，进入对应生成状态。"""
+    def _handle_ask_generate_mode(
+        self,
+        user_input: str,
+        current_state: str,
+        slots: dict[str, Any],
+        outputs: dict[str, Any],
+        user_id: str | None,
+        attachments: list[dict[str, Any]],
+    ) -> str:
+        """解析用户选择的生成模式并直接生成内容。"""
         mode = self._parse_generate_mode(user_input)
 
         if mode == "one_shot":
-            return json.dumps(
-                {
-                    "reply": "📝 收到，正在一次性生成完整剧本...",
-                    "next_role": "总编",
-                    "state_update": {"current_state": "generating_one_shot"},
-                },
-                ensure_ascii=False,
-            )
+            return self._handle_generate_one_shot(slots, outputs, user_id, attachments, current_state)
 
         if mode == "section":
-            return json.dumps(
-                {
-                    "reply": "📝 收到，将按小节逐段生成。我会先输出第一节。",
-                    "next_role": "总编",
-                    "state_update": {"current_state": "generating_section", "section_index": 0, "section_outline": []},
-                },
-                ensure_ascii=False,
+            return self._handle_generate_section(
+                slots, outputs, user_id, attachments, user_input, current_state
             )
 
         # 未识别，继续询问（带快捷按钮）

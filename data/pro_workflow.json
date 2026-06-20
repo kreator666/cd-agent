@@ -1,84 +1,76 @@
 {
-  "initial_state": "guiding",
+  "initial_state": "awaiting_outline",
   "states": {
-    "guiding": {
-      "action": "guide",
-      "role": "主持人",
-      "message": "请按照流程表格的指引，@对应的写作团队成员完成创作。"
-    },
-    "topic_filling": {
+    "awaiting_outline": {
       "action": "collect",
-      "slot": "话题",
-      "role": "话题专家",
-      "message": "请描述你想创作的主题场景。"
+      "message": "请告诉我你想创作什么内容？",
+      "slot": "outline",
+      "skill_type": null,
+      "skill": null
     },
-    "attitude_filling": {
-      "action": "collect",
-      "slot": "态度",
-      "role": "态度专家",
-      "message": "请给出你对这个话题的态度。"
+    "awaiting_genre": {
+      "action": "select",
+      "message": "请选择剧本体裁",
+      "slot": null,
+      "skill_type": "genre",
+      "skill": null
     },
-    "bias_filling": {
-      "action": "collect",
-      "slot": "偏见",
-      "role": "偏见专家",
-      "message": "请给出一个独特视角或偏见。"
+    "calling_topic": {
+      "action": "call",
+      "message": "调用话题专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "topic"
     },
-    "emotion_filling": {
-      "action": "collect",
-      "slot": "情绪",
-      "role": "情绪专家",
-      "message": "请描述情感节奏变化。"
+    "calling_attitude": {
+      "action": "call",
+      "message": "调用态度专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "attitude"
     },
-    "ask_generate_mode": {
-      "action": "ask",
-      "role": "总编",
-      "message": "四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？"
+    "calling_emotion": {
+      "action": "call",
+      "message": "调用情绪专家",
+      "slot": null,
+      "skill_type": null,
+      "skill": "emotion"
     },
-    "generating_one_shot": {
-      "action": "generate",
-      "mode": "one_shot",
-      "role": "总编",
-      "message": "正在生成完整剧本..."
+    "calling_rule_persona": {
+      "action": "call",
+      "message": "应用人物画像",
+      "slot": null,
+      "skill_type": null,
+      "skill": "rule_persona"
     },
-    "generating_section": {
-      "action": "generate",
-      "mode": "section",
-      "role": "总编",
-      "message": "正在按小节生成剧本..."
-    },
-    "done": {
-      "action": "done",
-      "role": "总编",
-      "message": "剧本已生成完成。"
+    "aggregating": {
+      "action": "aggregate",
+      "message": "生成最终剧本",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
     }
   },
   "transitions": {
-    "guiding": {
-      "next": "guiding"
+    "awaiting_outline": {
+      "next": "awaiting_genre"
     },
-    "topic_filling": {
-      "next": "attitude_filling"
+    "awaiting_genre": {
+      "next": "calling_topic"
     },
-    "attitude_filling": {
-      "next": "bias_filling"
+    "calling_topic": {
+      "next": "calling_attitude"
     },
-    "bias_filling": {
-      "next": "emotion_filling"
+    "calling_attitude": {
+      "next": "calling_emotion"
     },
-    "emotion_filling": {
-      "next": "ask_generate_mode"
+    "calling_emotion": {
+      "next": "calling_rule_persona"
     },
-    "ask_generate_mode": {
-      "next": null
+    "calling_rule_persona": {
+      "next": "aggregating"
     },
-    "generating_one_shot": {
-      "next": "done"
-    },
-    "generating_section": {
-      "next": "generating_section"
-    },
-    "done": {
+    "aggregating": {
       "next": null
     }
   }

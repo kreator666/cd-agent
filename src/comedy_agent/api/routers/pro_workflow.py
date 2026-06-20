@@ -961,7 +961,7 @@ async def admin_update_workflow(
     if initial_state not in states:
         raise HTTPException(status_code=400, detail="initial_state 必须存在于 states")
 
-    valid_actions = {"collect", "select", "call", "aggregate"}
+    valid_actions = {"guide", "collect", "select", "call", "aggregate", "ask", "generate", "done"}
     for state_id, s in states.items():
         action = s.get("action", "")
         if action not in valid_actions:

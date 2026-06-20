@@ -356,7 +356,21 @@ class Skill(ComedySkill):
     # ------------------------------------------------------------------ #
     @staticmethod
     def _extract_last_assistant_reply(conversation_history: list[dict[str, Any]]) -> str:
-        """从对话历史中提取最后一条助手回复的纯文本内容。"""
+        """从对话历史中提取最后一条助手回复的纯文本内容。
+
+        兼容两种格式：
+        - 标准消息格式：{"role": "ai", "content": "..."}
+        - 工作流日志格式：{"output": "...", "input": "..."}
+        """
+        if not conversation_history:
+            return ""
+
+        # 优先尝试日志格式：最后一条日志的 output 字段
+        last_entry = conversation_history[-1]
+        if isinstance(last_entry, dict) and "output" in last_entry:
+            return str(last_entry.get("output", ""))
+
+        # 标准消息格式
         for message in reversed(conversation_history):
             role = message.get("role", "").lower()
             if role in ("assistant", "agent", "ai", "model"):
@@ -368,55 +382,85 @@ class Skill(ComedySkill):
         return ""
 
     @staticmethod
-    def _parse_options(text: str) -> dict[str, str]:
-        """从文本中解析有序选项，返回 {label_lower: option_text}。
+    def _clean_option_tail(text: str) -> str:
+        """清理选项内容末尾的引导语、连接词和标点。"""
+        # 去掉常见的列表后引导语
+        tail_patterns = [
+            r"[。！?？；;，,、]\s*(?:您更倾向|你更倾向|请选择|您想|你想|哪个|怎么选|如何选|哪一个|何者|您选择|你选择).*$",
+            r"[。！?？；;，,、]\s*(?:或者|或|还是|and|or)\s*[A-D\d①-⑩].*$",
+            r"\s*(?:或者|或|还是|and|or)\s*$",
+            r"[。！?？；;，,、]\s*$",
+        ]
+        for _ in range(3):  # 多次清理，处理嵌套情况
+            for pattern in tail_patterns:
+                text = re.sub(pattern, "", text, flags=re.DOTALL)
+        return text.strip()
 
-        支持格式：
-        - 数字：1) / 1. / 1、/ (1) / ①
-        - 字母：a) / a. / A. / (a)
-        - 中文：一、/ 第一 / 第一个
+    @staticmethod
+    def _parse_options(text: str) -> dict[str, str]:
+        """从文本中解析有序选项，返回 {label: option_text}。
+
+        支持行内选项，例如：
+        - "A) xxx 或 B) yyy。您更倾向哪种？"
+        - "1) 职场 2) 校园"
         """
         options: dict[str, str] = {}
         if not text:
             return options
 
-        # 数字选项：1) / 1. / 1、/ (1)
-        # 先按行切分，再匹配行首选项
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
+        # 选项标记正则与标签提取器
+        marker_patterns: list[tuple[str, Any]] = [
+            # 字母 A) / A. / (A)
+            (r"[(（]?([a-dA-D])[)）\.．、]", lambda m: m.group(1).lower()),
+            # 数字 1) / 1. / (1)
+            (r"[(（]?(\d+)[)）\.．、]", lambda m: m.group(1)),
+            # 圆圈数字 ①
+            (r"([①②③④⑤⑥⑦⑧⑨⑩])", lambda m: m.group(1)),
+        ]
+
+        markers: list[tuple[int, int, str]] = []
+        for pattern, label_fn in marker_patterns:
+            for m in re.finditer(pattern, text):
+                markers.append((m.start(), m.end(), label_fn(m)))
+
+        # 中文数字
+        cn_pattern = r"(第\s*[一二三四五]\s*[个位]|[一二三四五]、)"
+        cn_map = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5"}
+        for m in re.finditer(cn_pattern, text):
+            label = m.group(1)
+            markers.append((m.start(), m.end(), label, cn_map))
+
+        if not markers:
+            return options
+
+        # 按位置排序，去重（同一位置保留第一个出现的标签）
+        markers.sort(key=lambda x: x[0])
+        seen: set[int] = set()
+        unique_markers = []
+        for marker in markers:
+            if marker[0] not in seen:
+                unique_markers.append(marker)
+                seen.add(marker[0])
+        markers = unique_markers
+
+        # 提取每个选项的内容：从当前标记结束到下一个标记开始
+        for i, marker in enumerate(markers):
+            start, end, label, *extra = marker
+            next_start = markers[i + 1][0] if i + 1 < len(markers) else len(text)
+            content = text[end:next_start].strip()
+            content = Skill._clean_option_tail(content)
+            if not content:
                 continue
-            # 1) xxx / 1. xxx / 1、xxx / (1) xxx
-            m = re.match(r"^[(（]?\s*(\d+)[)）\.．、]\s*(.+)$", line)
-            if m:
-                label = m.group(1)
-                options[label] = m.group(2).strip()
-                options[str(int(label))] = m.group(2).strip()
-                continue
-            # ①②③...
-            m = re.match(r"^([①②③④⑤⑥⑦⑧⑨⑩])\s*(.+)$", line)
-            if m:
-                label = m.group(1)
-                options[label] = m.group(2).strip()
-                idx = "①②③④⑤⑥⑦⑧⑨⑩".index(label) + 1
-                options[str(idx)] = m.group(2).strip()
-                continue
-            # a) / a. / A. / (a)
-            m = re.match(r"^[(（]?\s*([a-dA-D])[)）\.．、]\s*(.+)$", line)
-            if m:
-                label = m.group(1).lower()
-                options[label] = m.group(2).strip()
-                options[label.upper()] = m.group(2).strip()
-                continue
-            # 一、xxx / 第一 xxx / 第一个 xxx
-            m = re.match(r"^(第\s*[一二三四五]\s*[个位]|[一二三四五]、)\s*(.+)$", line)
-            if m:
-                cn_map = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5"}
-                label = m.group(1)
-                options[label] = m.group(2).strip()
-                for ch, num in cn_map.items():
+            options[label] = content
+            # 字母同时存大小写
+            if label.isalpha():
+                options[label.upper()] = content
+            # 中文数字同时存阿拉伯数字
+            if extra:
+                cn_map_ref = extra[0]
+                for ch, num in cn_map_ref.items():
                     if ch in label:
-                        options[num] = m.group(2).strip()
+                        options[num] = content
                         break
 
         return options

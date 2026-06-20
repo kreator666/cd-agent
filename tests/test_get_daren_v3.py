@@ -395,3 +395,16 @@ class TestOptionResolution:
         ]
         result = self.skill._resolve_option_reference("1", history)
         assert result is None
+
+    def test_parse_inline_options(self):
+        text = "我们可以考虑两个方向：A) 延续之前角色展开新情节，或 B) 完全跳出原有框架开启全新故事线。您更倾向哪种？"
+        options = self.skill._parse_options(text)
+        assert options["a"] == "延续之前角色展开新情节"
+        assert options["b"] == "完全跳出原有框架开启全新故事线"
+
+    def test_extract_from_log_format(self):
+        history = [
+            {"state": "guiding", "input": "继续", "output": "请选择：\n1) 职场\n2) 校园"},
+        ]
+        result = self.skill._resolve_option_reference("2", history)
+        assert result == "校园"

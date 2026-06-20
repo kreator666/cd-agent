@@ -493,7 +493,7 @@ class ProWorkflowEngine:
                     "slots": wf_state.get("slots", {}),
                     "outputs": wf_state.get("outputs", {}),
                     "user_input": user_input,
-                    "conversation_history": wf_state.get("log", [])[-10:],
+                    "conversation_history": messages[:-1][-10:],
                     "user_id": user_id,
                     "current_role": wf_state.get("current_role", "主持人"),
                     "attachments": wf_state.get("attachments", []),

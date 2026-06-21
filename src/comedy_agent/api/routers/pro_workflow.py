@@ -382,49 +382,27 @@ class ProWorkflowEngine:
         state_cfg["state_id"] = current_state_id
         result = self._execute_state(state_cfg, wf_state, message, user_id, messages)
 
-        # 7. 处理结果并自动 cue 下一个未填槽位的核心专家
-        max_auto_chain = len(self._CORE_SLOTS)
-        for chain_idx in range(max_auto_chain):
-            # 7.1 应用本轮结果到工作流状态
-            if result.get("slots_update"):
-                wf_state.setdefault("slots", {}).update(result["slots_update"])
-            if result.get("outputs_update"):
-                wf_state.setdefault("outputs", {}).update(result["outputs_update"])
-            if result.get("role"):
-                wf_state["current_role"] = result["role"]
-            if result.get("state_update"):
-                wf_state.update(result["state_update"])
-            if result.get("artifacts"):
-                wf_state.setdefault("artifacts", []).extend(result["artifacts"])
-            if result.get("attachments"):
-                wf_state.setdefault("attachments", []).extend(result["attachments"])
+        # 7. 应用第一次 skill 结果
+        self._apply_skill_result(wf_state, result, message)
+        messages.append({"role": "ai", "content": result.get("reply", "")})
 
-            # 7.2 记录本轮日志
-            reply = result.get("reply", "")
-            wf_state.setdefault("log", []).append({
-                "state": wf_state.get("current_state", "guiding"),
-                "action": "guide",
-                "input": message if chain_idx == 0 else "",
-                "output": reply[:200],
-            })
-
-            # 7.3 把本轮 AI 回复加入会话历史
-            messages.append({"role": "ai", "content": reply})
-
-            # 7.4 判断是否需要自动调用下一个核心专家
-            next_role = result.get("next_role")
-            next_slot = self._ROLE_TO_SLOT.get(next_role) if next_role else None
-            if not next_slot or wf_state.get("slots", {}).get(next_slot) or next_role == wf_state.get("current_role"):
-                break
-
-            # 切换到下一个专家，继续调用
+        # 8. 自动 cue 下一个未填槽位的核心专家（只 cue 一次）
+        next_role = result.get("next_role")
+        next_slot = self._ROLE_TO_SLOT.get(next_role) if next_role else None
+        if (
+            next_slot
+            and not wf_state.get("slots", {}).get(next_slot)
+            and next_role != wf_state.get("current_role")
+        ):
             wf_state["current_role"] = next_role
             current_state_id = wf_state.get("current_state", self.workflow.get("initial_state", "guiding"))
             state_cfg = dict(self.workflow.get("states", {}).get(current_state_id, {"action": "guide"}))
             state_cfg["state_id"] = current_state_id
             result = self._execute_state(state_cfg, wf_state, "", user_id, messages)
+            self._apply_skill_result(wf_state, result, "")
+            messages.append({"role": "ai", "content": result.get("reply", "")})
 
-        # 8. 确定最终响应类型
+        # 9. 确定最终响应类型
         if "final_script" in result.get("outputs_update", {}):
             response_type = "final_script"
             # 若后端未显式指定下一状态，则默认为 done
@@ -433,12 +411,12 @@ class ProWorkflowEngine:
         else:
             response_type = "guide"
 
-        # 9. 构建 checklist 和 todo_board
+        # 10. 构建 checklist 和 todo_board
         checklist = self._build_checklist(wf_state)
         todo_board = self._build_todo_board(wf_state.get("slots", {}))
         wf_state["todo_board"] = todo_board
 
-        # 10. 把最终轮作为步骤展示
+        # 11. 把最终轮作为步骤展示
         steps.append({
             "type": response_type,
             "content": result.get("reply", ""),
@@ -451,7 +429,7 @@ class ProWorkflowEngine:
             "attachments": result.get("attachments", []),
         })
 
-        # 11. 保存会话并返回
+        # 12. 保存会话并返回
         return self._build_response(session_id, wf_state, steps, checklist, messages, message, persona_id, user_id)
 
     def load_session(self, user_id: str, session_id: str) -> dict[str, Any] | None:
@@ -491,6 +469,32 @@ class ProWorkflowEngine:
             {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False, "blocked": not bool(slots.get("偏见")), "role": "情绪专家"},
             {"id": "aggregate", "label": "生成最终剧本", "done": False, "optional": False, "blocked": not all(slots.get(s) for s in self._CORE_SLOTS), "role": "总编"},
         ]
+
+    def _apply_skill_result(
+        self,
+        wf_state: dict[str, Any],
+        result: dict[str, Any],
+        user_input: str,
+    ) -> None:
+        """将 skill 返回结果应用到工作流状态，并记录日志。"""
+        if result.get("slots_update"):
+            wf_state.setdefault("slots", {}).update(result["slots_update"])
+        if result.get("outputs_update"):
+            wf_state.setdefault("outputs", {}).update(result["outputs_update"])
+        if result.get("role"):
+            wf_state["current_role"] = result["role"]
+        if result.get("state_update"):
+            wf_state.update(result["state_update"])
+        if result.get("artifacts"):
+            wf_state.setdefault("artifacts", []).extend(result["artifacts"])
+        if result.get("attachments"):
+            wf_state.setdefault("attachments", []).extend(result["attachments"])
+        wf_state.setdefault("log", []).append({
+            "state": wf_state.get("current_state", "guiding"),
+            "action": "guide",
+            "input": user_input,
+            "output": result.get("reply", "")[:200],
+        })
 
     def _execute_state(
         self,

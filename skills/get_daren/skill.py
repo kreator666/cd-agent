@@ -1349,12 +1349,26 @@ class Skill(ComedySkill):
             context_parts.append(f"【{att.get('name', '参考')}】\n{display}")
 
         if section:
+            # 按小节生成时直接调用 LLM，避免 standup_generator 不受控地输出完整剧本
             idx, title, outline, previous = section
-            context_parts.append(f"【当前小节】第 {idx + 1} 节：{title}")
-            context_parts.append(f"【章节大纲】{' / '.join(outline)}")
+            section_system = (
+                "你是一位资深喜剧编剧。当前任务是多小节剧本创作中的单个小节。"
+                "请严格只输出当前小节的剧本正文，不要输出其他小节，不要输出完整剧本，不要输出小节标题。"
+            )
+            section_user_parts = [
+                "创作维度：",
+                "\n\n".join(context_parts),
+                f"章节大纲：{' / '.join(outline)}",
+                f"当前小节：第 {idx + 1} 节《{title}》",
+            ]
             if previous:
-                context_parts.append("【已生成内容】\n" + "\n\n".join(previous[-2:]))
-            context_parts.append("请只输出当前小节的内容，不要输出其他小节的标题或内容。")
+                section_user_parts.append("已生成内容：\n" + "\n\n".join(previous[-2:]))
+            section_user_parts.append(f"请只输出第 {idx + 1} 节《{title}》的剧本内容，字数控制在 300-600 字之间。")
+            try:
+                return self._call_llm(section_system, "\n\n".join(section_user_parts))
+            except Exception as e:
+                logger.error("小节生成失败: %s", e, exc_info=True)
+                return f"生成失败：{e}"
 
         topic = "\n\n".join(context_parts)
 

@@ -178,6 +178,8 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .todo-item .todo-role{font-size:11px;color:#ff764a;background:#fff2ed;padding:2px 8px;border-radius:6px;margin-left:auto;}
 .todo-check{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;border:1.8px solid #e3e6ea;background:#fff;font-size:11px;}
 .todo-check.done{background:#15171a;border-color:#15171a;color:#fff;}
+.todo-item.in-progress{color:#ff764a;font-weight:700;}
+.todo-check.in-progress{border-color:#ff764a;color:#ff764a;}
 
 /* Budget warning in prompt */
 .budget-hint{position:absolute;right:0;top:-28px;font-size:12px;color:#ff764a;font-weight:650;display:none;}
@@ -1179,9 +1181,10 @@ function renderChecklist(checklist) {
   if (!checklist || checklist.length === 0) return '';
   const rows = checklist.map(item => {
     const done = item.done;
-    const icon = done ? '✅' : '⬜';
-    const style = done ? 'color:#666;text-decoration:line-through;' : 'color:#333;font-weight:600;';
-    const highlight = !done && !item.optional ? 'background:#fff8f0;border-radius:4px;' : '';
+    const inProgress = !done && item.in_progress;
+    const icon = done ? '✅' : (inProgress ? '🟡' : '⬜');
+    const style = done ? 'color:#666;text-decoration:line-through;' : (inProgress ? 'color:#ff764a;font-weight:700;' : 'color:#333;font-weight:600;');
+    const highlight = inProgress ? 'background:#fff8f0;border-radius:4px;border-left:4px solid #ff764a;' : (!done && !item.optional ? 'background:#fff8f0;border-radius:4px;' : '');
     const opt = item.optional ? '<span style="color:#999;font-size:12px;">（可选）</span>' : '';
     return `<div style="padding:4px 8px;${highlight}">${icon} <span style="${style}">${escapeHtml(item.label)}</span> ${opt}</div>`;
   }).join('');
@@ -1467,10 +1470,11 @@ function renderTodoBoard(todoBoard) {
   if (!todoBoard || todoBoard.length === 0) return '';
   const items = todoBoard.map(item => {
     const doneClass = item.done ? 'done' : '';
+    const inProgressClass = !item.done && item.in_progress ? 'in-progress' : '';
     const blockedClass = item.blocked ? 'blocked' : '';
-    const check = item.done ? '✓' : '';
+    const check = item.done ? '✓' : (item.in_progress ? '●' : '');
     const roleTag = item.role ? `<span class="todo-role">${escapeHtml(item.role)}</span>` : '';
-    return `<div class="todo-item ${doneClass} ${blockedClass}"><span class="todo-check ${doneClass}">${check}</span><span>${escapeHtml(item.label)}</span>${roleTag}</div>`;
+    return `<div class="todo-item ${doneClass} ${inProgressClass} ${blockedClass}"><span class="todo-check ${doneClass} ${inProgressClass}">${check}</span><span>${escapeHtml(item.label)}</span>${roleTag}</div>`;
   }).join('');
   return `<div class="todo-board"><div class="todo-board-title">📋 创作流程</div>${items}</div>`;
 }

@@ -281,6 +281,8 @@ class Skill(ComedySkill):
                     continue
                 if not art.get("id"):
                     art["id"] = f"{art.get('type', 'artifact')}_{uuid.uuid4().hex[:6]}"
+                # 将 id 中的特殊字符替换为下划线，避免前端 HTML/JS 注入或属性解析失败
+                art["id"] = re.sub(r"[^a-zA-Z0-9_-]", "_", str(art["id"]))
                 art.setdefault("type", "note")
                 art.setdefault("title", f"{art.get('type', 'artifact')}_{art.get('id')}")
                 art.setdefault("content", "")

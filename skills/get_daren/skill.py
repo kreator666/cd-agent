@@ -611,14 +611,27 @@ class Skill(ComedySkill):
             return intent
 
         # 3. 语义角色跳转（轻量规则）
+        # 防止当前核心专家还没填完槽时，被误跳转到后面的维度（如 态度/偏见 被跳过到 情绪）
         semantic_role = self._infer_role_from_text(text)
         if semantic_role and semantic_role != current_role:
-            intent["semantic_role"] = semantic_role
-            intent["type"] = "switch_role"
-            slot = ROLE_TO_SLOT.get(semantic_role)
-            if slot:
-                intent["slot_name"] = slot
-            return intent
+            current_slot = ROLE_TO_SLOT.get(current_role)
+            inferred_slot = ROLE_TO_SLOT.get(semantic_role)
+            allow_jump = True
+            if current_slot and inferred_slot and current_slot in self.CORE_SLOTS:
+                # 当前槽位还没填完，禁止跳走（除非用户显式 @，已在 mention 分支处理）
+                if not slots.get(current_slot):
+                    allow_jump = False
+                else:
+                    # 当前槽位已填完，只能顺序跳转到下一个未填充槽位，禁止跳过
+                    next_slot = self._next_unfilled_slot(current_slot, slots)
+                    if next_slot and inferred_slot != next_slot:
+                        allow_jump = False
+            if allow_jump:
+                intent["semantic_role"] = semantic_role
+                intent["type"] = "switch_role"
+                if inferred_slot:
+                    intent["slot_name"] = inferred_slot
+                return intent
 
         # 注：不再根据当前角色自动把用户输入填槽，避免多轮讨论时把用户的每一句回答都当成槽位值。
         # 槽位填写交给 LLM 自行判断，通过 JSON 中的 slot_name / slot_value 显式返回。
@@ -655,6 +668,17 @@ class Skill(ComedySkill):
             if match:
                 return match.group(1).strip()
         return user_input.strip()
+
+    def _next_unfilled_slot(self, current_slot: str, slots: dict[str, Any]) -> str | None:
+        """返回当前槽位之后第一个未填充的核心槽位，防止跳过中间维度。"""
+        order = list(self.CORE_SLOTS)
+        if current_slot not in order:
+            return None
+        idx = order.index(current_slot)
+        for s in order[idx + 1 :]:
+            if not slots.get(s):
+                return s
+        return None
 
     @staticmethod
     def _infer_role_from_text(text: str) -> str | None:

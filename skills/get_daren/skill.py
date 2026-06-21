@@ -198,7 +198,15 @@ class Skill(ComedySkill):
             # 已完成，处理后续指令（修改/排版/保存）
             return self._handle_done_state(user_input, slots, outputs, user_id, attachments, current_role)
 
-        # 3. 触发词检测（生成）
+        # 3. 总编审阅/生成模式选择阶段：如果用户直接回复选项或模式关键词，直接生成
+        # 避免 LLM  proactive 给出选项后，用户回复 "2" 却被当作普通聊天处理
+        if (current_state == "chief_editor_review" or current_role == "总编") and len(user_input.strip()) <= 8:
+            if self._parse_generate_mode(user_input):
+                return self._handle_ask_generate_mode(
+                    user_input, current_state, slots, outputs, user_id, attachments
+                )
+
+        # 4. 触发词检测（生成）
         if intent.get("trigger_generate"):
             return self._handle_generate(slots, outputs, user_id, attachments, current_role, current_state)
 

@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import uuid
+from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -21,6 +22,14 @@ from comedy_agent.core.prompt_manager import PromptManager
 from comedy_agent.skills.base import ComedySkill
 
 logger = logging.getLogger(__name__)
+
+# 分段脱口秀 prompt 模板路径
+_SECTION_OUTLINE_PROMPT_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "prompts" / "pro" / "standup_section_outline.md"
+)
+_SECTION_CONTENT_PROMPT_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "prompts" / "pro" / "standup_section_content.md"
+)
 
 
 class GetDarenArgs(BaseModel):
@@ -1147,7 +1156,7 @@ class Skill(ComedySkill):
         artifact = {
             "id": "script_main",
             "type": "script",
-            "title": "最终剧本",
+            "title": "脱口秀完整稿件",
             "content": final,
             "op": "create" if "script_main" not in outputs else "update",
             "version": 1 if "script_main" not in outputs else 2,
@@ -1156,7 +1165,7 @@ class Skill(ComedySkill):
 
         return json.dumps(
             {
-                "reply": "✅ 完整剧本已生成，请查看右侧工作台。",
+                "reply": "✅ 完整脱口秀稿件已生成，请查看右侧工作台。",
                 "next_role": "用户",
                 "current_role": "总编",
                 "state_update": {"current_state": "done"},
@@ -1176,86 +1185,135 @@ class Skill(ComedySkill):
         user_input: str,
         current_state: str,
     ) -> str:
-        """按小节生成剧本。"""
+        """按段落生成脱口秀：每次生成一段，等待用户确认后再继续。"""
         section_index = outputs.get("section_index", 0)
-        section_outline = outputs.get("section_outline", [])
-        generated_sections = outputs.get("generated_sections", [])
+        section_outline = list(outputs.get("section_outline", []))
+        generated_sections = list(outputs.get("generated_sections", []))
+        section_status = outputs.get("section_status")
 
-        # 第一次进入：生成章节大纲
+        # 第一次进入：生成段落大纲
         if not section_outline:
             section_outline = self._generate_section_outline(slots, attachments)
-            outputs["section_outline"] = section_outline
+            section_index = 0
+            generated_sections = []
 
-        # 处理用户指令
-        cmd = self._parse_section_command(user_input)
-        if cmd == "finish":
-            return json.dumps(
-                {
-                    "reply": "✅ 按小节生成已结束。完整剧本在右侧工作台。",
-                    "next_role": "用户",
-                    "current_role": "总编",
-                    "state_update": {"current_state": "done"},
-                    "slots_update": {},
-                    "outputs_update": {"final_script": "\n\n".join(generated_sections), **outputs},
-                },
-                ensure_ascii=False,
-            )
+        feedback = ""
+        # 如果上一段已经生成并在等待用户确认，先解析用户反馈
+        if section_status == "awaiting_confirm":
+            action, feedback = self._parse_confirm_response(user_input)
+            if action == "finish":
+                full_script = "\n\n".join(generated_sections)
+                return json.dumps(
+                    {
+                        "reply": "✅ 按小节生成已结束。完整脱口秀稿件在右侧工作台。",
+                        "next_role": "用户",
+                        "current_role": "总编",
+                        "state_update": {"current_state": "done"},
+                        "slots_update": {},
+                        "outputs_update": {
+                            **outputs,
+                            "final_script": full_script,
+                            "script_main": full_script,
+                            "section_status": "finished",
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+            if action == "continue":
+                if section_index + 1 >= len(section_outline):
+                    # 已经是最后一段，把“继续”视为完成
+                    full_script = "\n\n".join(generated_sections)
+                    return json.dumps(
+                        {
+                            "reply": "✅ 已到最后一段，生成结束。完整脱口秀稿件在右侧工作台。",
+                            "next_role": "用户",
+                            "current_role": "总编",
+                            "state_update": {"current_state": "done"},
+                            "slots_update": {},
+                            "outputs_update": {
+                                **outputs,
+                                "final_script": full_script,
+                                "script_main": full_script,
+                                "section_status": "finished",
+                            },
+                        },
+                        ensure_ascii=False,
+                    )
+                section_index += 1
+                feedback = ""
+            # action == "retry" 或 "feedback" 时，section_index 不变，用 feedback 重新生成当前段
 
-        if cmd == "retry" and section_index > 0:
-            section_index -= 1
-            generated_sections = generated_sections[:-1]
-
+        # 校验索引
         if section_index >= len(section_outline):
+            full_script = "\n\n".join(generated_sections)
             return json.dumps(
                 {
-                    "reply": "✅ 所有小节已生成完毕。回复「完成」结束，或继续补充修改。",
+                    "reply": "✅ 所有段落已生成完毕。回复「完成」结束，或继续补充修改。",
                     "next_role": "用户",
                     "current_role": "总编",
                     "state_update": {"current_state": "generating_section"},
                     "slots_update": {},
-                    "outputs_update": outputs,
+                    "outputs_update": {
+                        **outputs,
+                        "final_script": full_script,
+                        "script_main": full_script,
+                        "section_status": "awaiting_confirm",
+                    },
                 },
                 ensure_ascii=False,
             )
 
         section_title = section_outline[section_index]
+        previous = generated_sections[-2:] if generated_sections else []
         section_content = self._generate_script_content(
-            slots, outputs, user_id, attachments, section=(section_index, section_title, section_outline, generated_sections)
+            slots,
+            outputs,
+            user_id,
+            attachments,
+            section=(section_index, section_title, section_outline, previous),
+            feedback=feedback,
         )
-        generated_sections.append(f"## {section_title}\n\n{section_content}")
 
-        # 更新 artifact（追加小节）
+        # 替换或追加当前段
+        formatted_section = f"## {section_title}\n\n{section_content}"
+        if section_index < len(generated_sections):
+            generated_sections[section_index] = formatted_section
+        else:
+            generated_sections.append(formatted_section)
+
         full_script = "\n\n".join(generated_sections)
+        outputs_update = {
+            **outputs,
+            "section_outline": section_outline,
+            "section_index": section_index,
+            "generated_sections": generated_sections,
+            "final_script": full_script,
+            "script_main": full_script,
+            "section_status": "awaiting_confirm",
+        }
+
+        # 构建 artifact
         artifact = {
             "id": "script_main",
             "type": "script",
-            "title": "最终剧本",
-            "content": f"## {section_title}\n\n{section_content}",
+            "title": "脱口秀分段稿件",
+            "content": formatted_section,
             "op": "create" if section_index == 0 and "script_main" not in outputs else "append",
             "version": (section_index + 1),
             "created_by": "总编",
         }
 
-        next_index = section_index + 1
-        outputs_update = {
-            **outputs,
-            "section_index": next_index,
-            "generated_sections": generated_sections,
-            "final_script": full_script,
-            "script_main": full_script,
-        }
-
-        is_last = next_index >= len(section_outline)
-        reply = f"✅ 第 {section_index + 1} 节「{section_title}」已生成。"
+        is_last = section_index + 1 >= len(section_outline)
+        reply = f"✅ 第 {section_index + 1} 段「{section_title}」已生成。"
         actions = [
-            {"action": "continue_section", "label": "▶️ 继续", "value": "继续"},
-            {"action": "retry_section", "label": "🔄 修改上一节", "value": "修改"},
-            {"action": "finish_section", "label": "✅ 完成", "value": "完成"},
+            {"action": "continue_section", "label": "▶️ 继续生成下一段", "value": "继续"},
+            {"action": "retry_section", "label": "🔄 修改当前段", "value": "修改"},
+            {"action": "finish_section", "label": "✅ 满意，结束生成", "value": "完成"},
         ]
         if is_last:
-            reply += " 所有小节已完成，回复「完成」结束生成。"
+            reply += " 这是最后一段，回复「完成」结束，或「修改」优化当前段。也可以直接输入文字反馈意见。"
         else:
-            reply += " 回复「继续」生成下一节，或「修改」重生成本节。"
+            reply += " 回复「继续」生成下一段，「修改」优化当前段，或直接输入文字反馈（如“太平了，加点攻击性”）。"
 
         return json.dumps(
             {
@@ -1334,34 +1392,94 @@ class Skill(ComedySkill):
         # 默认继续
         return "continue"
 
+    def _parse_confirm_response(self, user_input: str) -> tuple[str, str]:
+        """解析用户在分段生成确认阶段的回复。
+
+        返回 (action, feedback) ：
+        - action: finish / continue / retry / feedback
+        - feedback: 当 action 为 retry 或 feedback 时，附带的用户修改意见
+        """
+        text = user_input.strip().lower()
+        if not text:
+            return "continue", ""
+
+        finish_words = ("完成", "结束", "done", "finish", "好了", "ok", "确认", "很满意")
+        if any(k in text for k in finish_words):
+            return "finish", ""
+
+        continue_words = ("继续", "下一节", "next", "go on", "生成下一段", "下一段")
+        if any(k in text for k in continue_words):
+            return "continue", ""
+
+        retry_words = ("修改", "重来", "重生成", "retry", "不满意", "优化", "调整", "重写")
+        if any(k in text for k in retry_words):
+            return "retry", user_input.strip()
+
+        # 其他自由文本视为对当前段的修改反馈
+        return "feedback", user_input.strip()
+
+    @staticmethod
+    def _build_attachment_summary(attachments: list[dict[str, Any]], limit: int = 800) -> str:
+        """把附件整理为可供 prompt 使用的摘要文本。"""
+        if not attachments:
+            return ""
+        parts = []
+        for att in attachments:
+            full_text = att.get("full_text", "")
+            summary = att.get("summary", "")
+            display = summary if summary else (full_text[:limit] + "..." if len(full_text) > limit else full_text)
+            parts.append(f"【{att.get('name', '参考')}】\n{display}")
+        return "\n\n".join(parts)
+
     def _generate_section_outline(
         self,
         slots: dict[str, Any],
         attachments: list[dict[str, Any]],
     ) -> list[str]:
-        """生成按小节创作的章节大纲。"""
-        context_parts = [f"【{s}】{slots[s]}" for s in self.CORE_SLOTS]
-        for att in attachments:
-            full_text = att.get("full_text", "")
-            summary = att.get("summary", "")
-            display = summary if summary else (full_text[:500] + "..." if len(full_text) > 500 else full_text)
-            context_parts.append(f"【{att.get('name', '参考')}】\n{display}")
+        """生成脱口秀分段大纲。"""
+        attachment_summary = self._build_attachment_summary(attachments, limit=500)
 
-        system_prompt = (
-            "你是一位资深喜剧编剧。请根据以下创作维度，为剧本设计 3-5 个小节标题。"
-            "只输出小节标题列表，每行一个，不要编号、不要解释。"
+        pm = PromptManager()
+        try:
+            pm.load_from_file(_SECTION_OUTLINE_PROMPT_PATH, name="pro/standup_section_outline")
+        except Exception as e:
+            logger.warning("加载分段大纲 prompt 失败: %s", e)
+
+        try:
+            system_prompt = pm.render(
+                "pro/standup_section_outline",
+                variables={
+                    "topic": slots.get("话题", ""),
+                    "attitude": slots.get("态度", ""),
+                    "bias": slots.get("偏见", ""),
+                    "emotion": slots.get("情绪", ""),
+                    "attachment_summary": attachment_summary,
+                },
+            )
+        except Exception as e:
+            logger.warning("渲染分段大纲 prompt 失败: %s", e)
+            system_prompt = (
+                "你是一位资深中文单口喜剧编剧。请根据话题、态度、偏见、情绪四个维度，"
+                "为一段脱口秀设计 3–5 个节奏段落标题。只输出标题列表，每行一个，不要编号、不要解释。"
+            )
+
+        user_prompt = (
+            f"话题：{slots.get('话题', '')}\n"
+            f"态度：{slots.get('态度', '')}\n"
+            f"偏见：{slots.get('偏见', '')}\n"
+            f"情绪：{slots.get('情绪', '')}\n"
+            f"{attachment_summary}".strip()
         )
-        user_prompt = "创作维度：\n\n" + "\n\n".join(context_parts)
 
         try:
             outline_text = self._call_llm(system_prompt, user_prompt)
             outlines = [line.strip() for line in outline_text.strip().split("\n") if line.strip()]
             # 清理可能的编号前缀
             outlines = [re.sub(r"^\d+[.、]\s*", "", o) for o in outlines]
-            return outlines[:6] or ["开场", "发展", "高潮", "结尾"]
+            return outlines[:6] or ["开场铺垫", "观察升级", "反转真相", "收尾观点"]
         except Exception as e:
             logger.warning("生成章节大纲失败: %s", e)
-            return ["开场", "发展", "高潮", "结尾"]
+            return ["开场铺垫", "观察升级", "反转真相", "收尾观点"]
 
     def _generate_script_content(
         self,
@@ -1370,34 +1488,48 @@ class Skill(ComedySkill):
         user_id: str | None,
         attachments: list[dict[str, Any]],
         section: tuple[int, str, list[str], list[str]] | None = None,
+        feedback: str = "",
     ) -> str:
-        """调用 standup_generator 或 LLM 直接生成剧本内容。"""
+        """调用 standup_generator 或 LLM 直接生成脱口秀内容。"""
         context_parts = [f"【{s}】{slots[s]}" for s in self.CORE_SLOTS]
-
-        for att in attachments:
-            full_text = att.get("full_text", "")
-            summary = att.get("summary", "")
-            display = summary if summary else (full_text[:800] + "..." if len(full_text) > 800 else full_text)
-            context_parts.append(f"【{att.get('name', '参考')}】\n{display}")
+        attachment_summary = self._build_attachment_summary(attachments, limit=800)
+        if attachment_summary:
+            context_parts.append(attachment_summary)
 
         if section:
-            # 按小节生成时直接调用 LLM，避免 standup_generator 不受控地输出完整剧本
+            # 分段脱口秀：直接调用 LLM，避免 standup_generator 不受控地输出完整稿件
             idx, title, outline, previous = section
-            section_system = (
-                "你是一位资深喜剧编剧。当前任务是多小节剧本创作中的单个小节。"
-                "请严格只输出当前小节的剧本正文，不要输出其他小节，不要输出完整剧本，不要输出小节标题。"
-            )
-            section_user_parts = [
-                "创作维度：",
-                "\n\n".join(context_parts),
-                f"章节大纲：{' / '.join(outline)}",
-                f"当前小节：第 {idx + 1} 节《{title}》",
-            ]
-            if previous:
-                section_user_parts.append("已生成内容：\n" + "\n\n".join(previous[-2:]))
-            section_user_parts.append(f"请只输出第 {idx + 1} 节《{title}》的剧本内容，字数控制在 300-600 字之间。")
+            pm = PromptManager()
             try:
-                return self._call_llm(section_system, "\n\n".join(section_user_parts))
+                pm.load_from_file(_SECTION_CONTENT_PROMPT_PATH, name="pro/standup_section_content")
+            except Exception as e:
+                logger.warning("加载分段正文 prompt 失败: %s", e)
+
+            previous_text = "\n\n".join(previous[-2:]) if previous else "（无）"
+            try:
+                system_prompt = pm.render(
+                    "pro/standup_section_content",
+                    variables={
+                        "topic": slots.get("话题", ""),
+                        "attitude": slots.get("态度", ""),
+                        "bias": slots.get("偏见", ""),
+                        "emotion": slots.get("情绪", ""),
+                        "outline": " / ".join(outline),
+                        "section_index": str(idx + 1),
+                        "section_title": title,
+                        "previous_sections": previous_text,
+                        "feedback": feedback or "（无）",
+                    },
+                )
+            except Exception as e:
+                logger.warning("渲染分段正文 prompt 失败: %s", e)
+                system_prompt = (
+                    "你是一位顶级中文单口喜剧编剧。请根据话题、态度、偏见、情绪四个维度，"
+                    "只输出当前段落的脱口秀讲述正文，不要输出其他段落，不要输出标题。"
+                )
+            user_prompt = f"请创作第 {idx + 1} 段《{title}》的讲述正文。"
+            try:
+                return self._call_llm(system_prompt, user_prompt)
             except Exception as e:
                 logger.error("小节生成失败: %s", e, exc_info=True)
                 return f"生成失败：{e}"

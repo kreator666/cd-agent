@@ -287,6 +287,19 @@ class Skill(ComedySkill):
         # 12. 处理 artifacts（写入 outputs 兼容旧逻辑），长 artifact 同时生成 attachment
         artifacts = parsed.get("artifacts", [])
         new_attachments = list(parsed.get("attachments", []))
+
+        # 补全 attachment 必填字段，防止 Pydantic 校验失败
+        for att in new_attachments:
+            if not isinstance(att, dict):
+                continue
+            if not att.get("id"):
+                att["id"] = f"att_{uuid.uuid4().hex[:6]}"
+            att["id"] = re.sub(r"[^a-zA-Z0-9_-]", "_", str(att["id"]))
+            att.setdefault("name", f"附件_{att['id']}")
+            att.setdefault("summary", "")
+            att.setdefault("full_text", "")
+            att.setdefault("mime_type", "text/plain")
+
         if artifacts:
             # 补全 artifact 必填字段，防止 Pydantic 校验失败
             for art in artifacts:

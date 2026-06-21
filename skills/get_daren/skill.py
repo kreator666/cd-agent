@@ -227,7 +227,7 @@ class Skill(ComedySkill):
         context = self._build_context(
             target_role, slots, outputs, attachments, decision_nodes, conversation_history, user_input, user_confirmed
         )
-        system_prompt = self._render_role_prompt(target_role)
+        system_prompt = self._render_role_prompt(target_role, workflow_step)
         user_prompt = self._build_user_prompt(context, intent)
 
         try:
@@ -256,6 +256,19 @@ class Skill(ComedySkill):
         if parsed.get("slot_name") and parsed.get("slot_value"):
             slots_update[parsed["slot_name"]] = parsed["slot_value"]
             parsed["slots_update"] = slots_update
+
+        # 兜底：如果当前是核心专家且用户输入非提问、非空，但 LLM 没有填槽，
+        # 则把用户输入作为当前槽位的默认值，确保用户提供的素材不会被忽略。
+        if (
+            target_role in ROLE_TO_SLOT
+            and not slots_update
+            and user_input.strip()
+            and not self._is_question(user_input)
+        ):
+            slot = ROLE_TO_SLOT[target_role]
+            if not slots.get(slot):
+                slots_update[slot] = user_input.strip()
+                parsed["slots_update"] = slots_update
 
         # 10. 计算下一状态（只有明确 advance、显式切换角色或用户确认推进时才推进）
         advance = bool(parsed.get("advance", False) or intent.get("type") == "switch_role")
@@ -368,7 +381,7 @@ class Skill(ComedySkill):
         if current_state == "bias_filling" and slots_update.get("偏见"):
             return {"current_state": "emotion_filling"}
         if current_state == "emotion_filling" and slots_update.get("情绪"):
-            return {"current_state": "ask_generate_mode"}
+            return {"current_state": "chief_editor_review"}
 
         # 在 guiding 状态下，如果某个槽位被填充，自动推进到下一个未填充槽位
         if current_state == "guiding" and slots_update:
@@ -381,7 +394,7 @@ class Skill(ComedySkill):
                     return {"current_state": SLOT_TO_STATE.get(next_slot, "guiding")}
             # 所有槽位已填满
             if all(slots.get(s) for s in self.CORE_SLOTS):
-                return {"current_state": "ask_generate_mode"}
+                return {"current_state": "chief_editor_review"}
 
         # 默认保持当前状态
         return {"current_state": current_state}
@@ -652,8 +665,14 @@ class Skill(ComedySkill):
         # 偏见
         if any(k in lower for k in ("偏见", "观点", "看法", "视角", "讽刺")):
             return "偏见专家"
-        # 情绪
-        if any(k in lower for k in ("情绪", "节奏", "氛围", "感动", "爆笑")):
+        # 情绪（包含常见情绪词、曲线描述词）
+        emotion_keywords = (
+            "情绪", "节奏", "氛围", "感动", "爆笑", "曲线", "转折", "高潮", "低谷",
+            "从", "到", "开始", "最后", "逐渐", "激动", "平静", "紧张", "放松",
+            "愤怒", "开心", "悲伤", "喜悦", "焦虑", "失落", "温暖", "治愈", "尴尬",
+            "无奈", "兴奋", "沮丧", "欣慰", "讽刺", "反差", "预期违背",
+        )
+        if any(k in lower for k in emotion_keywords):
             return "情绪专家"
         return None
 
@@ -683,7 +702,7 @@ class Skill(ComedySkill):
     # ------------------------------------------------------------------ #
     # Prompt 渲染
     # ------------------------------------------------------------------ #
-    def _render_role_prompt(self, role: str) -> str:
+    def _render_role_prompt(self, role: str, workflow_step: dict[str, Any] | None = None) -> str:
         """加载并渲染角色元提示词。"""
         cfg = ROLE_REGISTRY.get(role, ROLE_REGISTRY["主持人"])
         prompt_name = cfg["prompt"]
@@ -694,23 +713,38 @@ class Skill(ComedySkill):
             logger.warning("加载角色提示词 %s 失败: %s", prompt_name, e)
             base = self._default_role_prompt(role)
 
-        # 为核心维度专家动态注入「不急于交接」规则，覆盖 prompt 文件中的旧示例
-        if role in ROLE_TO_SLOT:
+        state_id = workflow_step.get("state_id", "") if workflow_step else ""
+
+        # 总编审阅阶段：先不生成剧本，跟用户讨论整体方案
+        if role == "总编" and state_id == "chief_editor_review":
+            review_rule = (
+                "【重要：当前阶段为总编审阅阶段】\n"
+                "四个核心维度已基本集齐。你现在扮演总编，先跟用户讨论整体创作方案：\n"
+                "- 可以确认、质疑、补充、调整话题/态度/偏见/情绪中的任意维度；\n"
+                "- 如果用户想修改某个维度，提醒他可以直接 @对应专家；\n"
+                "- 只有当用户明确表示「生成剧本」「开始写」「出稿」或类似指令时，才设置 \"advance\": true 并进入生成模式选择；\n"
+                "- 否则保持 \"advance\": false，继续审阅讨论。\n"
+                "输出 JSON 中 role 必须是 \"总编\"，next_role 默认 \"用户\"。\n\n"
+            )
+            base = review_rule + base
+        # 为核心维度专家动态注入「不急于交接但要及时记录」规则，覆盖 prompt 文件中的旧示例
+        elif role in ROLE_TO_SLOT:
             runtime_rule = (
                 "【重要：当前阶段交互规则】\n"
-                "你是核心维度专家，请先跟用户多轮讨论、给建议、提问，帮助用户完善素材，"
-                "不要收到一条输入就立刻填槽并 cue 下一个人。\n"
-                "只有当该维度已经足够完整、用户确认后，才在 JSON 中设置 \"advance\": true "
+                "你是核心维度专家，请先跟用户多轮讨论、给建议、提问，帮助用户完善素材。\n"
+                "只要用户输入包含了本维度的有效素材，就在 JSON 中填写 \"slot_name\" 和 \"slot_value\"（提炼后的内容），"
+                "不一定要等用户说确认才填。\n"
+                "只有当该维度已经足够完整、你判断可以进入下一阶段时，才设置 \"advance\": true "
                 "并在 reply 结尾 cue 下一位专家；否则保持 \"advance\": false，继续在当前角色内讨论。\n"
-                "输出 JSON 示例（未交接时）：\n"
+                "输出 JSON 示例：\n"
                 "```json\n"
                 "{\n"
                 '  "reply": "给用户的简短发言",\n'
                 f'  "role": "{role}",\n'
-                f'  "next_role": "{ROLE_REGISTRY[role]["next_default"]}",\n'
+                f'  "next_role": "{ROLE_REGISTRY[role]["next_default"]}\",\n'
                 '  "advance": false,\n'
                 f'  "slot_name": "{ROLE_TO_SLOT[role]}",\n'
-                '  "slot_value": "只在确认最终值时填写，若只是讨论则留空"\n'
+                '  "slot_value": "提炼后的维度内容（用户提供了就填）"\n'
                 "}\n"
                 "```\n"
                 "【以上规则优先于你将要看到的 prompt 文件内容】\n\n"

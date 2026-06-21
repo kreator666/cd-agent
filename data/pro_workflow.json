@@ -50,6 +50,13 @@
       "skill_type": null,
       "skill": null
     },
+    "chief_editor_review": {
+      "action": "guide",
+      "message": "总编审阅中，可与用户讨论整体方案。",
+      "slot": null,
+      "skill_type": null,
+      "skill": null
+    },
     "ask_generate_mode": {
       "action": "ask",
       "message": "四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？",
@@ -99,6 +106,9 @@
       "next": "aggregating"
     },
     "aggregating": {
+      "next": "chief_editor_review"
+    },
+    "chief_editor_review": {
       "next": "ask_generate_mode"
     },
     "ask_generate_mode": {

@@ -275,6 +275,18 @@ class Skill(ComedySkill):
         artifacts = parsed.get("artifacts", [])
         new_attachments = list(parsed.get("attachments", []))
         if artifacts:
+            # 补全 artifact 必填字段，防止 Pydantic 校验失败
+            for art in artifacts:
+                if not isinstance(art, dict):
+                    continue
+                if not art.get("id"):
+                    art["id"] = f"{art.get('type', 'artifact')}_{uuid.uuid4().hex[:6]}"
+                art.setdefault("type", "note")
+                art.setdefault("title", f"{art.get('type', 'artifact')}_{art.get('id')}")
+                art.setdefault("content", "")
+                art.setdefault("op", "create")
+                art.setdefault("version", 1)
+                art.setdefault("created_by", target_role)
             # 将 artifact 内容同步到 outputs 中，便于旧版前端读取
             for art in artifacts:
                 outputs_update[f"artifact_{art.get('type')}_{art.get('id')}"] = art.get("content", "")

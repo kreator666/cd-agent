@@ -256,8 +256,9 @@ class Skill(ComedySkill):
             slots_update[parsed["slot_name"]] = parsed["slot_value"]
             parsed["slots_update"] = slots_update
 
-        # 10. 计算下一状态
-        state_update = self._compute_next_state(current_state, slots_update, slots, intent)
+        # 10. 计算下一状态（只有明确 advance 或显式切换角色时才推进）
+        advance = bool(parsed.get("advance", False) or intent.get("type") == "switch_role")
+        state_update = self._compute_next_state(current_state, slots_update, slots, intent, advance)
 
         # 11. 更新 outputs（工具输出等）
         outputs_update = parsed.get("outputs_update", {})
@@ -302,7 +303,7 @@ class Skill(ComedySkill):
         # 14. 构造最终返回（兼容旧格式 + 新格式）
         result = {
             "reply": parsed.get("reply", ""),
-            "advance": bool(slots_update),
+            "advance": advance,
             "slots_update": slots_update,
             "outputs_update": outputs_update,
             "role": target_role,
@@ -321,11 +322,24 @@ class Skill(ComedySkill):
         slots_update: dict[str, Any],
         slots: dict[str, Any],
         intent: dict[str, Any],
+        advance: bool = False,
     ) -> dict[str, Any]:
-        """根据当前状态和槽位变化计算下一状态。"""
-        # 如果有 @mention 或语义跳转，保持 guiding 让角色自由调度
+        """根据当前状态和槽位变化计算下一状态。
+
+        只有当前角色明确给出 advance 信号（或用户显式切换角色）时才推进状态，
+        否则保持当前状态，支持多轮交互。
+        """
+        # 显式角色切换：@mention 或语义跳转
         if intent.get("mentioned_role") or intent.get("semantic_role"):
-            return {"current_state": "guiding"}
+            if advance:
+                role = intent.get("mentioned_role") or intent.get("semantic_role")
+                slot = ROLE_TO_SLOT.get(role)
+                return {"current_state": SLOT_TO_STATE.get(slot, "guiding")}
+            return {"current_state": current_state}
+
+        # 未收到 advance 信号时保持当前状态
+        if not advance:
+            return {"current_state": current_state}
 
         # collect 动作填完槽位后按顺序推进
         if current_state == "topic_filling" and slots_update.get("话题"):
@@ -561,14 +575,8 @@ class Skill(ComedySkill):
                 intent["slot_name"] = slot
             return intent
 
-        # 4. 当前角色可填充槽位，且用户输入看起来像填槽内容
-        slot = ROLE_TO_SLOT.get(current_role)
-        if slot and text and not self._is_question(text) and not slots.get(slot):
-            intent["type"] = "fill_slot"
-            intent["slot_name"] = slot
-            intent["slot_value"] = text
-            return intent
-
+        # 注：不再根据当前角色自动把用户输入填槽，避免多轮讨论时把用户的每一句回答都当成槽位值。
+        # 槽位填写交给 LLM 自行判断，通过 JSON 中的 slot_name / slot_value 显式返回。
         return intent
 
     @staticmethod
@@ -662,10 +670,34 @@ class Skill(ComedySkill):
         prompt_name = cfg["prompt"]
         try:
             pm = PromptManager()
-            return pm.render(prompt_name)
+            base = pm.render(prompt_name)
         except Exception as e:
             logger.warning("加载角色提示词 %s 失败: %s", prompt_name, e)
-            return self._default_role_prompt(role)
+            base = self._default_role_prompt(role)
+
+        # 为核心维度专家动态注入「不急于交接」规则，覆盖 prompt 文件中的旧示例
+        if role in ROLE_TO_SLOT:
+            runtime_rule = (
+                "【重要：当前阶段交互规则】\n"
+                "你是核心维度专家，请先跟用户多轮讨论、给建议、提问，帮助用户完善素材，"
+                "不要收到一条输入就立刻填槽并 cue 下一个人。\n"
+                "只有当该维度已经足够完整、用户确认后，才在 JSON 中设置 \"advance\": true "
+                "并在 reply 结尾 cue 下一位专家；否则保持 \"advance\": false，继续在当前角色内讨论。\n"
+                "输出 JSON 示例（未交接时）：\n"
+                "```json\n"
+                "{\n"
+                '  "reply": "给用户的简短发言",\n'
+                f'  "role": "{role}",\n'
+                f'  "next_role": "{ROLE_REGISTRY[role]["next_default"]}",\n'
+                '  "advance": false,\n'
+                f'  "slot_name": "{ROLE_TO_SLOT[role]}",\n'
+                '  "slot_value": "只在确认最终值时填写，若只是讨论则留空"\n'
+                "}\n"
+                "```\n"
+                "【以上规则优先于你将要看到的 prompt 文件内容】\n\n"
+            )
+            base = runtime_rule + base
+        return base
 
     @staticmethod
     def _default_role_prompt(role: str) -> str:

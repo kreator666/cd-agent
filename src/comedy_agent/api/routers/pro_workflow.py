@@ -278,14 +278,6 @@ class ProWorkflowEngine:
     # 核心工作流程维度（由 喜剧龙虾 内部处理，不直接调用外部 Skill）
     _CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
 
-    # 角色 -> 可填充槽位（用于自动 cue 下一个未填槽位的专家）
-    _ROLE_TO_SLOT: ClassVar[dict[str, str]] = {
-        "话题专家": "话题",
-        "态度专家": "态度",
-        "偏见专家": "偏见",
-        "情绪专家": "情绪",
-    }
-
     # 前端展示名称 -> Skill 注册名（处理 @素材 / @排版 等中文 mention）
     _DISPLAY_TO_SKILL_NAME: ClassVar[dict[str, str]] = {
         "素材": "material",
@@ -386,21 +378,13 @@ class ProWorkflowEngine:
         self._apply_skill_result(wf_state, result, message)
         messages.append({"role": "ai", "content": result.get("reply", "")})
 
-        # 8. 自动 cue 下一个未填槽位的核心专家（只 cue 一次）
-        next_role = result.get("next_role")
-        next_slot = self._ROLE_TO_SLOT.get(next_role) if next_role else None
+        # 8. 只有当 skill 明确给出 advance 信号且要切换角色时，才更新当前角色
         if (
-            next_slot
-            and not wf_state.get("slots", {}).get(next_slot)
-            and next_role != wf_state.get("current_role")
+            result.get("advance")
+            and result.get("next_role")
+            and result.get("next_role") != result.get("role")
         ):
-            wf_state["current_role"] = next_role
-            current_state_id = wf_state.get("current_state", self.workflow.get("initial_state", "guiding"))
-            state_cfg = dict(self.workflow.get("states", {}).get(current_state_id, {"action": "guide"}))
-            state_cfg["state_id"] = current_state_id
-            result = self._execute_state(state_cfg, wf_state, "", user_id, messages)
-            self._apply_skill_result(wf_state, result, "")
-            messages.append({"role": "ai", "content": result.get("reply", "")})
+            wf_state["current_role"] = result["next_role"]
 
         # 9. 确定最终响应类型
         if "final_script" in result.get("outputs_update", {}):

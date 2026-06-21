@@ -223,8 +223,9 @@ class Skill(ComedySkill):
             }
 
         # 7. 渲染角色提示词并调用 LLM
+        user_confirmed = self._detect_confirmation(user_input)
         context = self._build_context(
-            target_role, slots, outputs, attachments, decision_nodes, conversation_history, user_input
+            target_role, slots, outputs, attachments, decision_nodes, conversation_history, user_input, user_confirmed
         )
         system_prompt = self._render_role_prompt(target_role)
         user_prompt = self._build_user_prompt(context, intent)
@@ -256,8 +257,12 @@ class Skill(ComedySkill):
             slots_update[parsed["slot_name"]] = parsed["slot_value"]
             parsed["slots_update"] = slots_update
 
-        # 10. 计算下一状态（只有明确 advance 或显式切换角色时才推进）
+        # 10. 计算下一状态（只有明确 advance、显式切换角色或用户确认推进时才推进）
         advance = bool(parsed.get("advance", False) or intent.get("type") == "switch_role")
+        if user_confirmed and target_role in ROLE_TO_SLOT:
+            slot = ROLE_TO_SLOT[target_role]
+            if slots.get(slot) or slots_update.get(slot):
+                advance = True
         state_update = self._compute_next_state(current_state, slots_update, slots, intent, advance)
 
         # 11. 更新 outputs（工具输出等）
@@ -718,6 +723,7 @@ class Skill(ComedySkill):
         decision_nodes: list[dict[str, Any]],
         conversation_history: list[dict[str, Any]],
         user_input: str,
+        user_confirmed: bool = False,
     ) -> dict[str, Any]:
         """构建角色提示词上下文变量。"""
         # 最近决策节点摘要
@@ -750,6 +756,7 @@ class Skill(ComedySkill):
             "node_summary": node_summary,
             "conversation_history": history_text,
             "user_input": user_input,
+            "user_confirmed": user_confirmed,
             "next_default": ROLE_REGISTRY.get(role, {}).get("next_default", "用户"),
             "can_fill_slot": ROLE_REGISTRY.get(role, {}).get("can_fill_slot", ""),
         }
@@ -770,6 +777,8 @@ class Skill(ComedySkill):
             parts.append(f"最近决策节点：\n{context['node_summary']}")
         if context["conversation_history"]:
             parts.append(f"最近对话：\n{context['conversation_history']}")
+        if context.get("user_confirmed"):
+            parts.append("用户输入包含确认/推进信号（如“就这个”“下一步”“继续”），如果当前维度已经充分，请设置 advance: true 并交接给下一个专家。")
         parts.append(f"默认下一个角色：{context['next_default']}")
         parts.append("请按角色提示词要求输出 JSON。")
         return "\n\n".join(parts)
@@ -1361,5 +1370,28 @@ class Skill(ComedySkill):
             if kw in lower:
                 return True
         if re.search(r"[^不没未必](吗|呢|吧)[。！]?$", text):
+            return True
+        return False
+
+    _CONFIRMATION_WORDS: ClassVar[tuple[str, ...]] = (
+        "就这个", "就按这个", "定下来了", "定稿", "确定", "确认", "就这样",
+        "可以", "好的", "行", "没问题", "ok", "下一步", "继续", "推进",
+    )
+
+    _CONFIRMATION_NEGATIONS: ClassVar[tuple[str, ...]] = ("不", "没", "别", "否")
+
+    @classmethod
+    def _detect_confirmation(cls, user_input: str) -> bool:
+        """判断用户输入是否为确认/推进信号。"""
+        text = user_input.strip().lower()
+        if not text:
+            return False
+        for kw in cls._CONFIRMATION_WORDS:
+            idx = text.find(kw)
+            if idx == -1:
+                continue
+            # 简单过滤否定前缀，如"不可以"、"不要继续"
+            if idx > 0 and text[idx - 1] in cls._CONFIRMATION_NEGATIONS:
+                continue
             return True
         return False

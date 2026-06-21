@@ -278,6 +278,14 @@ class ProWorkflowEngine:
     # 核心工作流程维度（由 喜剧龙虾 内部处理，不直接调用外部 Skill）
     _CORE_SLOTS: ClassVar[tuple[str, ...]] = ("话题", "态度", "偏见", "情绪")
 
+    # 角色 -> 可填充槽位（用于判断当前正在聊哪个维度）
+    _ROLE_TO_SLOT: ClassVar[dict[str, str]] = {
+        "话题专家": "话题",
+        "态度专家": "态度",
+        "偏见专家": "偏见",
+        "情绪专家": "情绪",
+    }
+
     # 前端展示名称 -> Skill 注册名（处理 @素材 / @排版 等中文 mention）
     _DISPLAY_TO_SKILL_NAME: ClassVar[dict[str, str]] = {
         "素材": "material",
@@ -397,7 +405,7 @@ class ProWorkflowEngine:
 
         # 10. 构建 checklist 和 todo_board
         checklist = self._build_checklist(wf_state)
-        todo_board = self._build_todo_board(wf_state.get("slots", {}))
+        todo_board = self._build_todo_board(wf_state)
         wf_state["todo_board"] = todo_board
 
         # 11. 把最终轮作为步骤展示
@@ -433,25 +441,29 @@ class ProWorkflowEngine:
     # 内部方法
     # ------------------------------------------------------------------ #
     def _init_state(self) -> dict[str, Any]:
-        return {
+        state = {
             "current_state": self.workflow.get("initial_state", ""),
             "current_role": "主持人",
             "slots": {},
             "outputs": {},
             "attachments": [],
             "decision_nodes": [],
-            "todo_board": self._build_todo_board({}),
             "log": [],
         }
+        state["todo_board"] = self._build_todo_board(state)
+        return state
 
-    def _build_todo_board(self, slots: dict[str, Any]) -> list[dict[str, Any]]:
+    def _build_todo_board(self, wf_state: dict[str, Any]) -> list[dict[str, Any]]:
         """根据核心槽位构建 TODO 看板。"""
+        slots = wf_state.get("slots", {})
+        current_role = wf_state.get("current_role")
+        current_slot = self._ROLE_TO_SLOT.get(current_role)
         return [
-            {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False, "blocked": False, "role": "话题专家"},
-            {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False, "blocked": not bool(slots.get("话题")), "role": "态度专家"},
-            {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False, "blocked": not bool(slots.get("态度")), "role": "偏见专家"},
-            {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False, "blocked": not bool(slots.get("偏见")), "role": "情绪专家"},
-            {"id": "aggregate", "label": "生成最终剧本", "done": False, "optional": False, "blocked": not all(slots.get(s) for s in self._CORE_SLOTS), "role": "总编"},
+            {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False, "blocked": False, "role": "话题专家", "in_progress": ("话题" == current_slot and not slots.get("话题"))},
+            {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False, "blocked": not bool(slots.get("话题")), "role": "态度专家", "in_progress": ("态度" == current_slot and not slots.get("态度"))},
+            {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False, "blocked": not bool(slots.get("态度")), "role": "偏见专家", "in_progress": ("偏见" == current_slot and not slots.get("偏见"))},
+            {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False, "blocked": not bool(slots.get("偏见")), "role": "情绪专家", "in_progress": ("情绪" == current_slot and not slots.get("情绪"))},
+            {"id": "aggregate", "label": "生成最终剧本", "done": False, "optional": False, "blocked": not all(slots.get(s) for s in self._CORE_SLOTS), "role": "总编", "in_progress": False},
         ]
 
     def _apply_skill_result(
@@ -762,12 +774,14 @@ class ProWorkflowEngine:
         """根据核心槽位构建流程检查清单。"""
         slots = wf_state.get("slots", {})
         outputs = wf_state.get("outputs", {})
+        current_role = wf_state.get("current_role")
+        current_slot = self._ROLE_TO_SLOT.get(current_role)
         return [
-            {"id": "话题",     "label": "话题", "done": bool(slots.get("话题")),     "optional": False},
-            {"id": "态度",     "label": "态度", "done": bool(slots.get("态度")),     "optional": False},
-            {"id": "偏见",     "label": "偏见", "done": bool(slots.get("偏见")),     "optional": False},
-            {"id": "情绪",     "label": "情绪", "done": bool(slots.get("情绪")),     "optional": False},
-            {"id": "aggregate","label": "生成最终剧本", "done": "final_script" in outputs, "optional": False},
+            {"id": "话题",     "label": "话题", "done": bool(slots.get("话题")),     "optional": False, "in_progress": ("话题" == current_slot and not slots.get("话题"))},
+            {"id": "态度",     "label": "态度", "done": bool(slots.get("态度")),     "optional": False, "in_progress": ("态度" == current_slot and not slots.get("态度"))},
+            {"id": "偏见",     "label": "偏见", "done": bool(slots.get("偏见")),     "optional": False, "in_progress": ("偏见" == current_slot and not slots.get("偏见"))},
+            {"id": "情绪",     "label": "情绪", "done": bool(slots.get("情绪")),     "optional": False, "in_progress": ("情绪" == current_slot and not slots.get("情绪"))},
+            {"id": "aggregate","label": "生成最终剧本", "done": "final_script" in outputs, "optional": False, "in_progress": False},
         ]
 
 
@@ -807,7 +821,7 @@ class ProWorkflowEngine:
     ) -> dict[str, Any]:
         """构建并返回最终响应。"""
         # 同步更新 TODO 看板
-        wf_state["todo_board"] = self._build_todo_board(wf_state.get("slots", {}))
+        wf_state["todo_board"] = self._build_todo_board(wf_state)
 
         metadata = {"workflow": wf_state}
         if persona_id:

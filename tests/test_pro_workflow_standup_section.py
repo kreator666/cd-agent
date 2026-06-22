@@ -173,3 +173,76 @@ def test_finish_combines_sections_and_goes_done(skill: Skill, full_slots: dict[s
     assert "mock section 1" in data["outputs_update"]["final_script"]
     assert "mock section 2" in data["outputs_update"]["final_script"]
     assert data["outputs_update"]["section_status"] == "finished"
+
+
+def test_chief_editor_mode_with_requirements_skips_ask(
+    skill: Skill, full_slots: dict[str, str]
+) -> None:
+    """总编阶段用户直接说「分小节生成 + 要求」时，不应再询问生成方式，且要求要保留。"""
+    workflow_step = {"action": "guide", "state_id": "chief_editor_review", "role": "总编"}
+    user_input = "分小节生成。注重吐槽的幽默和加梗，不要说套话"
+    with patch.object(skill, "_generate_section_outline", return_value=["开场铺垫", "观察升级", "收尾观点"]), \
+         patch.object(skill, "_generate_script_content", return_value="mock section 1") as mock_gen:
+        result = skill._run(
+            workflow_step=workflow_step,
+            slots=full_slots,
+            outputs={},
+            user_input=user_input,
+            user_id="user1",
+        )
+    data = _parse_result(skill, result)
+    assert "四个维度已集齐" not in data["reply"]
+    assert data["state_update"]["current_state"] == "generating_section"
+    assert "注重吐槽的幽默和加梗" in data["outputs_update"]["section_requirements"]
+    # 第一段生成时就要把全局要求传进去
+    assert "注重吐槽" in mock_gen.call_args.kwargs.get("feedback", "")
+
+
+def test_feedback_defaults_to_retry_not_continue(
+    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+) -> None:
+    """用户给出风格/修改意见（如「太平了」）时，应重写当前段而不是继续下一段。"""
+    outputs = {
+        "section_outline": ["开场铺垫", "观察升级", "收尾观点"],
+        "section_index": 0,
+        "generated_sections": ["## 开场铺垫\n\nmock section 1"],
+        "script_main": "## 开场铺垫\n\nmock section 1",
+        "section_status": "awaiting_confirm",
+    }
+    with patch.object(skill, "_generate_script_content", return_value="mock section 1 v2") as mock_gen:
+        result = skill._run(
+            workflow_step=section_workflow_step,
+            slots=full_slots,
+            outputs=outputs,
+            user_input="太平了，加点攻击性",
+            user_id="user1",
+        )
+    data = _parse_result(skill, result)
+    # 索引不变，当前段被重写
+    assert data["outputs_update"]["section_index"] == 0
+    assert len(data["outputs_update"]["generated_sections"]) == 1
+    assert data["artifacts"][0]["op"] == "update"
+    assert "太平了，加点攻击性" in mock_gen.call_args.kwargs.get("feedback", "")
+
+
+def test_continue_after_last_section_does_not_auto_finish(
+    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+) -> None:
+    """已经到最后一段时，用户没说「完成」就不应自动结束生成。"""
+    outputs = {
+        "section_outline": ["开场铺垫", "观察升级"],
+        "section_index": 1,
+        "generated_sections": ["## 开场铺垫\n\nmock section 1", "## 观察升级\n\nmock section 2"],
+        "section_status": "awaiting_confirm",
+    }
+    result = skill._run(
+        workflow_step=section_workflow_step,
+        slots=full_slots,
+        outputs=outputs,
+        user_input="继续",
+        user_id="user1",
+    )
+    data = _parse_result(skill, result)
+    assert data["state_update"]["current_state"] != "done"
+    assert data["outputs_update"]["section_status"] == "awaiting_confirm"
+    assert "所有段落已生成完毕" in data["reply"] or "完成" in data["reply"]

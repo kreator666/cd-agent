@@ -31,6 +31,22 @@ _SECTION_CONTENT_PROMPT_PATH = (
     Path(__file__).resolve().parent.parent.parent / "data" / "prompts" / "pro" / "standup_section_content.md"
 )
 
+# 生成模式识别与要求提取
+_GENERATE_MODE_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (
+        re.compile(
+            r"一次性(?:生成|完整生成|输出)?|一次性|完整生成|全部生成|整体生成|完整|全部|整体|\bone\s*shot\b|\bone\b|\ball\b"
+        ),
+        "one_shot",
+    ),
+    (
+        re.compile(
+            r"(?:按|分)?小节(?:生成|输出)?|按小节|分小节|分段(?:生成|输出)?|逐段(?:生成|输出)?|一节一节|\bsection\b|一部分"
+        ),
+        "section",
+    ),
+]
+
 
 class GetDarenArgs(BaseModel):
     """喜剧龙虾调度参数。"""
@@ -207,9 +223,9 @@ class Skill(ComedySkill):
             # 已完成，处理后续指令（修改/排版/保存）
             return self._handle_done_state(user_input, slots, outputs, user_id, attachments, current_role)
 
-        # 3. 总编审阅/生成模式选择阶段：如果用户直接回复选项或模式关键词，直接生成
-        # 避免 LLM  proactive 给出选项后，用户回复 "2" 却被当作普通聊天处理
-        if (current_state == "chief_editor_review" or current_role == "总编") and len(user_input.strip()) <= 8:
+        # 3. 总编审阅/生成模式选择阶段：只要用户输入里带生成模式关键词，就直接生成
+        # 不再受长度限制，也不重复询问「一次性 / 按小节」
+        if current_state == "chief_editor_review":
             if self._parse_generate_mode(user_input):
                 return self._handle_ask_generate_mode(
                     user_input, current_state, slots, outputs, user_id, attachments
@@ -217,7 +233,9 @@ class Skill(ComedySkill):
 
         # 4. 触发词检测（生成）
         if intent.get("trigger_generate"):
-            return self._handle_generate(slots, outputs, user_id, attachments, current_role, current_state)
+            return self._handle_generate(
+                user_input, slots, outputs, user_id, attachments, current_role, current_state
+            )
 
         # 4. 确定当前角色
         target_role = self._determine_target_role(intent, current_role, slots)
@@ -1052,6 +1070,7 @@ class Skill(ComedySkill):
     # ------------------------------------------------------------------ #
     def _handle_generate(
         self,
+        user_input: str,
         slots: dict[str, Any],
         outputs: dict[str, Any],
         user_id: str | None,
@@ -1059,7 +1078,10 @@ class Skill(ComedySkill):
         current_role: str,
         current_state: str,
     ) -> str:
-        """处理生成触发词。强制卡点：四槽位填满才能进入生成阶段。"""
+        """处理生成触发词。强制卡点：四槽位填满才能进入生成阶段。
+
+        如果用户输入里已经包含生成模式和要求，直接生成，不再二次询问。
+        """
         missing = [s for s in self.CORE_SLOTS if not slots.get(s)]
         if missing:
             next_role = SLOT_TO_ROLE.get(missing[0], "主持人")
@@ -1075,7 +1097,17 @@ class Skill(ComedySkill):
                 ensure_ascii=False,
             )
 
-        # 四维度已齐：进入询问生成方式状态
+        mode, requirements = self._extract_generate_mode_and_requirements(user_input)
+        if mode == "one_shot":
+            return self._handle_generate_one_shot(
+                slots, outputs, user_id, attachments, current_state, requirements=requirements
+            )
+        if mode == "section":
+            return self._handle_generate_section(
+                slots, outputs, user_id, attachments, user_input, current_state
+            )
+
+        # 四维度已齐且用户未指定模式：进入询问生成方式状态
         return json.dumps(
             {
                 "reply": "📝 四个维度已集齐。你希望「一次性生成」完整剧本，还是「按小节生成」逐段输出？",
@@ -1095,11 +1127,13 @@ class Skill(ComedySkill):
         user_id: str | None,
         attachments: list[dict[str, Any]],
     ) -> str:
-        """解析用户选择的生成模式并直接生成内容。"""
-        mode = self._parse_generate_mode(user_input)
+        """解析用户选择的生成模式并直接生成内容，同时保留风格/要求说明。"""
+        mode, requirements = self._extract_generate_mode_and_requirements(user_input)
 
         if mode == "one_shot":
-            return self._handle_generate_one_shot(slots, outputs, user_id, attachments, current_state)
+            return self._handle_generate_one_shot(
+                slots, outputs, user_id, attachments, current_state, requirements=requirements
+            )
 
         if mode == "section":
             return self._handle_generate_section(
@@ -1122,25 +1156,35 @@ class Skill(ComedySkill):
         )
 
     @staticmethod
+    def _extract_generate_mode_and_requirements(user_input: str) -> tuple[str | None, str]:
+        """从用户输入中提取生成模式，并保留剩余的风格/要求说明。
+
+        返回 (mode, requirements)：
+        - mode: one_shot / section / None
+        - requirements: 去除模式关键词后的用户补充要求
+        """
+        text = user_input.strip()
+        if not text:
+            return None, ""
+
+        lower = text.lower()
+        if lower in ("1", "一", "一次性"):
+            return "one_shot", ""
+        if lower in ("2", "二", "按小节", "分小节"):
+            return "section", ""
+
+        for pattern, mode in _GENERATE_MODE_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                requirements = (text[: match.start()] + text[match.end() :]).strip(" \t。！.,;、：")
+                return mode, requirements
+
+        return None, text
+
+    @staticmethod
     def _parse_generate_mode(user_input: str) -> str | None:
-        """解析用户选择的生成模式。"""
-        text = user_input.strip().lower()
-        one_shot_keywords = ("一次性", "一次", "完整", "全部", "整体", "one", "全部生成")
-        section_keywords = ("按小节", "小节", "分段", "逐段", "一节一节", "section", "一部分")
-
-        # 先检查是否有明确否定词
-        if any(k in text for k in one_shot_keywords) and "不" not in text[:10]:
-            return "one_shot"
-        if any(k in text for k in section_keywords) and "不" not in text[:10]:
-            return "section"
-
-        # 简短回复兜底
-        if text in ("1", "一", "一次性"):
-            return "one_shot"
-        if text in ("2", "二", "按小节"):
-            return "section"
-
-        return None
+        """解析用户选择的生成模式（仅返回模式，不提取要求）。"""
+        return Skill._extract_generate_mode_and_requirements(user_input)[0]
 
     def _handle_generate_one_shot(
         self,
@@ -1149,9 +1193,12 @@ class Skill(ComedySkill):
         user_id: str | None,
         attachments: list[dict[str, Any]],
         current_state: str,
+        requirements: str = "",
     ) -> str:
         """一次性生成完整剧本。"""
-        final = self._generate_script_content(slots, outputs, user_id, attachments, section=None)
+        final = self._generate_script_content(
+            slots, outputs, user_id, attachments, section=None, requirements=requirements
+        )
 
         artifact = {
             "id": "script_main",
@@ -1191,16 +1238,21 @@ class Skill(ComedySkill):
         generated_sections = list(outputs.get("generated_sections", []))
         section_status = outputs.get("section_status")
 
-        # 第一次进入：生成段落大纲
+        # 第一次进入：生成段落大纲，同时提取用户的全局风格/要求
+        requirements = outputs.get("section_requirements", "")
         if not section_outline:
             section_outline = self._generate_section_outline(slots, attachments)
             section_index = 0
             generated_sections = []
+            _, requirements = self._extract_generate_mode_and_requirements(user_input)
+            requirements = requirements.strip()
 
-        feedback = ""
+        # 全局要求作为基础反馈，贯穿每一小节
+        feedback = requirements
+
         # 如果已经生成过段落（无论 section_status 是否正常落库），先解析用户反馈
         if section_status == "awaiting_confirm" or generated_sections:
-            action, feedback = self._parse_confirm_response(user_input)
+            action, fb = self._parse_confirm_response(user_input)
             if action == "finish":
                 full_script = "\n\n".join(generated_sections)
                 return json.dumps(
@@ -1221,27 +1273,32 @@ class Skill(ComedySkill):
                 )
             if action == "continue":
                 if section_index + 1 >= len(section_outline):
-                    # 已经是最后一段，把“继续”视为完成
+                    # 已经到最后一段，不自动结束，等待用户明确说「完成」
                     full_script = "\n\n".join(generated_sections)
                     return json.dumps(
                         {
-                            "reply": "✅ 已到最后一段，生成结束。完整脱口秀稿件在右侧工作台。",
+                            "reply": "✅ 所有段落已生成完毕。回复「完成」结束，或继续补充修改。",
                             "next_role": "用户",
                             "current_role": "总编",
-                            "state_update": {"current_state": "done"},
+                            "state_update": {"current_state": "generating_section"},
                             "slots_update": {},
                             "outputs_update": {
                                 **outputs,
                                 "final_script": full_script,
                                 "script_main": full_script,
-                                "section_status": "finished",
+                                "section_status": "awaiting_confirm",
                             },
                         },
                         ensure_ascii=False,
                     )
                 section_index += 1
-                feedback = ""
-            # action == "retry" 或 "feedback" 时，section_index 不变，用 feedback 重新生成当前段
+                feedback = requirements
+            elif action == "retry":
+                # 将全局要求与当前段反馈合并
+                if fb:
+                    feedback = f"{requirements}\n{fb}".strip() if requirements else fb
+                else:
+                    feedback = requirements
 
         # 校验索引
         if section_index >= len(section_outline):
@@ -1288,6 +1345,7 @@ class Skill(ComedySkill):
             "section_outline": section_outline,
             "section_index": section_index,
             "generated_sections": generated_sections,
+            "section_requirements": requirements,
             "final_script": full_script,
             "script_main": full_script,
             "section_status": "awaiting_confirm",
@@ -1413,8 +1471,11 @@ class Skill(ComedySkill):
         - action: finish / continue / retry
         - feedback: 当 action 为 retry 时，附带的用户修改意见
 
-        设计原则：用户没有明确说「完成/切换/重写」时，默认继续生成下一段，
-        符合主编角色「一直写」的预期；只有显式反馈才触发重写。
+        设计原则：
+        - 显式「完成/停止」才结束；
+        - 显式「继续/确认」才推进到下一段；
+        - 其余输入（风格要求、修改意见、"太平了" 等）一律视为对当前段的反馈，
+          避免把用户的修改要求误解为「继续」而跳过或覆盖。
         """
         text = user_input.strip().lower()
         if not text:
@@ -1424,12 +1485,25 @@ class Skill(ComedySkill):
         if any(k in text for k in finish_words):
             return "finish", ""
 
+        # 显式继续 / 确认推进（短句）
+        continue_words = (
+            "继续", "下一节", "next", "go on", "下一步", "生成下一段", "往下", "往下写",
+            "接着", "往下生成", "ok", "好的", "可以", "行", "没问题", "就这样", "确认",
+            "下一步", "推进",
+        )
+        # 简短确认语直接推进；如果句子较长且含其他内容，更可能是反馈
+        is_short_confirmation = len(text) <= 12 and (
+            any(k in text for k in continue_words) or self._detect_confirmation(user_input)
+        )
+        if is_short_confirmation:
+            return "continue", ""
+
         retry_words = ("修改", "重来", "重生成", "retry", "不满意", "优化", "调整", "重写", "改一下", "再写")
         if any(k in text for k in retry_words):
             return "retry", user_input.strip()
 
-        # 默认继续：用户不说完成/重写/切换，主编就继续写下一段
-        return "continue", ""
+        # 默认视为对当前段的反馈，用原始输入作为修改意见
+        return "retry", user_input.strip()
 
     @staticmethod
     def _build_attachment_summary(attachments: list[dict[str, Any]], limit: int = 800) -> str:
@@ -1502,6 +1576,7 @@ class Skill(ComedySkill):
         attachments: list[dict[str, Any]],
         section: tuple[int, str, list[str], list[str]] | None = None,
         feedback: str = "",
+        requirements: str = "",
     ) -> str:
         """调用 standup_generator 或 LLM 直接生成脱口秀内容。"""
         context_parts = [f"【{s}】{slots[s]}" for s in self.CORE_SLOTS]
@@ -1519,6 +1594,12 @@ class Skill(ComedySkill):
                 logger.warning("加载分段正文 prompt 失败: %s", e)
 
             previous_text = "\n\n".join(previous[-2:]) if previous else "（无）"
+            # 把全局要求与当前段反馈合并，确保用户初始要求不会被后续操作覆盖
+            effective_feedback = feedback or "（无）"
+            if requirements and feedback:
+                effective_feedback = f"全局要求：{requirements}\n当前段反馈：{feedback}"
+            elif requirements:
+                effective_feedback = f"全局要求：{requirements}"
             try:
                 system_prompt = pm.render(
                     "pro/standup_section_content",
@@ -1531,7 +1612,7 @@ class Skill(ComedySkill):
                         "section_index": str(idx + 1),
                         "section_title": title,
                         "previous_sections": previous_text,
-                        "feedback": feedback or "（无）",
+                        "feedback": effective_feedback,
                     },
                 )
             except Exception as e:
@@ -1546,6 +1627,9 @@ class Skill(ComedySkill):
             except Exception as e:
                 logger.error("小节生成失败: %s", e, exc_info=True)
                 return f"生成失败：{e}"
+
+        if requirements:
+            context_parts.append(f"【用户额外要求】{requirements}")
 
         topic = "\n\n".join(context_parts)
 

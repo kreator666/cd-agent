@@ -155,26 +155,35 @@ class TestGenerateMode:
         assert self.skill._parse_section_command("随便说点") == "continue"
 
     def test_compute_next_state_slot_filling(self):
-        result = self.skill._compute_next_state("topic_filling", {"话题": "职场"}, {}, {})
+        result = self.skill._compute_next_state(
+            "topic_filling", {"话题": "职场"}, {}, {}, advance=True
+        )
         assert result["current_state"] == "attitude_filling"
 
     def test_compute_next_state_all_slots_filled(self):
         slots = {"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "从愤怒到释然"}
-        result = self.skill._compute_next_state("emotion_filling", {"情绪": "从愤怒到释然"}, slots, {})
-        assert result["current_state"] == "ask_generate_mode"
+        result = self.skill._compute_next_state(
+            "emotion_filling", {"情绪": "从愤怒到释然"}, slots, {}, advance=True
+        )
+        assert result["current_state"] == "chief_editor_review"
 
     def test_compute_next_state_guiding_fill_slot(self):
         slots = {"话题": "职场"}
-        result = self.skill._compute_next_state("guiding", {"话题": "职场"}, slots, {})
+        result = self.skill._compute_next_state(
+            "guiding", {"话题": "职场"}, slots, {}, advance=True
+        )
         assert result["current_state"] == "attitude_filling"
 
     def test_compute_next_state_guiding_all_filled(self):
         slots = {"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "从愤怒到释然"}
-        result = self.skill._compute_next_state("guiding", {"情绪": "从愤怒到释然"}, slots, {})
-        assert result["current_state"] == "ask_generate_mode"
+        result = self.skill._compute_next_state(
+            "guiding", {"情绪": "从愤怒到释然"}, slots, {}, advance=True
+        )
+        assert result["current_state"] == "chief_editor_review"
 
     def test_handle_generate_missing_slots(self):
         result = json.loads(self.skill._handle_generate(
+            user_input="生成",
             slots={"话题": "职场"},
             outputs={},
             user_id=None,
@@ -185,20 +194,30 @@ class TestGenerateMode:
         assert "态度" in result["reply"]
         assert result["state_update"]["current_state"] == "attitude_filling"
 
-    def test_handle_ask_generate_mode_one_shot(self):
-        result = json.loads(self.skill._handle_ask_generate_mode("一次性", "ask_generate_mode"))
-        assert result["state_update"]["current_state"] == "generating_one_shot"
+    def test_handle_ask_generate_mode_one_shot(self, monkeypatch):
+        monkeypatch.setattr(self.skill, "_generate_script_content", lambda *args, **kwargs: "mock full script")
+        result = json.loads(self.skill._handle_ask_generate_mode(
+            "一次性", "ask_generate_mode",
+            slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
+            outputs={}, user_id=None, attachments=[],
+        ))
+        assert result["state_update"]["current_state"] == "done"
+        assert result["outputs_update"].get("final_script") == "mock full script"
 
     def test_handle_ask_generate_mode_section(self):
-        result = json.loads(self.skill._handle_ask_generate_mode("按小节", "ask_generate_mode"))
+        result = json.loads(self.skill._handle_ask_generate_mode(
+            "按小节", "ask_generate_mode",
+            slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
+            outputs={}, user_id=None, attachments=[],
+        ))
         assert result["state_update"]["current_state"] == "generating_section"
-        assert result["state_update"]["section_index"] == 0
+        assert result["outputs_update"]["section_index"] == 0
 
     def test_handle_generate_section_first(self, monkeypatch):
         def fake_outline(slots, attachments):
             return ["开场", "发展", "高潮", "结尾"]
 
-        def fake_content(slots, outputs, user_id, attachments, section=None):
+        def fake_content(*args, **kwargs):
             return "这是第一节内容。"
 
         monkeypatch.setattr(self.skill, "_generate_section_outline", fake_outline)
@@ -209,11 +228,11 @@ class TestGenerateMode:
             outputs={},
             user_id=None,
             attachments=[],
-            user_input="继续",
+            user_input="按小节生成",
             current_state="generating_section",
         ))
         assert result["state_update"]["current_state"] == "generating_section"
-        assert result["outputs_update"]["section_index"] == 1
+        assert result["outputs_update"]["section_index"] == 0
         assert len(result["artifacts"]) == 1
         assert result["artifacts"][0]["op"] == "create"
 

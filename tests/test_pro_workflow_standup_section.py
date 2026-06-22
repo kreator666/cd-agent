@@ -76,6 +76,7 @@ def test_continue_generates_next_section(skill: Skill, full_slots: dict[str, str
     assert data["outputs_update"]["section_index"] == 1
     assert len(data["outputs_update"]["generated_sections"]) == 2
     assert data["outputs_update"]["section_status"] == "awaiting_confirm"
+    assert data["artifacts"][0]["op"] == "append"
 
 
 def test_retry_regenerates_current_section(skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]) -> None:
@@ -97,6 +98,10 @@ def test_retry_regenerates_current_section(skill: Skill, full_slots: dict[str, s
     data = _parse_result(skill, result)
     assert data["outputs_update"]["section_index"] == 1
     assert len(data["outputs_update"]["generated_sections"]) == 2
+    assert data["artifacts"][0]["op"] == "update"
+    # update 时应返回完整合并后的稿件，确保前端能整体替换
+    assert "## 开场铺垫" in data["artifacts"][0]["content"]
+    assert "mock section 2 v2" in data["artifacts"][0]["content"]
     # feedback 应被传入 _generate_script_content
     call_kwargs = mock_gen.call_args.kwargs
     assert call_kwargs.get("feedback") == "太平了，加点攻击性"

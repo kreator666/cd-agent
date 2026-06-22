@@ -1326,7 +1326,7 @@ function applyArtifactOp(art) {
   } else if (art.op === 'append') {
     artifactsState[art.id].content += '\n\n' + (art.content || '');
     artifactsState[art.id].version = (art.version || existing.version + 1);
-    updateArtifactCardContent(art.id);
+    appendArtifactContent(art.id, art.content || '');
   } else if (art.op === 'update') {
     artifactsState[art.id].content = art.content || existing.content;
     artifactsState[art.id].version = (art.version || existing.version + 1);
@@ -1371,6 +1371,29 @@ function updateArtifactCardContent(id) {
   if (contentEl) {
     contentEl.innerHTML = formatArtifactContent(artifact.content);
   }
+  const card = $(`[data-artifact-id="${id}"]`);
+  if (card) {
+    const versionEl = card.querySelector('.artifact-version');
+    if (versionEl) versionEl.textContent = `v${artifact.version}`;
+  }
+}
+
+function appendArtifactContent(id, newContent) {
+  const artifact = artifactsState[id];
+  if (!artifact) return;
+  const contentEl = $(`#artifact-content-${id}`);
+  if (!contentEl) return;
+
+  // 增量追加，只渲染新增的段落，避免整个卡片重绘导致滚动和闪烁
+  const lines = (newContent || '').split('\n').filter(line => line.trim());
+  if (lines.length === 0) return;
+
+  lines.forEach(line => {
+    const p = document.createElement('p');
+    p.textContent = line.trim();
+    contentEl.appendChild(p);
+  });
+
   const card = $(`[data-artifact-id="${id}"]`);
   if (card) {
     const versionEl = card.querySelector('.artifact-version');

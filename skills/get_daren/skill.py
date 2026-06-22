@@ -1276,7 +1276,8 @@ class Skill(ComedySkill):
 
         # 替换或追加当前段
         formatted_section = f"## {section_title}\n\n{section_content}"
-        if section_index < len(generated_sections):
+        is_regenerating = section_index < len(generated_sections)
+        if is_regenerating:
             generated_sections[section_index] = formatted_section
         else:
             generated_sections.append(formatted_section)
@@ -1292,13 +1293,26 @@ class Skill(ComedySkill):
             "section_status": "awaiting_confirm",
         }
 
-        # 构建 artifact
+        # 构建 artifact：
+        # - 第一次新建
+        # - 重写当前段时用 update 整体替换（避免把重写的段落再追加一遍）
+        # - 新增段落时用 append
+        if section_index == 0 and "script_main" not in outputs:
+            art_op = "create"
+            art_content = formatted_section
+        elif is_regenerating:
+            art_op = "update"
+            art_content = full_script
+        else:
+            art_op = "append"
+            art_content = formatted_section
+
         artifact = {
             "id": "script_main",
             "type": "script",
             "title": "脱口秀分段稿件",
-            "content": formatted_section,
-            "op": "create" if section_index == 0 and "script_main" not in outputs else "append",
+            "content": art_content,
+            "op": art_op,
             "version": (section_index + 1),
             "created_by": "总编",
         }

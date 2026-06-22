@@ -246,3 +246,79 @@ def test_continue_after_last_section_does_not_auto_finish(
     assert data["state_update"]["current_state"] != "done"
     assert data["outputs_update"]["section_status"] == "awaiting_confirm"
     assert "所有段落已生成完毕" in data["reply"] or "完成" in data["reply"]
+
+
+def test_natural_language_next_with_feedback(
+    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+) -> None:
+    """「下一段加点吐槽」应推进到下一段，并把风格要求带过去。"""
+    outputs = {
+        "section_outline": ["开场铺垫", "观察升级", "收尾观点"],
+        "section_index": 0,
+        "generated_sections": ["## 开场铺垫\n\nmock section 1"],
+        "script_main": "## 开场铺垫\n\nmock section 1",
+        "section_status": "awaiting_confirm",
+    }
+    with patch.object(skill, "_generate_script_content", return_value="mock section 2") as mock_gen:
+        result = skill._run(
+            workflow_step=section_workflow_step,
+            slots=full_slots,
+            outputs=outputs,
+            user_input="下一段加点吐槽",
+            user_id="user1",
+        )
+    data = _parse_result(skill, result)
+    assert data["outputs_update"]["section_index"] == 1
+    assert len(data["outputs_update"]["generated_sections"]) == 2
+    assert data["artifacts"][0]["op"] == "append"
+    feedback = mock_gen.call_args.kwargs.get("feedback", "")
+    assert "加点吐槽" in feedback
+
+
+def test_natural_language_prev_section(
+    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+) -> None:
+    """「上一段太平了」应回到上一段重写，而不是覆盖当前段或结束。"""
+    outputs = {
+        "section_outline": ["开场铺垫", "观察升级", "收尾观点"],
+        "section_index": 1,
+        "generated_sections": ["## 开场铺垫\n\nmock section 1", "## 观察升级\n\nmock section 2"],
+        "script_main": "## 开场铺垫\n\nmock section 1\n\n## 观察升级\n\nmock section 2",
+        "section_status": "awaiting_confirm",
+    }
+    with patch.object(skill, "_generate_script_content", return_value="mock section 1 v2") as mock_gen:
+        result = skill._run(
+            workflow_step=section_workflow_step,
+            slots=full_slots,
+            outputs=outputs,
+            user_input="上一段太平了",
+            user_id="user1",
+        )
+    data = _parse_result(skill, result)
+    assert data["outputs_update"]["section_index"] == 0
+    assert "太平了" in mock_gen.call_args.kwargs.get("feedback", "")
+
+
+def test_natural_language_modify_current_section(
+    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+) -> None:
+    """「不要说套话」应重写当前段，而不是继续下一段。"""
+    outputs = {
+        "section_outline": ["开场铺垫", "观察升级", "收尾观点"],
+        "section_index": 0,
+        "generated_sections": ["## 开场铺垫\n\nmock section 1"],
+        "script_main": "## 开场铺垫\n\nmock section 1",
+        "section_status": "awaiting_confirm",
+    }
+    with patch.object(skill, "_generate_script_content", return_value="mock section 1 v2") as mock_gen:
+        result = skill._run(
+            workflow_step=section_workflow_step,
+            slots=full_slots,
+            outputs=outputs,
+            user_input="不要说套话",
+            user_id="user1",
+        )
+    data = _parse_result(skill, result)
+    assert data["outputs_update"]["section_index"] == 0
+    assert len(data["outputs_update"]["generated_sections"]) == 1
+    assert "套话" in mock_gen.call_args.kwargs.get("feedback", "")

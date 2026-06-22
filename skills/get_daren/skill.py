@@ -47,6 +47,20 @@ _GENERATE_MODE_PATTERNS: list[tuple[re.Pattern, str]] = [
     ),
 ]
 
+# 分段生成确认阶段：用户回复意图识别
+_SECTION_FINISH_RE = re.compile(r"完成|结束|done|finish|停止|停|好了|定稿|就这些|就到这|到此为止")
+_SECTION_NEXT_RE = re.compile(
+    r"继续|下一节|下一小节|下一段|下一部分|往后|接着(?:写|生成|来)?|生成下一段|写(?:下|后)一?段|"
+    r"第二节|第二段|第\s*2\s*段|后面一段|后面一节|再来一段|再来一节|输出下一段|"
+    r"next|go\s*on|推进|往下|往下写|往下生成|写下面|先这样写下一段"
+)
+_SECTION_PREV_RE = re.compile(r"上一段|上一节|上一部分|前面一段|前一段|上一小节|回到上一段")
+_SECTION_MODIFY_RE = re.compile(
+    r"修改|重写|重来|重生成|retry|优化|调整|改一下|再写|不满意|"
+    r"太平|太水|太短|太长|加梗|多点|少点|不要[太不要套话]|套话|说教|AI腔|机械|死板|"
+    r"幽默|吐槽|攻击性|画面感|节奏|情绪|衔接|力度|爆点|笑点|共鸣"
+)
+
 
 class GetDarenArgs(BaseModel):
     """喜剧龙虾调度参数。"""
@@ -1252,8 +1266,10 @@ class Skill(ComedySkill):
 
         # 如果已经生成过段落（无论 section_status 是否正常落库），先解析用户反馈
         if section_status == "awaiting_confirm" or generated_sections:
-            action, fb = self._parse_confirm_response(user_input)
-            if action == "finish":
+            command = self._classify_section_reply(user_input)
+            intent = command["intent"]
+
+            if intent == "finish":
                 full_script = "\n\n".join(generated_sections)
                 return json.dumps(
                     {
@@ -1271,7 +1287,8 @@ class Skill(ComedySkill):
                     },
                     ensure_ascii=False,
                 )
-            if action == "continue":
+
+            if intent == "next":
                 if section_index + 1 >= len(section_outline):
                     # 已经到最后一段，不自动结束，等待用户明确说「完成」
                     full_script = "\n\n".join(generated_sections)
@@ -1292,13 +1309,20 @@ class Skill(ComedySkill):
                         ensure_ascii=False,
                     )
                 section_index += 1
-                feedback = requirements
-            elif action == "retry":
-                # 将全局要求与当前段反馈合并
-                if fb:
-                    feedback = f"{requirements}\n{fb}".strip() if requirements else fb
-                else:
-                    feedback = requirements
+                # 如果用户在「继续/下一段」后面还带了风格要求，也传给下一段
+                leftover = command.get("feedback", "")
+                feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
+
+            elif intent == "prev":
+                # 回到上一段重写
+                if section_index > 0:
+                    section_index -= 1
+                leftover = command.get("feedback", "")
+                feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
+
+            else:  # modify / feedback
+                leftover = command.get("feedback", "")
+                feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
 
         # 校验索引
         if section_index >= len(section_outline):
@@ -1464,46 +1488,44 @@ class Skill(ComedySkill):
         # 默认继续
         return "continue"
 
-    def _parse_confirm_response(self, user_input: str) -> tuple[str, str]:
-        """解析用户在分段生成确认阶段的回复。
+    def _classify_section_reply(self, user_input: str) -> dict[str, str]:
+        """识别用户在分段生成阶段的意图。
 
-        返回 (action, feedback) ：
-        - action: finish / continue / retry
-        - feedback: 当 action 为 retry 时，附带的用户修改意见
-
-        设计原则：
-        - 显式「完成/停止」才结束；
-        - 显式「继续/确认」才推进到下一段；
-        - 其余输入（风格要求、修改意见、"太平了" 等）一律视为对当前段的反馈，
-          避免把用户的修改要求误解为「继续」而跳过或覆盖。
+        返回 {"intent": "finish"|"next"|"prev"|"modify", "feedback": str}。
+        - finish：结束生成。
+        - next：写下一段；如果用户还附带风格要求，放在 feedback 里传给下一段。
+        - prev：回到上一段重写。
+        - modify：重写当前段，feedback 为用户意见。
         """
-        text = user_input.strip().lower()
+        text = user_input.strip()
         if not text:
-            return "continue", ""
+            return {"intent": "next", "feedback": ""}
 
-        finish_words = ("完成", "结束", "done", "finish", "停止", "停")
-        if any(k in text for k in finish_words):
-            return "finish", ""
+        if _SECTION_FINISH_RE.search(text):
+            return {"intent": "finish", "feedback": ""}
 
-        # 显式继续 / 确认推进（短句）
-        continue_words = (
-            "继续", "下一节", "next", "go on", "下一步", "生成下一段", "往下", "往下写",
-            "接着", "往下生成", "ok", "好的", "可以", "行", "没问题", "就这样", "确认",
-            "下一步", "推进",
-        )
-        # 简短确认语直接推进；如果句子较长且含其他内容，更可能是反馈
-        is_short_confirmation = len(text) <= 12 and (
-            any(k in text for k in continue_words) or self._detect_confirmation(user_input)
-        )
-        if is_short_confirmation:
-            return "continue", ""
+        # 上一段 / 前一段
+        prev_match = _SECTION_PREV_RE.search(text)
+        if prev_match:
+            leftover = (text[: prev_match.start()] + text[prev_match.end() :]).strip(" \t。！.,;、：")
+            return {"intent": "prev", "feedback": leftover}
 
-        retry_words = ("修改", "重来", "重生成", "retry", "不满意", "优化", "调整", "重写", "改一下", "再写")
-        if any(k in text for k in retry_words):
-            return "retry", user_input.strip()
+        # 下一段 / 继续
+        next_match = _SECTION_NEXT_RE.search(text)
+        if next_match:
+            leftover = (text[: next_match.start()] + text[next_match.end() :]).strip(" \t。！.,;、：")
+            return {"intent": "next", "feedback": leftover}
 
-        # 默认视为对当前段的反馈，用原始输入作为修改意见
-        return "retry", user_input.strip()
+        # 修改 / 风格 / 质量反馈
+        if _SECTION_MODIFY_RE.search(text):
+            return {"intent": "modify", "feedback": text}
+
+        # 简短确认语（ok / 好的 / 可以 等）默认推进
+        if len(text) <= 8 and self._detect_confirmation(text):
+            return {"intent": "next", "feedback": ""}
+
+        # 其余自由文本也视为对当前段的反馈，确保不会被跳过
+        return {"intent": "modify", "feedback": text}
 
     @staticmethod
     def _build_attachment_summary(attachments: list[dict[str, Any]], limit: int = 800) -> str:

@@ -1410,27 +1410,26 @@ class Skill(ComedySkill):
         """解析用户在分段生成确认阶段的回复。
 
         返回 (action, feedback) ：
-        - action: finish / continue / retry / feedback
-        - feedback: 当 action 为 retry 或 feedback 时，附带的用户修改意见
+        - action: finish / continue / retry
+        - feedback: 当 action 为 retry 时，附带的用户修改意见
+
+        设计原则：用户没有明确说「完成/切换/重写」时，默认继续生成下一段，
+        符合主编角色「一直写」的预期；只有显式反馈才触发重写。
         """
         text = user_input.strip().lower()
         if not text:
             return "continue", ""
 
-        finish_words = ("完成", "结束", "done", "finish", "好了", "ok", "确认", "很满意")
+        finish_words = ("完成", "结束", "done", "finish", "停止", "停")
         if any(k in text for k in finish_words):
             return "finish", ""
 
-        continue_words = ("继续", "下一节", "next", "go on", "生成下一段", "下一段")
-        if any(k in text for k in continue_words):
-            return "continue", ""
-
-        retry_words = ("修改", "重来", "重生成", "retry", "不满意", "优化", "调整", "重写")
+        retry_words = ("修改", "重来", "重生成", "retry", "不满意", "优化", "调整", "重写", "改一下", "再写")
         if any(k in text for k in retry_words):
             return "retry", user_input.strip()
 
-        # 其他自由文本视为对当前段的修改反馈
-        return "feedback", user_input.strip()
+        # 默认继续：用户不说完成/重写/切换，主编就继续写下一段
+        return "continue", ""
 
     @staticmethod
     def _build_attachment_summary(attachments: list[dict[str, Any]], limit: int = 800) -> str:

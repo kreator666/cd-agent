@@ -456,14 +456,21 @@ class ProWorkflowEngine:
     def _build_todo_board(self, wf_state: dict[str, Any]) -> list[dict[str, Any]]:
         """根据核心槽位构建 TODO 看板。"""
         slots = wf_state.get("slots", {})
+        outputs = wf_state.get("outputs", {})
         current_role = wf_state.get("current_role")
+        current_state = wf_state.get("current_state", "")
         current_slot = self._ROLE_TO_SLOT.get(current_role)
+
+        all_filled = all(slots.get(s) for s in self._CORE_SLOTS)
+        is_done = current_state == "done" or outputs.get("section_status") == "finished"
+        is_generating = current_state in ("generating_section", "generating_one_shot", "ask_generate_mode", "chief_editor_review") or current_role == "总编"
+
         return [
             {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False, "blocked": False, "role": "话题专家", "in_progress": ("话题" == current_slot and not slots.get("话题"))},
             {"id": "态度", "label": "态度", "done": bool(slots.get("态度")), "optional": False, "blocked": not bool(slots.get("话题")), "role": "态度专家", "in_progress": ("态度" == current_slot and not slots.get("态度"))},
             {"id": "偏见", "label": "偏见", "done": bool(slots.get("偏见")), "optional": False, "blocked": not bool(slots.get("态度")), "role": "偏见专家", "in_progress": ("偏见" == current_slot and not slots.get("偏见"))},
             {"id": "情绪", "label": "情绪", "done": bool(slots.get("情绪")), "optional": False, "blocked": not bool(slots.get("偏见")), "role": "情绪专家", "in_progress": ("情绪" == current_slot and not slots.get("情绪"))},
-            {"id": "aggregate", "label": "生成最终剧本", "done": False, "optional": False, "blocked": not all(slots.get(s) for s in self._CORE_SLOTS), "role": "总编", "in_progress": False},
+            {"id": "aggregate", "label": "生成脱口秀稿件", "done": is_done, "optional": False, "blocked": not all_filled, "role": "总编", "in_progress": all_filled and not is_done and is_generating},
         ]
 
     def _apply_skill_result(
@@ -775,13 +782,19 @@ class ProWorkflowEngine:
         slots = wf_state.get("slots", {})
         outputs = wf_state.get("outputs", {})
         current_role = wf_state.get("current_role")
+        current_state = wf_state.get("current_state", "")
         current_slot = self._ROLE_TO_SLOT.get(current_role)
+
+        all_filled = all(slots.get(s) for s in self._CORE_SLOTS)
+        is_done = current_state == "done" or outputs.get("section_status") == "finished"
+        is_generating = current_state in ("generating_section", "generating_one_shot", "ask_generate_mode", "chief_editor_review") or current_role == "总编"
+
         return [
             {"id": "话题",     "label": "话题", "done": bool(slots.get("话题")),     "optional": False, "in_progress": ("话题" == current_slot and not slots.get("话题"))},
             {"id": "态度",     "label": "态度", "done": bool(slots.get("态度")),     "optional": False, "in_progress": ("态度" == current_slot and not slots.get("态度"))},
             {"id": "偏见",     "label": "偏见", "done": bool(slots.get("偏见")),     "optional": False, "in_progress": ("偏见" == current_slot and not slots.get("偏见"))},
             {"id": "情绪",     "label": "情绪", "done": bool(slots.get("情绪")),     "optional": False, "in_progress": ("情绪" == current_slot and not slots.get("情绪"))},
-            {"id": "aggregate","label": "生成最终剧本", "done": "final_script" in outputs, "optional": False, "in_progress": False},
+            {"id": "aggregate","label": "生成脱口秀稿件", "done": is_done, "optional": False, "in_progress": all_filled and not is_done and is_generating},
         ]
 
 

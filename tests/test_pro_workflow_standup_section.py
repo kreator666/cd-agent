@@ -129,6 +129,30 @@ def test_default_continue_generates_next_section(skill: Skill, full_slots: dict[
     assert data["outputs_update"]["section_status"] == "awaiting_confirm"
 
 
+def test_continue_without_section_status_still_advances(skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]) -> None:
+    """即使 section_status 未落库，只要有已生成段落，继续就应生成下一段而不是覆盖。"""
+    outputs = {
+        "section_outline": ["开场铺垫", "观察升级", "收尾观点"],
+        "section_index": 0,
+        "generated_sections": ["## 开场铺垫\n\nmock section 1"],
+        # 故意不设置 section_status，模拟落库异常
+    }
+    with patch.object(skill, "_generate_script_content", return_value="mock section 2"):
+        result = skill._run(
+            workflow_step=section_workflow_step,
+            slots=full_slots,
+            outputs=outputs,
+            user_input="继续",
+            user_id="user1",
+        )
+    data = _parse_result(skill, result)
+    assert data["outputs_update"]["section_index"] == 1
+    assert len(data["outputs_update"]["generated_sections"]) == 2
+    assert data["artifacts"][0]["op"] == "append"
+    assert "mock section 1" in data["outputs_update"]["final_script"]
+    assert "mock section 2" in data["outputs_update"]["final_script"]
+
+
 def test_finish_combines_sections_and_goes_done(skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]) -> None:
     """回复「完成」应合并所有段落并进入 done 状态。"""
     outputs = {

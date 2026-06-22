@@ -1198,8 +1198,8 @@ class Skill(ComedySkill):
             generated_sections = []
 
         feedback = ""
-        # 如果上一段已经生成并在等待用户确认，先解析用户反馈
-        if section_status == "awaiting_confirm":
+        # 如果已经生成过段落（无论 section_status 是否正常落库），先解析用户反馈
+        if section_status == "awaiting_confirm" or generated_sections:
             action, feedback = self._parse_confirm_response(user_input)
             if action == "finish":
                 full_script = "\n\n".join(generated_sections)

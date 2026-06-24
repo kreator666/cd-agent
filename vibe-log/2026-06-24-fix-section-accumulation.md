@@ -59,7 +59,7 @@
 - `tests/test_pro_workflow_intent.py`：10/10 通过
 - `tests/test_get_daren_v3.py`：47/47 通过
 - `tests/test_pro_workflow_skill_mapping.py`：10/10 通过
-- **合计：94/94 通过（本次修复后）**
+- **合计：91/91 通过（本次修复后）**
 
 ## Commit 记录
 - **Commit ID**: `e3cfe2862b141ef3987de40fe9a60f83428b6404`

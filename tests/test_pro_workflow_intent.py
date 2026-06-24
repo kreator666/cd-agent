@@ -69,10 +69,9 @@ def test_parse_generate_mode_recognizes_numbers_and_options(skill: Skill) -> Non
 
 
 def test_chief_editor_direct_option_2_triggers_section(skill: Skill, full_slots: dict[str, str]) -> None:
-    """总编审阅阶段用户直接回复选项 2 应进入按小节生成。"""
+    """总编审阅阶段用户直接回复选项 2 应进入按小节生成（直接写第 1 段，不预生成大纲）。"""
     workflow_step = {"action": "guide", "state_id": "chief_editor_review", "role": "总编"}
-    with patch.object(skill, "_generate_script_content", return_value="mock section content"), \
-         patch.object(skill, "_generate_section_outline", return_value=["开场", "发展", "高潮"]):
+    with patch.object(skill, "_generate_script_content", return_value="mock section content"):
         result = skill._run(
             workflow_step=workflow_step,
             slots=full_slots,
@@ -83,6 +82,7 @@ def test_chief_editor_direct_option_2_triggers_section(skill: Skill, full_slots:
     data = json.loads(result)
     assert data["state_update"]["current_state"] == "generating_section"
     assert "section_index" in data["outputs_update"]
+    assert "section_outline" not in data["outputs_update"]
     assert any(a["type"] == "script" for a in data["artifacts"])
 
 

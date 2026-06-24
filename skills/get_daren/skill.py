@@ -24,9 +24,6 @@ from comedy_agent.skills.base import ComedySkill
 logger = logging.getLogger(__name__)
 
 # 分段脱口秀 prompt 模板路径
-_SECTION_OUTLINE_PROMPT_PATH = (
-    Path(__file__).resolve().parent.parent.parent / "data" / "prompts" / "pro" / "standup_section_outline.md"
-)
 _SECTION_CONTENT_PROMPT_PATH = (
     Path(__file__).resolve().parent.parent.parent / "data" / "prompts" / "pro" / "standup_section_content.md"
 )
@@ -48,7 +45,7 @@ _GENERATE_MODE_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 # 分段生成确认阶段：用户回复意图识别
-_SECTION_FINISH_RE = re.compile(r"完成|结束|done|finish|停止|停|好了|定稿|就这些|就到这|到此为止")
+_SECTION_FINISH_RE = re.compile(r"完成|结束|done|finish|停止|定稿|就这些|就到这|到此为止")
 _SECTION_NEXT_RE = re.compile(
     r"继续|下一节|下一小节|下一段|下一部分|往后|接着(?:写|生成|来)?|生成下一段|写(?:下|后)一?段|"
     r"第二节|第二段|第\s*2\s*段|后面一段|后面一节|再来一段|再来一节|输出下一段|"
@@ -56,7 +53,7 @@ _SECTION_NEXT_RE = re.compile(
 )
 _SECTION_PREV_RE = re.compile(r"上一段|上一节|上一部分|前面一段|前一段|上一小节|回到上一段")
 _SECTION_MODIFY_RE = re.compile(
-    r"修改|重写|重来|重生成|retry|优化|调整|改一下|再写|不满意|"
+    r"修改|重写|重来|重生成|retry|优化|调整|改一下|不满意|"
     r"太平|太水|太短|太长|加梗|多点|少点|不要[太不要套话]|套话|说教|AI腔|机械|死板|"
     r"幽默|吐槽|攻击性|画面感|节奏|情绪|衔接|力度|爆点|笑点|共鸣"
 )
@@ -316,11 +313,16 @@ class Skill(ComedySkill):
         ):
             slot = ROLE_TO_SLOT[target_role]
             if not slots.get(slot):
-                slots_update[slot] = user_input.strip()
+                # 尝试去掉 "偏见：" / "偏见是" 等前缀，避免把引导词也填进槽位
+                extracted = self._extract_slot_value_from_text(user_input, slot)
+                slots_update[slot] = extracted if extracted else user_input.strip()
                 parsed["slots_update"] = slots_update
 
-        # 10. 计算下一状态（只有明确 advance、显式切换角色或用户确认推进时才推进）
-        advance = bool(parsed.get("advance", False) or intent.get("type") == "switch_role")
+        # 10. 计算下一状态（明确 advance、显式切换角色、显式填槽或用户确认推进时才推进）
+        advance = bool(
+            parsed.get("advance", False)
+            or intent.get("type") in ("switch_role", "fill_slot")
+        )
         if user_confirmed and target_role in ROLE_TO_SLOT:
             slot = ROLE_TO_SLOT[target_role]
             if slots.get(slot) or slots_update.get(slot):
@@ -428,6 +430,12 @@ class Skill(ComedySkill):
             if advance:
                 role = intent.get("mentioned_role") or intent.get("semantic_role")
                 slot = ROLE_TO_SLOT.get(role)
+                # 如果目标槽位已经被本次输入填充，直接推进到下一个未填充槽位
+                merged_slots = {**slots, **slots_update}
+                if slot and (slots_update.get(slot) or slots.get(slot)):
+                    next_slot = self._next_unfilled_slot(slot, merged_slots)
+                    if next_slot:
+                        return {"current_state": SLOT_TO_STATE.get(next_slot, "guiding")}
                 return {"current_state": SLOT_TO_STATE.get(slot, "guiding")}
             return {"current_state": current_state}
 
@@ -680,6 +688,10 @@ class Skill(ComedySkill):
                 intent["type"] = "switch_role"
                 if inferred_slot:
                     intent["slot_name"] = inferred_slot
+                    # 尝试从用户输入中提取槽位值，例如 "偏见：领导永远是对的"
+                    extracted_value = self._extract_slot_value_from_text(user_input, inferred_slot)
+                    if extracted_value:
+                        intent["slot_value"] = extracted_value
                 return intent
 
         # 注：不再根据当前角色自动把用户输入填槽，避免多轮讨论时把用户的每一句回答都当成槽位值。
@@ -697,16 +709,8 @@ class Skill(ComedySkill):
 
     @staticmethod
     def _extract_mention_content(user_input: str, slot_name: str) -> str:
-        """提取 @话题 xxx 中的 xxx。"""
-        patterns = [
-            rf"@{slot_name}\s*(.+)$",
-            rf"@{slot_name}(.+)$",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, user_input, re.MULTILINE)
-            if match:
-                return match.group(1).strip()
-        # 如果 @的是角色名
+        """提取 @话题 xxx 或 @话题专家 xxx 中的 xxx。"""
+        # 优先匹配完整角色名，避免 "@偏见专家" 被 "@偏见" 前缀误截断
         role_name = SLOT_TO_ROLE.get(slot_name, slot_name)
         patterns = [
             rf"@{role_name}\s*(.+)$",
@@ -716,7 +720,39 @@ class Skill(ComedySkill):
             match = re.search(pattern, user_input, re.MULTILINE)
             if match:
                 return match.group(1).strip()
+
+        # 再匹配槽位名
+        patterns = [
+            rf"@{slot_name}\s*(.+)$",
+            rf"@{slot_name}(.+)$",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, user_input, re.MULTILINE)
+            if match:
+                return match.group(1).strip()
+
         return user_input.strip()
+
+    @staticmethod
+    def _extract_slot_value_from_text(user_input: str, slot_name: str) -> str | None:
+        """从自由文本中提取槽位值，例如 '偏见：领导永远是对的' -> '领导永远是对的'。"""
+        text = user_input.strip()
+        if not text:
+            return None
+
+        # 常见前缀模式："偏见：xxx" / "偏见是xxx" / "偏见为xxx" / "我的偏见是xxx"
+        prefixes = [
+            rf"^{slot_name}\s*[:：]\s*",
+            rf"^{slot_name}\s*[是为]\s*",
+            rf"^我的{slot_name}\s*[是为]\s*",
+            rf"^这个{slot_name}\s*[是为]\s*",
+        ]
+        for prefix in prefixes:
+            match = re.match(prefix, text)
+            if match:
+                value = text[match.end():].strip()
+                return value if value else None
+        return None
 
     def _next_unfilled_slot(self, current_slot: str, slots: dict[str, Any]) -> str | None:
         """返回当前槽位之后第一个未填充的核心槽位，防止跳过中间维度。"""
@@ -1246,118 +1282,95 @@ class Skill(ComedySkill):
         user_input: str,
         current_state: str,
     ) -> str:
-        """按段落生成脱口秀：每次生成一段，等待用户确认后再继续。"""
-        section_index = outputs.get("section_index", 0)
-        section_outline = list(outputs.get("section_outline", []))
-        generated_sections = list(outputs.get("generated_sections", []))
-        section_status = outputs.get("section_status")
+        """按小节生成脱口秀：与 LLM 进行多轮对话续写，每段是一个子话题。
 
-        # 第一次进入：生成段落大纲，同时提取用户的全局风格/要求
+        与“按固定大纲分小节输出”不同，这里：
+        - 不预生成固定大纲；
+        - 每轮结合四维度 + 已生成前文 + 用户最新输入，生成下一段（子话题）；
+        - 用户可以一直续写，直到明确说「完成」。
+        """
+        section_index = outputs.get("section_index", 0)
+        generated_sections = list(outputs.get("generated_sections", []))
+
+        # 第一次进入：提取全局风格/要求，默认开始写第 1 段
         requirements = outputs.get("section_requirements", "")
-        if not section_outline:
-            section_outline = self._generate_section_outline(slots, attachments)
-            section_index = 0
-            generated_sections = []
+        if not generated_sections:
             _, requirements = self._extract_generate_mode_and_requirements(user_input)
             requirements = requirements.strip()
+            command = {"intent": "next", "feedback": ""}
+        else:
+            command = self._classify_section_reply(user_input)
+
+        intent = command["intent"]
+        leftover = command.get("feedback", "").strip()
 
         # 全局要求作为基础反馈，贯穿每一小节
-        feedback = requirements
+        feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
+        sub_topic = leftover  # 用户输入中的具体方向/子话题
 
-        # 如果已经生成过段落（无论 section_status 是否正常落库），先解析用户反馈
-        if section_status == "awaiting_confirm" or generated_sections:
-            command = self._classify_section_reply(user_input)
-            intent = command["intent"]
-
-            if intent == "finish":
-                full_script = "\n\n".join(generated_sections)
-                return json.dumps(
-                    {
-                        "reply": "✅ 按小节生成已结束。完整脱口秀稿件在右侧工作台。",
-                        "next_role": "用户",
-                        "current_role": "总编",
-                        "state_update": {"current_state": "done"},
-                        "slots_update": {},
-                        "outputs_update": {
-                            **outputs,
-                            "final_script": full_script,
-                            "script_main": full_script,
-                            "section_status": "finished",
-                        },
-                    },
-                    ensure_ascii=False,
-                )
-
-            if intent == "next":
-                if section_index + 1 >= len(section_outline):
-                    # 已经到最后一段，不自动结束，等待用户明确说「完成」
-                    full_script = "\n\n".join(generated_sections)
-                    return json.dumps(
-                        {
-                            "reply": "✅ 所有段落已生成完毕。回复「完成」结束，或继续补充修改。",
-                            "next_role": "用户",
-                            "current_role": "总编",
-                            "state_update": {"current_state": "generating_section"},
-                            "slots_update": {},
-                            "outputs_update": {
-                                **outputs,
-                                "final_script": full_script,
-                                "script_main": full_script,
-                                "section_status": "awaiting_confirm",
-                            },
-                        },
-                        ensure_ascii=False,
-                    )
-                section_index += 1
-                # 如果用户在「继续/下一段」后面还带了风格要求，也传给下一段
-                leftover = command.get("feedback", "")
-                feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
-
-            elif intent == "prev":
-                # 回到上一段重写
-                if section_index > 0:
-                    section_index -= 1
-                leftover = command.get("feedback", "")
-                feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
-
-            else:  # modify / feedback
-                leftover = command.get("feedback", "")
-                feedback = f"{requirements}\n{leftover}".strip() if requirements and leftover else (requirements or leftover)
-
-        # 校验索引
-        if section_index >= len(section_outline):
+        if intent == "finish":
             full_script = "\n\n".join(generated_sections)
             return json.dumps(
                 {
-                    "reply": "✅ 所有段落已生成完毕。回复「完成」结束，或继续补充修改。",
+                    "reply": "✅ 按小节生成已结束。完整脱口秀稿件在右侧工作台。",
                     "next_role": "用户",
                     "current_role": "总编",
-                    "state_update": {"current_state": "generating_section"},
+                    "state_update": {"current_state": "done"},
                     "slots_update": {},
                     "outputs_update": {
                         **outputs,
                         "final_script": full_script,
                         "script_main": full_script,
-                        "section_status": "awaiting_confirm",
+                        "section_status": "finished",
                     },
                 },
                 ensure_ascii=False,
             )
 
-        section_title = section_outline[section_index]
-        previous = generated_sections[-2:] if generated_sections else []
+        # 确定是写新段还是重写已有段
+        is_new_section = False
+        if intent == "next":
+            section_index = len(generated_sections)
+            is_new_section = True
+        elif intent == "prev":
+            if section_index > 0:
+                section_index -= 1
+        else:  # modify
+            # 保持当前段索引不变，重写当前段
+            section_index = min(section_index, len(generated_sections) - 1) if generated_sections else 0
+
+        # 传入全部前文，让 LLM 掌握整体叙事线；同时给出当前段的结构位置提示
+        previous = list(generated_sections) if generated_sections else []
+        if section_index == 0:
+            overall_progress = "开场段：建立话题、态度，用具体画面把观众拉进来"
+        elif section_index <= 2:
+            overall_progress = "中间展开段：承接前文，深入子话题，升级荒谬或切换角度"
+        else:
+            overall_progress = "深入/升级段：推进观点，可 callback 前文，增强整体感"
+
         section_content = self._generate_script_content(
             slots,
             outputs,
             user_id,
             attachments,
-            section=(section_index, section_title, section_outline, previous),
+            section=(section_index, previous, overall_progress),
             feedback=feedback,
+            sub_topic=sub_topic,
         )
 
-        # 替换或追加当前段
-        formatted_section = f"## {section_title}\n\n{section_content}"
+        # 后处理：防止 LLM 不遵守提示，重复输出前文或输出多个段落
+        # 重写当前段时不去重，避免把当前段新版本误删
         is_regenerating = section_index < len(generated_sections)
+        section_content = self._sanitize_section_content(
+            section_content,
+            previous,
+            remove_duplicate_previous=not is_regenerating,
+        )
+
+
+        # 替换或追加当前段
+        section_title = f"第 {section_index + 1} 段"
+        formatted_section = f"## {section_title}\n\n{section_content}"
         if is_regenerating:
             generated_sections[section_index] = formatted_section
         else:
@@ -1366,7 +1379,6 @@ class Skill(ComedySkill):
         full_script = "\n\n".join(generated_sections)
         outputs_update = {
             **outputs,
-            "section_outline": section_outline,
             "section_index": section_index,
             "generated_sections": generated_sections,
             "section_requirements": requirements,
@@ -1375,11 +1387,8 @@ class Skill(ComedySkill):
             "section_status": "awaiting_confirm",
         }
 
-        # 构建 artifact：
-        # - 第一次新建
-        # - 重写当前段时用 update 整体替换（避免把重写的段落再追加一遍）
-        # - 新增段落时用 append
-        if section_index == 0 and "script_main" not in outputs:
+        # 构建 artifact
+        if not is_regenerating and section_index == 0:
             art_op = "create"
             art_content = formatted_section
         elif is_regenerating:
@@ -1399,17 +1408,19 @@ class Skill(ComedySkill):
             "created_by": "总编",
         }
 
-        is_last = section_index + 1 >= len(section_outline)
-        reply = f"✅ 第 {section_index + 1} 段「{section_title}」已生成。"
+        reply = f"✅ {section_title}已生成。"
+        if is_new_section:
+            reply += " 回复「继续」写下一个子话题，输入具体方向（如“再写写同事关系”），或「完成」结束。"
+        elif intent == "prev":
+            reply += " 已回到上一段重写。回复「继续」写下一个子话题，或「完成」结束。"
+        else:
+            reply += " 当前段已重写。回复「继续」写下一个子话题，或「完成」结束。"
+
         actions = [
             {"action": "continue_section", "label": "▶️ 继续生成下一段", "value": "继续"},
             {"action": "retry_section", "label": "🔄 修改当前段", "value": "修改"},
             {"action": "finish_section", "label": "✅ 满意，结束生成", "value": "完成"},
         ]
-        if is_last:
-            reply += " 这是最后一段，回复「完成」结束，或「修改」优化当前段。也可以直接输入文字反馈意见。"
-        else:
-            reply += " 回复「继续」生成下一段，「修改」优化当前段，或直接输入文字反馈（如“太平了，加点攻击性”）。"
 
         return json.dumps(
             {
@@ -1524,8 +1535,8 @@ class Skill(ComedySkill):
         if len(text) <= 8 and self._detect_confirmation(text):
             return {"intent": "next", "feedback": ""}
 
-        # 其余自由文本也视为对当前段的反馈，确保不会被跳过
-        return {"intent": "modify", "feedback": text}
+        # 其余自由文本视为下一段的子话题方向，支持用户自然续写新内容
+        return {"intent": "next", "feedback": text}
 
     @staticmethod
     def _build_attachment_summary(attachments: list[dict[str, Any]], limit: int = 800) -> str:
@@ -1539,56 +1550,52 @@ class Skill(ComedySkill):
             display = summary if summary else (full_text[:limit] + "..." if len(full_text) > limit else full_text)
             parts.append(f"【{att.get('name', '参考')}】\n{display}")
         return "\n\n".join(parts)
+    @staticmethod
+    def _sanitize_section_content(
+        content: str, previous: list[str], remove_duplicate_previous: bool = True
+    ) -> str:
+        """清洗分段生成中 LLM 返回的内容，防止重复前文或输出多个段落。
 
-    def _generate_section_outline(
-        self,
-        slots: dict[str, Any],
-        attachments: list[dict[str, Any]],
-    ) -> list[str]:
-        """生成脱口秀分段大纲。"""
-        attachment_summary = self._build_attachment_summary(attachments, limit=500)
+        处理策略（按优先级）：
+        1. 如果输出包含多个 Markdown 标题段落，只取最后一个标题之后的内容。
+        2. （新增段落时）去掉与已生成前文完全重复的头部内容。
+        3. 清理首尾空白与标题标记。
 
-        pm = PromptManager()
-        try:
-            pm.load_from_file(_SECTION_OUTLINE_PROMPT_PATH, name="pro/standup_section_outline")
-        except Exception as e:
-            logger.warning("加载分段大纲 prompt 失败: %s", e)
+        Args:
+            content: LLM 原始输出。
+            previous: 已生成的前文段落列表。
+            remove_duplicate_previous: 是否去掉与前文重复的头部。重写当前段时应设为 False，
+                避免把当前段的新版本误当成前文重复而截断。
+        """
+        if not content:
+            return content
 
-        try:
-            system_prompt = pm.render(
-                "pro/standup_section_outline",
-                variables={
-                    "topic": slots.get("话题", ""),
-                    "attitude": slots.get("态度", ""),
-                    "bias": slots.get("偏见", ""),
-                    "emotion": slots.get("情绪", ""),
-                    "attachment_summary": attachment_summary,
-                },
-            )
-        except Exception as e:
-            logger.warning("渲染分段大纲 prompt 失败: %s", e)
-            system_prompt = (
-                "你是一位资深中文单口喜剧编剧。请根据话题、态度、偏见、情绪四个维度，"
-                "为一段脱口秀设计 3–5 个节奏段落标题。只输出标题列表，每行一个，不要编号、不要解释。"
-            )
+        text = content.strip()
 
-        user_prompt = (
-            f"话题：{slots.get('话题', '')}\n"
-            f"态度：{slots.get('态度', '')}\n"
-            f"偏见：{slots.get('偏见', '')}\n"
-            f"情绪：{slots.get('情绪', '')}\n"
-            f"{attachment_summary}".strip()
-        )
+        # 1. LLM 不遵守提示，用 ## 输出了多个段落 -> 取最后一段
+        if "\n\n## " in text:
+            text = text.rsplit("\n\n## ", 1)[1]
+        elif text.startswith("## "):
+            # 去掉标题行
+            text = text.split("\n\n", 1)[1] if "\n\n" in text else text[3:]
 
-        try:
-            outline_text = self._call_llm(system_prompt, user_prompt)
-            outlines = [line.strip() for line in outline_text.strip().split("\n") if line.strip()]
-            # 清理可能的编号前缀
-            outlines = [re.sub(r"^\d+[.、]\s*", "", o) for o in outlines]
-            return outlines[:6] or ["开场铺垫", "观察升级", "反转真相", "收尾观点"]
-        except Exception as e:
-            logger.warning("生成章节大纲失败: %s", e)
-            return ["开场铺垫", "观察升级", "反转真相", "收尾观点"]
+        text = text.strip()
+
+        # 2. 新增段落时，如果 LLM 把整段前文又重复输出了一次，则去掉重复部分。
+        #    只对较长的重复头部（>=80 字符）做截断，避免因为常见短开头相似而误删新内容。
+        if remove_duplicate_previous:
+            for prev in previous:
+                # prev 格式通常是 "## 标题\n\n正文"
+                prev_body = prev.split("\n\n", 1)[1] if "\n\n" in prev else prev
+                prev_body = prev_body.strip()
+                if prev_body and len(prev_body) >= 80 and text.startswith(prev_body):
+                    text = text[len(prev_body):].strip()
+                    # 去掉可能残留的前导符号/空行
+                    text = text.lstrip("\n")
+                    text = text.lstrip("#")
+                    text = text.strip()
+
+        return text
 
     def _generate_script_content(
         self,
@@ -1596,9 +1603,10 @@ class Skill(ComedySkill):
         outputs: dict[str, Any],
         user_id: str | None,
         attachments: list[dict[str, Any]],
-        section: tuple[int, str, list[str], list[str]] | None = None,
+        section: tuple[int, list[str]] | None = None,
         feedback: str = "",
         requirements: str = "",
+        sub_topic: str = "",
     ) -> str:
         """调用 standup_generator 或 LLM 直接生成脱口秀内容。"""
         context_parts = [f"【{s}】{slots[s]}" for s in self.CORE_SLOTS]
@@ -1608,14 +1616,15 @@ class Skill(ComedySkill):
 
         if section:
             # 分段脱口秀：直接调用 LLM，避免 standup_generator 不受控地输出完整稿件
-            idx, title, outline, previous = section
+            idx, previous, overall_progress = section
             pm = PromptManager()
             try:
                 pm.load_from_file(_SECTION_CONTENT_PROMPT_PATH, name="pro/standup_section_content")
             except Exception as e:
                 logger.warning("加载分段正文 prompt 失败: %s", e)
 
-            previous_text = "\n\n".join(previous[-2:]) if previous else "（无）"
+            # 传入全部前文，让 LLM 掌握整体叙事线与 callback 机会
+            previous_text = "\n\n".join(previous) if previous else "（无）"
             # 把全局要求与当前段反馈合并，确保用户初始要求不会被后续操作覆盖
             effective_feedback = feedback or "（无）"
             if requirements and feedback:
@@ -1630,11 +1639,11 @@ class Skill(ComedySkill):
                         "attitude": slots.get("态度", ""),
                         "bias": slots.get("偏见", ""),
                         "emotion": slots.get("情绪", ""),
-                        "outline": " / ".join(outline),
                         "section_index": str(idx + 1),
-                        "section_title": title,
+                        "overall_progress": overall_progress,
                         "previous_sections": previous_text,
                         "feedback": effective_feedback,
+                        "sub_topic": sub_topic or "（用户未指定具体子话题，请基于四维度自由发挥）",
                     },
                 )
             except Exception as e:
@@ -1643,12 +1652,19 @@ class Skill(ComedySkill):
                     "你是一位顶级中文单口喜剧编剧。请根据话题、态度、偏见、情绪四个维度，"
                     "只输出当前段落的脱口秀讲述正文，不要输出其他段落，不要输出标题。"
                 )
-            user_prompt = f"请创作第 {idx + 1} 段《{title}》的讲述正文。"
+
+            if sub_topic:
+                user_prompt = f"请创作第 {idx + 1} 段（{overall_progress}），子话题方向：{sub_topic}。只输出当前段落的讲述正文。"
+            else:
+                user_prompt = f"请创作第 {idx + 1} 段（{overall_progress}）的讲述正文。"
+
             try:
-                return self._call_llm(system_prompt, user_prompt)
+                section_content = self._call_llm(system_prompt, user_prompt)
             except Exception as e:
                 logger.error("小节生成失败: %s", e, exc_info=True)
                 return f"生成失败：{e}"
+
+            return section_content
 
         if requirements:
             context_parts.append(f"【用户额外要求】{requirements}")

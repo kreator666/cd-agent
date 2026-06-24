@@ -214,13 +214,10 @@ class TestGenerateMode:
         assert result["outputs_update"]["section_index"] == 0
 
     def test_handle_generate_section_first(self, monkeypatch):
-        def fake_outline(slots, attachments):
-            return ["开场", "发展", "高潮", "结尾"]
-
+        """首次进入分段生成应直接写第 1 段，不预生成大纲。"""
         def fake_content(*args, **kwargs):
             return "这是第一节内容。"
 
-        monkeypatch.setattr(self.skill, "_generate_section_outline", fake_outline)
         monkeypatch.setattr(self.skill, "_generate_script_content", fake_content)
 
         result = json.loads(self.skill._handle_generate_section(
@@ -233,6 +230,7 @@ class TestGenerateMode:
         ))
         assert result["state_update"]["current_state"] == "generating_section"
         assert result["outputs_update"]["section_index"] == 0
+        assert "section_outline" not in result["outputs_update"]
         assert len(result["artifacts"]) == 1
         assert result["artifacts"][0]["op"] == "create"
 

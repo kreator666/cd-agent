@@ -276,31 +276,20 @@ class TestPromptEscaping:
     def setup_method(self):
         self.skill = Skill()
 
-    def test_call_llm_escapes_json_braces(self, monkeypatch):
-        """system_prompt / user_prompt 中的 JSON 花括号应被正确转义。"""
-        from langchain_core.prompts import ChatPromptTemplate
-        original_from_messages = ChatPromptTemplate.from_messages
+    def test_call_llm_passes_raw_prompts_without_template_parsing(self, monkeypatch):
+        """system_prompt / user_prompt 应原样传给 LLM，不被 ChatPromptTemplate 当模板解析。"""
         captured = {}
 
-        def fake_from_messages(messages):
-            captured["messages"] = messages
-            return original_from_messages([
-                ("system", "you are a bot"),
-                ("human", "hello"),
-            ])
-
-        monkeypatch.setattr("langchain_core.prompts.ChatPromptTemplate.from_messages", fake_from_messages)
-
-        from langchain_core.runnables import RunnableLambda
-
-        def fake_invoke(messages):
-            class Result:
-                content = "fake"
-            return Result()
+        class FakeLLM:
+            def invoke(self, messages):
+                captured["messages"] = messages
+                class Result:
+                    content = "fake"
+                return Result()
 
         monkeypatch.setattr(
             "comedy_agent.models.factory.ModelFactory.get_model_with_fallback",
-            lambda *args, **kwargs: RunnableLambda(fake_invoke),
+            lambda *args, **kwargs: FakeLLM(),
         )
 
         system = '{\n  "reply": "示例",\n  "next_role": "用户"\n}'
@@ -309,10 +298,8 @@ class TestPromptEscaping:
 
         assert result == "fake"
         sys_msg, human_msg = captured["messages"]
-        assert sys_msg[0] == "system"
-        assert "{{" in sys_msg[1] and "}}" in sys_msg[1]
-        assert human_msg[0] == "human"
-        assert "{{" in human_msg[1] and "}}" in human_msg[1]
+        assert sys_msg.content == system
+        assert human_msg.content == user
 
 
 class TestOptionResolution:

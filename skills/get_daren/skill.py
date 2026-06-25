@@ -919,27 +919,22 @@ class Skill(ComedySkill):
     def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """调用 LLM。
 
-        system_prompt / user_prompt 都是已经渲染完成的最终字符串，其中包含
-        JSON 示例、已收集槽位等字面花括号。ChatPromptTemplate 默认会把这些
-        花括号当作模板变量解析，因此需要先转义为 {{ / }}。
+        system_prompt / user_prompt 都是已经渲染完成的最终字符串，其中可能包含
+        JSON 示例等字面花括号。直接使用 Message 对象调用 LLM，避免 ChatPromptTemplate
+        把花括号误当成模板变量解析。
         """
         from comedy_agent.models.factory import ModelFactory
-        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.messages import HumanMessage, SystemMessage
 
-        system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
-        user_prompt = user_prompt.replace("{", "{{").replace("}", "}}")
-
-        messages = [
-            ("system", system_prompt),
-            ("human", user_prompt),
-        ]
-        prompt = ChatPromptTemplate.from_messages(messages)
         llm = ModelFactory.get_model_with_fallback(
             name=self.model_name,
             task_type=self.task_type,
         )
-        chain = prompt | llm
-        result = chain.invoke({})
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        result = llm.invoke(messages)
         return str(result.content) if hasattr(result, "content") else str(result)
 
     def _parse_json_output(self, raw: str) -> dict[str, Any]:

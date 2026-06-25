@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
 from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
+from comedy_agent.graph.builder import build_chat_graph
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.admin import require_admin, router as admin_router
@@ -42,6 +43,7 @@ from comedy_agent.memory.models import DocumentData, ScriptData
 from comedy_agent.memory.unified import UnifiedMemory
 from comedy_agent.models.factory import ModelConfigError, ModelFactory
 from comedy_agent.rag.feedback_loop import FeedbackLoop
+from comedy_agent.state.schema import ComedyState
 from comedy_agent.rag.ingest import KnowledgeIngestor
 from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
@@ -364,13 +366,19 @@ async def lifespan(app: FastAPI):
         # 从 skills/ 目录加载所有 Skill（内置 + 外部插件）
         for plugin in load_plugin_skills():
             state.orch.register_skill(plugin)
+
+        # 初始化 v4 LangGraph Chat 图
+        state.graph = build_chat_graph()
+        logging.getLogger("comedy-agent").info("v4 LangGraph Chat 图已初始化")
     except ModelConfigError as e:
         import logging
 
         logging.getLogger("comedy-agent").error("模型配置错误: %s", e)
         state.orch = None
+        state.graph = None
     yield
     state.orch = None
+    state.graph = None
     state.memory = None
     reset_observability()
 
@@ -453,6 +461,7 @@ class HealthResponse(BaseModel):
     version: str
     memory_ready: bool
     orchestrator_ready: bool
+    graph_ready: bool
     uptime_seconds: float | None = None
 
 
@@ -466,6 +475,7 @@ async def health() -> HealthResponse:
         version="0.1.0",
         memory_ready=state.memory is not None,
         orchestrator_ready=state.orch is not None,
+        graph_ready=state.graph is not None,
         uptime_seconds=time.time() - state.start_time if state.start_time else None,
     )
 
@@ -576,8 +586,8 @@ CHAT_MIN_COST = 5
 async def chat(
     request: ChatRequest, user_id: str = Depends(get_current_user)
 ) -> ChatResponse:
-    """与 Agent 对话。"""
-    if state.orch is None:
+    """与 Agent 对话（v4 LangGraph StateGraph）。"""
+    if state.graph is None:
         raise HTTPException(status_code=503, detail="服务未就绪")
     if state.memory is not None:
         account = state.memory.get_token_account(user_id)
@@ -588,10 +598,6 @@ async def chat(
     metrics = get_metrics()
 
     try:
-        # 若前端指定了模型，运行时切换
-        if request.model:
-            state.orch.set_model(request.model)
-
         # 生成或复用 session_id
         import uuid
         session_id = request.session_id or uuid.uuid4().hex[:16]
@@ -603,14 +609,19 @@ async def chat(
             input_data={"prompt": request.prompt[:200], "user_id": user_id},
             metadata={"model": request.model, "endpoint": "/chat", "session_id": session_id},
         ) as span:
-            result = state.orch.run(
-                request.prompt,
-                chat_history=request.chat_history,
-                user_id=user_id,
+            result = await state.graph.ainvoke(
+                ComedyState(
+                    user_input=request.prompt,
+                    chat_history=request.chat_history,
+                    user_id=user_id,
+                    model=request.model,
+                    session_id=session_id,
+                ),
+                config={"configurable": {"thread_id": session_id}},
             )
             # 将消息对象序列化为 dict
             messages = []
-            for msg in result.get("messages", []):
+            for msg in result.messages:
                 messages.append(
                     {
                         "role": getattr(msg, "type", "unknown"),
@@ -625,21 +636,20 @@ async def chat(
                         user_id=user_id,
                         session_id=session_id,
                         messages=messages,
-                        summary=result["output"][:80] if result["output"] else None,
+                        summary=result.output[:80] if result.output else None,
                         source=request.source,
                     )
                 except Exception as save_err:
                     logger.warning("保存会话记录失败: %s", save_err)
 
-            span.output_data = {"output": result["output"][:200]}
+            span.output_data = {"output": result.output[:200]}
             metrics.record("api.chat.duration_ms", span.duration_ms)
-            orch_model = getattr(state.orch, 'model_name', None) if state.orch else None
-            model_used = request.model or (orch_model if isinstance(orch_model, str) else None) or settings.default_model
+            model_used = request.model or settings.default_model
 
             # 构造改进建议（仅创作类 Skill）
-            skill_meta = result.get("skill_meta")
+            skill_meta = result.skill_meta
             suggestion = None
-            if skill_meta and skill_meta.get("skill_type") == "creative":
+            if skill_meta and skill_meta.get("skill_type") == "creative" and state.orch is not None:
                 skill_name = skill_meta.get("skill_name")
                 skill = state.orch._find_skill(skill_name) if state.orch else None
                 args = skill_meta.get("args", {})
@@ -672,7 +682,7 @@ async def chat(
             )
 
             return ChatResponse(
-                output=result["output"], session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
+                output=result.output, session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

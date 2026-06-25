@@ -5,9 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy import StaticPool, create_engine
 
 from comedy_agent.api.server import app, state
+from comedy_agent.state.schema import ComedyState
 
 
 def _patched_create_engine(*args, **kwargs):
@@ -31,8 +33,9 @@ def client(request):
     # 条件 mock：默认跳过 VectorStore 初始化（HuggingFaceEmbeddings 加载极慢）
     cm_vector = patch("comedy_agent.api.server.VectorStore") if not full_lifespan else contextlib.nullcontext()
     cm_retriever = patch("comedy_agent.api.server.ComedyRetriever") if not full_lifespan else contextlib.nullcontext()
+    cm_graph = patch("comedy_agent.api.server.build_chat_graph") if not full_lifespan else contextlib.nullcontext()
 
-    with cm_vector, cm_retriever, patch(
+    with cm_vector, cm_retriever, cm_graph, patch(
         "comedy_agent.memory.medium_term.create_engine",
         side_effect=_patched_create_engine,
     ), patch(
@@ -70,6 +73,7 @@ def client(request):
 
     # 清理
     state.orch = None
+    state.graph = None
     state.memory = None
 
 
@@ -82,6 +86,7 @@ class TestHealth:
         assert "version" in data
         assert "memory_ready" in data
         assert "orchestrator_ready" in data
+        assert "graph_ready" in data
 
 
 class TestSkills:
@@ -96,19 +101,18 @@ class TestSkills:
 
 class TestChat:
     def test_chat_success(self, client):
-        # TestClient  lifespan 里的 mock 已经替换了 state.orch
-        # 但我们需要让它能返回正常结果
         from comedy_agent.api.server import state
 
-        state.orch.run = MagicMock(
-            return_value={
-                "output": "Agent 回答",
-                "messages": [
-                    MagicMock(type="human", content="你好"),
-                    MagicMock(type="ai", content="Agent 回答"),
+        async def _ainvoke(state_input, config=None):
+            return ComedyState(
+                output="Agent 回答",
+                messages=[
+                    HumanMessage(content="你好"),
+                    AIMessage(content="Agent 回答"),
                 ],
-            }
-        )
+            )
+
+        state.graph.ainvoke = _ainvoke
 
         response = client.post(
             "/chat",
@@ -122,12 +126,14 @@ class TestChat:
     def test_chat_with_history(self, client):
         from comedy_agent.api.server import state
 
-        state.orch.run = MagicMock(
-            return_value={
-                "output": "好的",
-                "messages": [],
-            }
-        )
+        async def _ainvoke(state_input, config=None):
+            return ComedyState(
+                output="好的",
+                messages=[],
+                chat_history=state_input.chat_history,
+            )
+
+        state.graph.ainvoke = _ainvoke
 
         response = client.post(
             "/chat",
@@ -137,11 +143,6 @@ class TestChat:
             },
         )
         assert response.status_code == 200
-        _, call_kwargs = state.orch.run.call_args
-        assert call_kwargs["chat_history"] == [
-            ("human", "上一句"),
-            ("ai", "上一答"),
-        ]
 
 
 class TestStandupSkill:

@@ -1,10 +1,12 @@
-"""总编分段输出（多轮对话续写）累积性测试。
+"""总编节点重构后行为测试。
 
-验证按小节生成模式下：
-- 不预生成固定大纲；
-- 每轮根据用户输入生成一个子话题段落；
-- 用户可以无限续写，直到说「完成」；
-- generated_sections / final_script 正确累积，不会被覆盖。
+新行为：
+- 四槽位集齐后进入 chief_editor_review，总编先给用户提示，不替用户决定。
+- 用户每次输入一个想法，总编生成一段；生成后回到 chief_editor_review。
+- 默认追加新段落，不改动已有段落。
+- 只有明确说「重写第 N 段」才修改已有段落。
+- 只有明确说「完成/结束/done/finish/定稿/就这些/就到这/到此为止」才进入 done。
+- 上下文保持一定逻辑性：生成时传入全部前文。
 """
 
 from __future__ import annotations
@@ -33,80 +35,75 @@ def full_slots() -> dict[str, str]:
 
 
 @pytest.fixture
-def section_workflow_step() -> dict[str, str]:
-    return {"action": "generate", "state_id": "generating_section", "mode": "section", "role": "总编"}
+def review_workflow_step() -> dict[str, str]:
+    return {"action": "review", "state_id": "chief_editor_review", "role": "总编"}
+
+
+@pytest.fixture
+def generate_workflow_step() -> dict[str, str]:
+    return {"action": "generate", "state_id": "chief_editor_writing", "role": "总编", "mode": "section"}
 
 
 def _parse_result(result: str) -> dict:
     return json.loads(result)
 
 
-def test_first_section_starts_without_outline(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+def test_first_entry_to_review_prompts_user(
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """首次进入分段生成应直接写第 1 段，不预生成固定大纲。"""
-    with patch.object(skill, "_call_llm", return_value="第一段正文"):
+    """首次进入 chief_editor_review 应给用户提示，不直接生成。"""
+    result = skill._run(
+        workflow_step=review_workflow_step,
+        slots=full_slots,
+        outputs={},
+        user_input="从紧张到爆笑",
+        user_id="user1",
+    )
+    data = _parse_result(result)
+
+    assert data["state_update"]["current_state"] == "chief_editor_review"
+    assert data["outputs_update"]["chief_editor_prompted"] is True
+    assert "四维度" in data["reply"]
+    assert "想写什么" in data["reply"] or "想法" in data["reply"]
+    assert not data["artifacts"]
+
+
+def test_review_after_prompt_generates_first_section(
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
+) -> None:
+    """用户给出想法后，总编生成第 1 段。"""
+    outputs = {"chief_editor_prompted": True}
+    with patch.object(skill, "_call_llm", return_value="第一段正文") as mock_llm:
         result = skill._run(
-            workflow_step=section_workflow_step,
+            workflow_step=review_workflow_step,
             slots=full_slots,
-            outputs={},
-            user_input="按小节生成",
+            outputs=outputs,
+            user_input="先写被领导盯着的开场",
             user_id="user1",
         )
     data = _parse_result(result)
     out = data["outputs_update"]
 
-    assert data["state_update"]["current_state"] == "generating_section"
-    assert out["section_status"] == "awaiting_confirm"
+    assert data["state_update"]["current_state"] == "chief_editor_review"
     assert out["section_index"] == 0
     assert len(out["generated_sections"]) == 1
-    assert "section_outline" not in out
     assert out["generated_sections"][0] == "## 第 1 段\n\n第一段正文"
     assert data["artifacts"][0]["op"] == "create"
+    assert "先写被领导盯着的开场" in mock_llm.call_args[0][1]
 
 
-def test_continue_generates_next_subtopic(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+def test_review_appends_new_section_for_each_idea(
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """回复「继续」应生成下一段子话题，并追加到已有段落之后。"""
+    """每次给出新想法都追加一段，不改动已有段落。"""
     outputs = {
+        "chief_editor_prompted": True,
         "section_index": 0,
         "generated_sections": ["## 第 1 段\n\n第一段正文"],
-        "section_status": "awaiting_confirm",
     }
     with patch.object(skill, "_call_llm", return_value="第二段正文"):
         result = skill._run(
-            workflow_step=section_workflow_step,
-            slots=full_slots,
-            outputs=outputs,
-            user_input="继续",
-            user_id="user1",
-        )
-    data = _parse_result(result)
-    out = data["outputs_update"]
-
-    assert out["section_index"] == 1
-    assert len(out["generated_sections"]) == 2
-    assert out["generated_sections"] == [
-        "## 第 1 段\n\n第一段正文",
-        "## 第 2 段\n\n第二段正文",
-    ]
-    assert data["artifacts"][0]["op"] == "append"
-    assert data["artifacts"][0]["content"] == "## 第 2 段\n\n第二段正文"
-
-
-def test_free_text_becomes_next_subtopic(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
-) -> None:
-    """用户输入具体方向（如“再写写同事关系”）应作为下一段子话题，而不是修改当前段。"""
-    outputs = {
-        "section_index": 0,
-        "generated_sections": ["## 第 1 段\n\n第一段正文"],
-        "section_status": "awaiting_confirm",
-    }
-    with patch.object(skill, "_call_llm", return_value="同事关系段子") as mock_llm:
-        result = skill._run(
-            workflow_step=section_workflow_step,
+            workflow_step=review_workflow_step,
             slots=full_slots,
             outputs=outputs,
             user_input="再写写同事关系",
@@ -115,190 +112,102 @@ def test_free_text_becomes_next_subtopic(
     data = _parse_result(result)
     out = data["outputs_update"]
 
+    assert data["state_update"]["current_state"] == "chief_editor_review"
     assert out["section_index"] == 1
     assert len(out["generated_sections"]) == 2
-    assert out["generated_sections"][1] == "## 第 2 段\n\n同事关系段子"
+    assert out["generated_sections"][0] == "## 第 1 段\n\n第一段正文"
+    assert out["generated_sections"][1] == "## 第 2 段\n\n第二段正文"
     assert data["artifacts"][0]["op"] == "append"
-    # 子话题方向应传入 _call_llm 的 user_prompt
-    assert "同事关系" in mock_llm.call_args[0][1]
 
 
-def test_modify_regenerates_current_section(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+def test_review_explicit_rewrite_modifies_section(
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """显式修改意见应重写当前段，而不是新增一段。"""
+    """明确说「重写第 2 段」时才修改第 2 段。"""
     outputs = {
+        "chief_editor_prompted": True,
         "section_index": 1,
         "generated_sections": ["## 第 1 段\n\n第一段正文", "## 第 2 段\n\nold section 2"],
-        "section_status": "awaiting_confirm",
     }
-    with patch.object(skill, "_call_llm", return_value="第二段正文 v2") as mock_llm:
+    with patch.object(skill, "_call_llm", return_value="第二段正文 v2"):
         result = skill._run(
-            workflow_step=section_workflow_step,
+            workflow_step=review_workflow_step,
             slots=full_slots,
             outputs=outputs,
-            user_input="太平了，加点攻击性",
+            user_input="重写第 2 段，太平了加点攻击性",
             user_id="user1",
         )
     data = _parse_result(result)
     out = data["outputs_update"]
 
+    assert data["state_update"]["current_state"] == "chief_editor_review"
     assert out["section_index"] == 1
     assert len(out["generated_sections"]) == 2
     assert out["generated_sections"][1] == "## 第 2 段\n\n第二段正文 v2"
     assert data["artifacts"][0]["op"] == "update"
-    assert "太平了" in mock_llm.call_args[0][1]
 
 
-def test_prev_regenerates_previous_section(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+def test_vague_modify_input_is_treated_as_new_section(
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """「上一段太平了」应回到上一段重写，索引递减。"""
+    """没有明确段号的「太平了」应被当作新想法追加，而不是修改当前段。"""
     outputs = {
-        "section_index": 1,
-        "generated_sections": ["## 第 1 段\n\n第一段正文", "## 第 2 段\n\n第二段正文"],
-        "section_status": "awaiting_confirm",
+        "chief_editor_prompted": True,
+        "section_index": 0,
+        "generated_sections": ["## 第 1 段\n\n第一段正文"],
     }
-    with patch.object(skill, "_call_llm", return_value="第一段正文 v2") as mock_llm:
+    with patch.object(skill, "_call_llm", return_value="第二段正文"):
         result = skill._run(
-            workflow_step=section_workflow_step,
+            workflow_step=review_workflow_step,
             slots=full_slots,
             outputs=outputs,
-            user_input="上一段太平了",
+            user_input="太平了，再加点攻击性",
             user_id="user1",
         )
     data = _parse_result(result)
     out = data["outputs_update"]
 
-    assert out["section_index"] == 0
-    assert out["generated_sections"][0] == "## 第 1 段\n\n第一段正文 v2"
+    assert data["state_update"]["current_state"] == "chief_editor_review"
+    assert out["section_index"] == 1
     assert len(out["generated_sections"]) == 2
-    assert "太平了" in mock_llm.call_args[0][1]
+    assert out["generated_sections"][1] == "## 第 2 段\n\n第二段正文"
 
 
-def test_finish_combines_sections_and_goes_done(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+def test_finish_command_goes_done(
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """回复「完成」应合并所有段落并进入 done 状态。"""
+    """用户明确说「完成」时进入 done，合并所有段落。"""
     outputs = {
+        "chief_editor_prompted": True,
         "section_index": 1,
         "generated_sections": ["## 第 1 段\n\n第一段正文", "## 第 2 段\n\n第二段正文"],
-        "section_status": "awaiting_confirm",
     }
     result = skill._run(
-        workflow_step=section_workflow_step,
+        workflow_step=review_workflow_step,
         slots=full_slots,
         outputs=outputs,
         user_input="完成",
         user_id="user1",
     )
     data = _parse_result(result)
+
     assert data["state_update"]["current_state"] == "done"
     assert "第一段正文" in data["outputs_update"]["final_script"]
     assert "第二段正文" in data["outputs_update"]["final_script"]
 
 
-def test_unlimited_continue_no_outline_limit(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
-) -> None:
-    """没有固定大纲长度限制，用户可以一直继续生成新段。"""
-    outputs = {
-        "section_index": 2,
-        "generated_sections": [
-            "## 第 1 段\n\n第一段正文",
-            "## 第 2 段\n\n第二段正文",
-            "## 第 3 段\n\n第三段正文",
-        ],
-        "section_status": "awaiting_confirm",
-    }
-    with patch.object(skill, "_call_llm", return_value="第四段正文"):
-        result = skill._run(
-            workflow_step=section_workflow_step,
-            slots=full_slots,
-            outputs=outputs,
-            user_input="继续",
-            user_id="user1",
-        )
-    data = _parse_result(result)
-    out = data["outputs_update"]
-
-    assert out["section_index"] == 3
-    assert len(out["generated_sections"]) == 4
-    assert out["generated_sections"][3] == "## 第 4 段\n\n第四段正文"
-    assert data["artifacts"][0]["op"] == "append"
-
-
-def test_sanitize_repeated_previous_section(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
-) -> None:
-    """LLM 重复输出前文时，后处理应截断到只保留当前段新内容。"""
-    long_body = "第一段正文" * 17  # 确保 >=80 字符，触发长重复截断
-    outputs = {
-        "section_index": 0,
-        "generated_sections": [f"## 第 1 段\n\n{long_body}"],
-        "section_status": "awaiting_confirm",
-    }
-
-    misbehaving_content = f"{long_body}\n\n第二段正文"
-
-    with patch.object(skill, "_call_llm", return_value=misbehaving_content):
-        result = skill._run(
-            workflow_step=section_workflow_step,
-            slots=full_slots,
-            outputs=outputs,
-            user_input="继续",
-            user_id="user1",
-        )
-    data = _parse_result(result)
-    out = data["outputs_update"]
-
-    assert out["section_index"] == 1
-    assert len(out["generated_sections"]) == 2
-    assert out["generated_sections"][1] == "## 第 2 段\n\n第二段正文"
-
-
-def test_short_repeated_prefix_not_truncated(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
-) -> None:
-    """常见短开头相似时，不应被误当成前文重复而截断新段落。"""
-    outputs = {
-        "section_index": 0,
-        "generated_sections": ["## 第 1 段\n\n我最近发现职场 PUA 真的无处不在。"],
-        "section_status": "awaiting_confirm",
-    }
-    # 新段以相同短句开头，但后面是全新内容
-    new_content = "我最近发现职场 PUA 真的无处不在。而且最可怕的是，有时候连你自己都没意识到被 PUA 了。"
-
-    with patch.object(skill, "_call_llm", return_value=new_content):
-        result = skill._run(
-            workflow_step=section_workflow_step,
-            slots=full_slots,
-            outputs=outputs,
-            user_input="写写自我觉察",
-            user_id="user1",
-        )
-    data = _parse_result(result)
-    out = data["outputs_update"]
-
-    assert out["section_index"] == 1
-    assert len(out["generated_sections"]) == 2
-    assert "自我觉察" not in out["generated_sections"][1]  # 用户输入不会出现在结果中
-    assert "最可怕的是" in out["generated_sections"][1]
-    assert "## 第 2 段" in out["generated_sections"][1]
-
-
 def test_hao_le_does_not_finish(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """「好了」「好的」等日常用语不应被误判为结束生成。"""
+    """「好了」不应被误判为结束，应作为写作想法追加。"""
     outputs = {
+        "chief_editor_prompted": True,
         "section_index": 0,
         "generated_sections": ["## 第 1 段\n\n第一段正文"],
-        "section_status": "awaiting_confirm",
     }
     with patch.object(skill, "_call_llm", return_value="第二段正文"):
         result = skill._run(
-            workflow_step=section_workflow_step,
+            workflow_step=review_workflow_step,
             slots=full_slots,
             outputs=outputs,
             user_input="好了，再写写同事关系",
@@ -307,27 +216,46 @@ def test_hao_le_does_not_finish(
     data = _parse_result(result)
     out = data["outputs_update"]
 
-    assert data["state_update"]["current_state"] == "generating_section"
+    assert data["state_update"]["current_state"] == "chief_editor_review"
     assert out["section_index"] == 1
     assert len(out["generated_sections"]) == 2
-    assert out["generated_sections"][1] == "## 第 2 段\n\n第二段正文"
+
+
+def test_generate_action_directly_generates_section(
+    skill: Skill, full_slots: dict[str, str], generate_workflow_step: dict[str, str]
+) -> None:
+    """action=generate 时直接生成一段（兼容工作流引擎调用）。"""
+    with patch.object(skill, "_call_llm", return_value="第一段正文"):
+        result = skill._run(
+            workflow_step=generate_workflow_step,
+            slots=full_slots,
+            outputs={},
+            user_input="按小节生成",
+            user_id="user1",
+        )
+    data = _parse_result(result)
+    out = data["outputs_update"]
+
+    assert data["state_update"]["current_state"] == "chief_editor_review"
+    assert len(out["generated_sections"]) == 1
+    assert out["generated_sections"][0] == "## 第 1 段\n\n第一段正文"
 
 
 def test_full_previous_sections_passed_to_llm(
-    skill: Skill, full_slots: dict[str, str], section_workflow_step: dict[str, str]
+    skill: Skill, full_slots: dict[str, str], review_workflow_step: dict[str, str]
 ) -> None:
-    """生成第 3 段时，应把第 1、2 段全部前文传入 LLM，而不是只传最近 1 段。"""
+    """生成第 3 段时，应把第 1、2 段全部前文传入 LLM。"""
     outputs = {
+        "chief_editor_prompted": True,
         "section_index": 1,
         "generated_sections": ["## 第 1 段\n\n第一段正文", "## 第 2 段\n\n第二段正文"],
-        "section_status": "awaiting_confirm",
     }
     with patch.object(skill, "_call_llm", return_value="第三段正文") as mock_llm:
         skill._run(
-            workflow_step=section_workflow_step,
+            workflow_step=review_workflow_step,
             slots=full_slots,
             outputs=outputs,
-            user_input="继续",
+            user_input="继续写收尾",
             user_id="user1",
         )
     system_prompt = mock_llm.call_args[0][0]

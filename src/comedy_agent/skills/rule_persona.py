@@ -64,9 +64,13 @@ class RulePersonaSkill(ComedySkill):
             f"{rules_text}\n\n"
             "输出要求：只输出最终剧本内容，不要添加解释。"
         )
+        human_prompt = f"创意大纲：\n{outline}\n\n请生成严格遵循上述规则的剧本内容。"
+        # 规则内容/大纲中可能包含 JSON 花括号，需转义为字面量，避免被 ChatPromptTemplate 当变量解析
+        system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+        human_prompt = human_prompt.replace("{", "{{").replace("}", "}}")
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", f"创意大纲：\n{outline}\n\n请生成严格遵循上述规则的剧本内容。"),
+            ("human", human_prompt),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm

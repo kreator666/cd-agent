@@ -64,22 +64,16 @@ _DEFAULT_WORKFLOW: dict[str, Any] = {
             "role": "情绪专家",
             "message": "请描述情感节奏变化。",
         },
-        "ask_generate_mode": {
-            "action": "ask",
+        "chief_editor_review": {
+            "action": "review",
             "role": "总编",
-            "message": "四个维度已集齐。你希望一次性生成完整剧本，还是按小节逐段生成？",
+            "message": "四维度已集齐。请告诉我你想写什么，我会按你的想法一段一段输出。",
         },
-        "generating_one_shot": {
+        "chief_editor_writing": {
             "action": "generate",
-            "mode": "one_shot",
+            "mode": "paragraph",
             "role": "总编",
-            "message": "正在生成完整剧本...",
-        },
-        "generating_section": {
-            "action": "generate",
-            "mode": "section",
-            "role": "总编",
-            "message": "正在按小节生成剧本...",
+            "message": "正在根据你的想法写脱口秀段落...",
         },
         "done": {
             "action": "done",
@@ -92,10 +86,9 @@ _DEFAULT_WORKFLOW: dict[str, Any] = {
         "topic_filling": {"next": "attitude_filling"},
         "attitude_filling": {"next": "bias_filling"},
         "bias_filling": {"next": "emotion_filling"},
-        "emotion_filling": {"next": "ask_generate_mode"},
-        "ask_generate_mode": {"next": None},
-        "generating_one_shot": {"next": "done"},
-        "generating_section": {"next": "generating_section"},
+        "emotion_filling": {"next": "chief_editor_review"},
+        "chief_editor_review": {"next": "chief_editor_review"},
+        "chief_editor_writing": {"next": "chief_editor_review"},
         "done": {"next": None},
     },
 }
@@ -463,7 +456,7 @@ class ProWorkflowEngine:
 
         all_filled = all(slots.get(s) for s in self._CORE_SLOTS)
         is_done = current_state == "done" or outputs.get("section_status") == "finished"
-        is_generating = current_state in ("generating_section", "generating_one_shot", "ask_generate_mode", "chief_editor_review") or current_role == "总编"
+        is_generating = current_state in ("chief_editor_writing", "chief_editor_review") or current_role == "总编"
 
         return [
             {"id": "话题", "label": "话题", "done": bool(slots.get("话题")), "optional": False, "blocked": False, "role": "话题专家", "in_progress": ("话题" == current_slot and not slots.get("话题"))},
@@ -787,7 +780,7 @@ class ProWorkflowEngine:
 
         all_filled = all(slots.get(s) for s in self._CORE_SLOTS)
         is_done = current_state == "done" or outputs.get("section_status") == "finished"
-        is_generating = current_state in ("generating_section", "generating_one_shot", "ask_generate_mode", "chief_editor_review") or current_role == "总编"
+        is_generating = current_state in ("chief_editor_writing", "chief_editor_review") or current_role == "总编"
 
         return [
             {"id": "话题",     "label": "话题", "done": bool(slots.get("话题")),     "optional": False, "in_progress": ("话题" == current_slot and not slots.get("话题"))},

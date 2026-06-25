@@ -135,25 +135,6 @@ class TestGenerateMode:
     def setup_method(self):
         self.skill = Skill()
 
-    def test_parse_generate_mode_one_shot(self):
-        assert self.skill._parse_generate_mode("一次性") == "one_shot"
-        assert self.skill._parse_generate_mode("完整生成") == "one_shot"
-        assert self.skill._parse_generate_mode("1") == "one_shot"
-
-    def test_parse_generate_mode_section(self):
-        assert self.skill._parse_generate_mode("按小节") == "section"
-        assert self.skill._parse_generate_mode("分段输出") == "section"
-        assert self.skill._parse_generate_mode("2") == "section"
-
-    def test_parse_generate_mode_unknown(self):
-        assert self.skill._parse_generate_mode("不知道") is None
-
-    def test_parse_section_command(self):
-        assert self.skill._parse_section_command("完成") == "finish"
-        assert self.skill._parse_section_command("修改上一节") == "retry"
-        assert self.skill._parse_section_command("继续") == "continue"
-        assert self.skill._parse_section_command("随便说点") == "continue"
-
     def test_compute_next_state_slot_filling(self):
         result = self.skill._compute_next_state(
             "topic_filling", {"话题": "职场"}, {}, {}, advance=True
@@ -194,59 +175,42 @@ class TestGenerateMode:
         assert "态度" in result["reply"]
         assert result["state_update"]["current_state"] == "attitude_filling"
 
-    def test_handle_ask_generate_mode_one_shot(self, monkeypatch):
-        monkeypatch.setattr(self.skill, "_generate_script_content", lambda *args, **kwargs: "mock full script")
-        result = json.loads(self.skill._handle_ask_generate_mode(
-            "一次性", "ask_generate_mode",
-            slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
-            outputs={}, user_id=None, attachments=[],
-        ))
-        assert result["state_update"]["current_state"] == "done"
-        assert result["outputs_update"].get("final_script") == "mock full script"
-
-    def test_handle_ask_generate_mode_section(self):
-        result = json.loads(self.skill._handle_ask_generate_mode(
-            "按小节", "ask_generate_mode",
-            slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
-            outputs={}, user_id=None, attachments=[],
-        ))
-        assert result["state_update"]["current_state"] == "generating_section"
-        assert result["outputs_update"]["section_index"] == 0
-
-    def test_handle_generate_section_first(self, monkeypatch):
+    def test_handle_chief_editor_writing_first(self, monkeypatch):
         """首次进入分段生成应直接写第 1 段，不预生成大纲。"""
         def fake_content(*args, **kwargs):
             return "这是第一节内容。"
 
         monkeypatch.setattr(self.skill, "_generate_script_content", fake_content)
 
-        result = json.loads(self.skill._handle_generate_section(
+        result = json.loads(self.skill._handle_chief_editor_writing(
             slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
             outputs={},
             user_id=None,
             attachments=[],
             user_input="按小节生成",
-            current_state="generating_section",
+            current_state="chief_editor_writing",
         ))
-        assert result["state_update"]["current_state"] == "generating_section"
+        assert result["state_update"]["current_state"] == "chief_editor_review"
         assert result["outputs_update"]["section_index"] == 0
         assert "section_outline" not in result["outputs_update"]
         assert len(result["artifacts"]) == 1
         assert result["artifacts"][0]["op"] == "create"
 
-    def test_handle_generate_section_finish(self):
+    def test_handle_chief_editor_review_finish(self):
+        """总编审阅阶段用户说「完成」才进入 done。"""
         outputs = {
-            "section_outline": ["开场", "发展"],
-            "section_index": 2,
-            "generated_sections": ["## 开场\\n\\nabc", "## 发展\\n\\ndef"],
+            "chief_editor_prompted": True,
+            "section_index": 1,
+            "generated_sections": ["## 第 1 段\n\nabc", "## 第 2 段\n\ndef"],
         }
-        result = json.loads(self.skill._handle_generate_section(
+        result = json.loads(self.skill._handle_chief_editor_review(
+            workflow_step={"action": "review", "state_id": "chief_editor_review", "role": "总编"},
             slots={"话题": "职场", "态度": "愤怒", "偏见": "加班是对的", "情绪": "释然"},
             outputs=outputs,
+            user_input="完成",
             user_id=None,
             attachments=[],
-            user_input="完成",
-            current_state="generating_section",
+            current_state="chief_editor_review",
         ))
         assert result["state_update"]["current_state"] == "done"
         assert "final_script" in result["outputs_update"]

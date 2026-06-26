@@ -330,6 +330,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       </div>
       <!-- 4 维度槽位状态 -->
       <div class="slot-status-bar" id="slotStatusBar"></div>
+      <div id="selectedSkillBadge" style="display:none;margin:0 0 8px;font-size:12px;font-weight:650;color:#166534;background:#e8f5e9;border:1px solid #18a058;border-radius:10px;padding:5px 10px;width:fit-content;"></div>
 
       <!-- 消息列表 -->
       <div class="chat-messages" id="chatMessages">
@@ -458,6 +459,8 @@ let personas = [];
 let allSkills = [];
 let selectedSkills = new Set();
 let selectedPersonaId = '';
+let selectedSkillId = '';
+let selectedStyle = '';
 let currentConversationId = null;
 let conversations = [];
 let isGenerating = false;
@@ -835,6 +838,7 @@ async function loadSkills() {
     const res = await apiFetch('/pro/skills');
     allSkills = await res.json();
     renderTeamSkills();
+    updateSelectedSkillDisplay();
     updateEstimate();
   } catch (err) {
     console.error('加载 Skill 失败', err);
@@ -867,8 +871,50 @@ function renderTeamSkills() {
   });
   html += '</div>';
 
+  // Phase 3：写作风格 Skill 选择
+  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing');
+  if (writingSkills.length > 0) {
+    html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">';
+    html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">🎭 写作风格</div>';
+    html += '<div class="slot-list">';
+    writingSkills.forEach(skill => {
+      const isSelected = skill.id === selectedSkillId;
+      const check = isSelected ? '✓ ' : '';
+      html += `<div class="slot-row" onclick="selectSkill('${skill.id}')" title="${escapeHtml(skill.description || '')}" style="background:linear-gradient(135deg,#ffedd5,#f97316)">
+        <div class="slot-avatar" style="display:flex;align-items:center;justify-content:center;font-size:18px;">🎤</div>
+        <div class="slot-info">
+          <div class="slot-name">${check}${escapeHtml(skill.name)}</div>
+          <div class="slot-meta">@${escapeHtml(skill.id)} · ${escapeHtml(skill.description || '写作风格')}</div>
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+
   container.innerHTML = html;
   updateTeamCount();
+}
+
+function selectSkill(skillId) {
+  selectedSkillId = skillId;
+  const skill = (allSkills || []).find(s => s.id === skillId);
+  toast('已切换写作风格：' + (skill?.name || skillId));
+  renderTeamSkills();
+  updateSelectedSkillDisplay();
+  closeAll();
+}
+
+function updateSelectedSkillDisplay() {
+  const badge = $('#selectedSkillBadge');
+  if (!badge) return;
+  const skill = (allSkills || []).find(s => s.id === selectedSkillId);
+  if (selectedSkillId && skill) {
+    badge.textContent = '🎭 ' + skill.name;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.textContent = '';
+    badge.style.display = 'none';
+  }
 }
 
 function toggleSkillChip(el) {
@@ -919,6 +965,8 @@ function newConversation() {
   workflowSessionId = null;
   selectedPersonaId = '';
   selectedSkills = new Set();
+  selectedSkillId = '';
+  selectedStyle = '';
 
   // Reset chat messages
   const area = $('#chatMessages');
@@ -1124,6 +1172,8 @@ async function runAgentTurn(text, silent = false) {
         session_id: workflowSessionId,
         message: text,
         persona_id: selectedPersonaId || undefined,
+        skill_id: selectedSkillId || undefined,
+        style: selectedStyle || undefined,
         model
       })
     });

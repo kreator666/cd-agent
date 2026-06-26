@@ -222,42 +222,67 @@ async def delete_persona(
 async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
     """列出专业版可用 Skill，支持按类型过滤。
 
-    可选类型：topic / attitude / emotion / genre / rule_persona / script_composer / style_mimic
+    可选类型：topic / attitude / emotion / genre / rule_persona / script_composer / style_mimic / writing
     """
-    if state.orch is None:
-        raise HTTPException(status_code=503, detail="服务未就绪")
-    skills = state.orch.list_skills()
-    result = []
-    for s in skills:
+    result: list[dict] = []
+
+    # 1. 旧版 ComedySkill 工具（分析/填槽类）
+    if state.orch is not None:
+        skills = state.orch.list_skills()
+        for s in skills:
+            info = {
+                "id": s.get("name", ""),
+                "name": s.get("name", ""),
+                "description": s.get("description", ""),
+                "type": getattr(s, "task_type", "unknown"),
+            }
+            # 尝试从 Skill 类名推断类型
+            name = info["name"]
+            if "topic" in name:
+                info["skill_type"] = "topic"
+            elif "attitude" in name:
+                info["skill_type"] = "attitude"
+            elif "emotion" in name:
+                info["skill_type"] = "emotion"
+            elif "genre" in name:
+                info["skill_type"] = "genre"
+            elif "rule_persona" in name:
+                info["skill_type"] = "rule_persona"
+            elif "script_composer" in name:
+                info["skill_type"] = "script_composer"
+            elif "style_mimic" in name:
+                info["skill_type"] = "style_mimic"
+            elif "material" in name:
+                info["skill_type"] = "material"
+            elif "layout" in name:
+                info["skill_type"] = "layout"
+            else:
+                info["skill_type"] = "other"
+            if skill_type is None or info["skill_type"] == skill_type:
+                result.append(info)
+
+    # 2. 新版写作类 Skill（供 v4 Writer 使用）
+    from comedy_agent.core.skill_loader import load_skill_configs
+
+    for cfg in load_skill_configs(settings.skills_dir):
+        if cfg.metadata.get("kind") != "standup" and cfg.id not in {
+            "my_skill",
+            "open_source_skill",
+            "zhou_qimo",
+            "xu_zhisheng",
+            "hu_lan",
+        }:
+            continue
         info = {
-            "name": s.get("name", ""),
-            "description": s.get("description", ""),
-            "type": getattr(s, "task_type", "unknown"),
+            "id": cfg.id,
+            "name": cfg.name,
+            "description": cfg.description,
+            "type": cfg.task_type,
+            "skill_type": "writing",
         }
-        # 尝试从 Skill 类名推断类型
-        name = info["name"]
-        if "topic" in name:
-            info["skill_type"] = "topic"
-        elif "attitude" in name:
-            info["skill_type"] = "attitude"
-        elif "emotion" in name:
-            info["skill_type"] = "emotion"
-        elif "genre" in name:
-            info["skill_type"] = "genre"
-        elif "rule_persona" in name:
-            info["skill_type"] = "rule_persona"
-        elif "script_composer" in name:
-            info["skill_type"] = "script_composer"
-        elif "style_mimic" in name:
-            info["skill_type"] = "style_mimic"
-        elif "material" in name:
-            info["skill_type"] = "material"
-        elif "layout" in name:
-            info["skill_type"] = "layout"
-        else:
-            info["skill_type"] = "other"
-        if skill_type is None or info["skill_type"] == skill_type:
+        if skill_type is None or skill_type == "writing":
             result.append(info)
+
     return result
 
 

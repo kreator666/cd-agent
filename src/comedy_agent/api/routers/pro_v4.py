@@ -30,6 +30,8 @@ class ProChatV4Request(BaseModel):
     message: str = Field(description="用户消息")
     outline: str | None = Field(default=None, description="选题大纲（兼容旧字段，暂不启用）")
     persona_id: str | None = Field(default=None, description="人物画像 ID（暂不启用）")
+    skill_id: str | None = Field(default=None, description="选中的写作 Skill ID")
+    style: str | None = Field(default=None, description="选中的风格子选项")
     model: str | None = Field(default=None, description="使用的模型名称")
 
 
@@ -387,9 +389,18 @@ async def pro_chat_v4(
         else:
             is_feedback = False
 
+        state_updates: dict[str, Any] = {}
+        if request.skill_id:
+            state_updates["selected_skill"] = request.skill_id
+        if request.style:
+            state_updates["selected_style"] = request.style
+
         if is_feedback:
             raw_result = await state.graph.ainvoke(
-                Command(resume=request.message),
+                Command(
+                    resume=request.message,
+                    update=state_updates if state_updates else None,
+                ),
                 config=config,
             )
         else:
@@ -399,6 +410,7 @@ async def pro_chat_v4(
                     model=request.model,
                     user_id=user_id,
                     session_id=session_id,
+                    **state_updates,
                 ),
                 config=config,
             )

@@ -241,6 +241,11 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .slot-chip.filled .slot-dot{background:#18a058;}
 .slot-chip.pending .slot-dot{background:#ff9800;}
 
+/* Manual edit in human_review */
+.review-section{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;line-height:1.7;white-space:pre-wrap;font-size:14px;color:#3f3f3f;}
+.review-section[contenteditable="true"]{background:#fff;border-color:#ff764a;box-shadow:0 0 0 3px rgba(255,118,74,.12);outline:none;}
+.edit-actions{display:none;gap:8px;margin-top:8px;}
+
 .chat-messages{flex:1;overflow-y:auto;padding:4px 0 12px;display:flex;flex-direction:column;gap:2px;min-height:0;}
 
 .msg-welcome{display:flex;gap:12px;padding:12px 0 16px;margin-bottom:4px;border-bottom:1px solid var(--line);}
@@ -1096,26 +1101,13 @@ async function loadConversation(id) {
 }
 
 /* ========== Generation ========== */
-async function sendPrompt() {
-  const input = $('#chatInput');
-  const text = input.value.trim();
-  if (!text) { input.focus(); return; }
-
-  // Hide welcome on first message
-  const welcome = $('#msgWelcome');
-  if (welcome) welcome.style.display = 'none';
-
-  // Add user message
-  addChatMessage('user', '我', '创作主理人', text);
-  input.value = '';
-  input.style.height = 'auto';
-
+async function runAgentTurn(text, silent = false) {
   // Show agent typing indicator
   const agentMsg = addChatMessage('agent', '喜剧龙虾', '资料与结构助手', '收到，正在处理您的需求…', { gradient: 'background:linear-gradient(135deg,#ddd,#9b7)' });
   agentMsg.classList.add('typing');
 
-  // Update title if new
-  if ($('#pageTitle').textContent === '新对话') {
+  // Update title if new (only for user-visible messages)
+  if (!silent && $('#pageTitle').textContent === '新对话') {
     $('#pageTitle').textContent = text.slice(0, 20) || '剧本创作';
   }
 
@@ -1144,6 +1136,11 @@ async function sendPrompt() {
 
     // 记录当前角色
     if (data.current_role) currentRole = data.current_role;
+
+    // 最终剧本场景：先清空右侧 section 草稿卡片，只保留最终剧本
+    if (data.type === 'final_script') {
+      clearSectionArtifacts();
+    }
 
     // Render artifacts 到右侧面板
     if (data.artifacts && data.artifacts.length > 0) {
@@ -1180,6 +1177,23 @@ async function sendPrompt() {
   }
 }
 
+async function sendPrompt() {
+  const input = $('#chatInput');
+  const text = input.value.trim();
+  if (!text) { input.focus(); return; }
+
+  // Hide welcome on first message
+  const welcome = $('#msgWelcome');
+  if (welcome) welcome.style.display = 'none';
+
+  // Add user message
+  addChatMessage('user', '我', '创作主理人', text);
+  input.value = '';
+  input.style.height = 'auto';
+
+  await runAgentTurn(text, false);
+}
+
 function renderWorkflowSteps(data) {
   if (data.steps && data.steps.length > 0) {
     data.steps.forEach((step, idx) => {
@@ -1209,7 +1223,102 @@ function renderChecklist(checklist) {
   </div>`;
 }
 
-function renderWorkflowStep(step, bindEvents = false) {
+function splitHumanReviewContent(content) {
+  const idx = content.indexOf('\n\n');
+  if (idx === -1) return { message: content, sectionText: '' };
+  return {
+    message: content.slice(0, idx),
+    sectionText: content.slice(idx + 2)
+  };
+}
+
+function renderGuideContentHtml(content, workflowState) {
+  if (workflowState === 'human_review') {
+    const { message, sectionText } = splitHumanReviewContent(content);
+    const messageHtml = `<p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`;
+    const sectionHtml = sectionText
+      ? `<div class="review-section" contenteditable="false">${escapeHtml(sectionText)}</div>
+         <div class="edit-actions">
+           <button class="wf-action-btn" data-action="confirm_edit">✅ 确认修改</button>
+           <button class="wf-action-btn" data-action="cancel_edit">取消</button>
+         </div>`
+      : '';
+    return messageHtml + sectionHtml;
+  }
+  return content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
+}
+
+function getSectionArtifactId(artifacts) {
+  if (!artifacts) return null;
+  const sectionArt = artifacts.find(a => a.type === 'section');
+  return sectionArt ? sectionArt.id : null;
+}
+
+function bindGuideActions(msgDiv, options = {}) {
+  const { allowManualEdit = false, sectionArtifactId = null, workflowState = '' } = options;
+  msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      const value = btn.dataset.value;
+
+      if (allowManualEdit && action === 'modify') {
+        const sectionEl = msgDiv.querySelector('.review-section');
+        if (sectionEl) {
+          sectionEl.dataset.original = sectionEl.textContent;
+          sectionEl.contentEditable = 'true';
+          sectionEl.focus();
+          const editActions = msgDiv.querySelector('.edit-actions');
+          if (editActions) editActions.style.display = 'flex';
+          return;
+        }
+      }
+
+      if (action === 'confirm_edit') {
+        const sectionEl = msgDiv.querySelector('.review-section');
+        if (sectionEl) finishSectionEdit(sectionEl, true, sectionArtifactId);
+        return;
+      }
+
+      if (action === 'cancel_edit') {
+        const sectionEl = msgDiv.querySelector('.review-section');
+        if (sectionEl) finishSectionEdit(sectionEl, false, sectionArtifactId);
+        return;
+      }
+
+      if (action === 'select_skill' && value) {
+        $('#chatInput').value = value;
+        sendPrompt();
+      } else if (action === 'set_outline') {
+        $('#chatInput').focus();
+      } else {
+        $('#chatInput').value = value || btn.textContent;
+        sendPrompt();
+      }
+    });
+  });
+}
+
+function finishSectionEdit(sectionEl, save, artifactId) {
+  const editActions = sectionEl.nextElementSibling;
+  if (editActions) editActions.style.display = 'none';
+  sectionEl.contentEditable = 'false';
+
+  if (!save) {
+    sectionEl.textContent = sectionEl.dataset.original || sectionEl.textContent;
+    return;
+  }
+
+  const editedText = sectionEl.textContent.trim();
+  // 同步更新右侧结果区域对应的段落卡片
+  if (artifactId && artifactsState[artifactId]) {
+    artifactsState[artifactId].content = editedText;
+    updateArtifactCardContent(artifactId);
+  }
+  // 以 [manual] 标记把编辑结果提交给后端，不触发模型重写
+  runAgentTurn('[manual]\n' + editedText, true);
+}
+
+function renderWorkflowStep(step, bindEvents = false, workflowState = '', isLast = false) {
   const type = step.type;
   const content = step.content;
   const skillName = step.skill_name || '喜剧龙虾';
@@ -1224,24 +1333,14 @@ function renderWorkflowStep(step, bindEvents = false) {
     const actionsHtml = (step.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
-    const contentHtml = content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
+    const contentHtml = renderGuideContentHtml(content, workflowState);
     const html = `${todoHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
     const msgDiv = addChatMessage('agent', roleName, roleLabel, html, { gradient: roleGradient });
     if (bindEvents) {
-      msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const action = btn.dataset.action;
-          const value = btn.dataset.value;
-          if (action === 'select_skill' && value) {
-            $('#chatInput').value = value;
-            sendPrompt();
-          } else if (action === 'set_outline') {
-            $('#chatInput').focus();
-          } else {
-            $('#chatInput').value = value || btn.textContent;
-            sendPrompt();
-          }
-        });
+      bindGuideActions(msgDiv, {
+        allowManualEdit: isLast && workflowState === 'human_review',
+        sectionArtifactId: getSectionArtifactId(step.artifacts),
+        workflowState
       });
     }
   } else if (type === 'skill_output') {
@@ -1278,24 +1377,14 @@ function renderWorkflowResponse(data) {
     const actionsHtml = (data.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
-    const html = `${todoHtml}<p>${escapeHtml(content)}</p>${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const contentHtml = renderGuideContentHtml(content, data.workflow_state);
+    const html = `${todoHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
     const msgDiv = addChatMessage('agent', roleName, roleLabel, html, { gradient: roleGradient });
     // 绑定快捷按钮点击事件
-    msgDiv.querySelectorAll('.wf-action-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const action = btn.dataset.action;
-        const value = btn.dataset.value;
-        if (action === 'select_skill' && value) {
-          $('#chatInput').value = value;
-          sendPrompt();
-        } else if (action === 'set_outline') {
-          // 大纲由 喜剧龙虾 在对话中收集，不再弹出编辑框
-          $('#chatInput').focus();
-        } else {
-          $('#chatInput').value = value || btn.textContent;
-          sendPrompt();
-        }
-      });
+    bindGuideActions(msgDiv, {
+      allowManualEdit: data.workflow_state === 'human_review',
+      sectionArtifactId: getSectionArtifactId(data.artifacts),
+      workflowState: data.workflow_state
     });
   } else if (type === 'skill_output') {
     const skillInfo = allSkills.find(s => s.name === skillName) || { name: skillName, skill_type: 'topic', description: '' };
@@ -1539,6 +1628,17 @@ function updateSlotStatus(slots) {
 function clearArtifacts() {
   artifactsState = {};
   $('#artifactsPanel').innerHTML = '<div class="artifacts-empty">在左侧与写作团队对话，生成的内容将以卡片形式展示在这里。</div>';
+}
+
+function clearSectionArtifacts() {
+  // 最终剧本生成时，清除中间段落草稿卡片，避免与最终剧本重复显示
+  Object.keys(artifactsState).forEach(id => {
+    if (artifactsState[id].type === 'section') {
+      const card = $(`[data-artifact-id="${id}"]`);
+      if (card) card.remove();
+      delete artifactsState[id];
+    }
+  });
 }
 
 /* ========== Persona Modal ========== */

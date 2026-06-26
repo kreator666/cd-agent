@@ -1,0 +1,79 @@
+"""槽位检查 Worker。
+
+检查 4 个维度槽位是否已填满：
+- 未填满：返回引导消息，要求用户继续通过 @ 选择填充。
+- 已填满：将槽位映射为 analysis，进入 planning。
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from comedy_agent.state.schema import ComedyState
+
+logger = logging.getLogger(__name__)
+
+_REQUIRED_SLOTS = ("话题", "态度", "偏见", "情绪")
+
+
+class SlotCheckingAgent:
+    """槽位检查 Agent。"""
+
+    def run(self, state: ComedyState, llm: Any | None = None) -> dict[str, Any]:
+        """检查槽位完整性并决定下一步。
+
+        Args:
+            state: 当前图状态。
+            llm: 预留参数，当前实现基于规则检查，暂不使用 LLM。
+
+        Returns:
+            若槽位完整：``phase=planning`` + ``analysis``
+            若槽位缺失：``phase=complete`` + ``response_type=guide`` + ``output`` 引导语
+        """
+        slots = state.slots or {}
+        missing = [s for s in _REQUIRED_SLOTS if not slots.get(s)]
+
+        if missing:
+            guide = self._build_guide_message(slots, missing)
+            logger.debug("slot_checker: missing %s", missing)
+            return {
+                "output": guide,
+                "response_type": "guide",
+                "phase": "complete",
+            }
+
+        logger.debug("slot_checker: all slots filled, move to planning")
+        return {
+            "analysis": {
+                "topic": slots["话题"],
+                "attitude": slots["态度"],
+                "bias": slots["偏见"],
+                "emotion": slots["情绪"],
+            },
+            "phase": "planning",
+        }
+
+    def _build_guide_message(
+        self, slots: dict[str, str], missing: list[str]
+    ) -> str:
+        """构造引导用户继续填槽的消息。"""
+        lines = ["在开始写作前，请先通过 @ 选择填满以下维度："]
+        for slot in _REQUIRED_SLOTS:
+            value = slots.get(slot)
+            if value:
+                lines.append(f"✅ {slot}：{value}")
+            else:
+                lines.append(f"⬜ {slot}：未填写")
+
+        missing_examples = {
+            "话题": "例如：@话题 加班",
+            "态度": "例如：@态度 讽刺",
+            "偏见": "例如：@偏见 领导永远是对的",
+            "情绪": "例如：@情绪 无奈",
+        }
+        lines.append("\n还需要你补充：")
+        for slot in missing:
+            lines.append(f"• {slot} {missing_examples.get(slot, '')}")
+
+        return "\n".join(lines)

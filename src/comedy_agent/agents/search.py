@@ -60,6 +60,7 @@ class SearchAgent:
             "search_results": [r.model_dump() for r in results],
             "output": output,
             "phase": "complete",
+            "response_type": "guide",
         }
 
     def _format_output(self, query: str, results: list[SearchResultItem]) -> str:

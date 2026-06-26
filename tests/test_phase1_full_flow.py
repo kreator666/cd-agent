@@ -85,7 +85,7 @@ def test_full_writing_flow_with_human_in_the_loop(graph):
         mock_review.get_model.return_value = analytical_llm
 
         result = graph.invoke(
-            ComedyState(user_input="写一段关于通勤的脱口秀"),
+            ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result
@@ -135,7 +135,7 @@ def test_modify_feedback_rewrites_current_section(graph):
         mock_review.get_model.return_value = analytical_llm
 
         result = graph.invoke(
-            ComedyState(user_input="写一段关于加班的脱口秀"),
+            ComedyState(user_input="写一段关于加班的脱口秀", slots={"话题": "加班", "态度": "自嘲", "偏见": "无", "情绪": "疲惫"}),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result

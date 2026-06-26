@@ -1,6 +1,6 @@
 """意图分类 Worker。
 
-将用户输入分类为 writing / control / search / feedback / chat 五类。
+将用户输入分类为 writing / fill_slot / control / search / feedback / chat 六类。
 Phase 2 使用 LLM 结构化输出，并保留规则兜底。
 """
 
@@ -20,18 +20,19 @@ logger = logging.getLogger(__name__)
 PROMPT = """你是一位意图分类助手。请根据用户输入判断其意图。
 
 可选意图：
-- writing：用户想要创作喜剧内容（脱口秀、小品、相声、漫才、剧本等）。
+- writing：用户想要创作喜剧内容（脱口秀、小品、相声、漫才、剧本等），且没有明确使用 @ 填槽。
+- fill_slot：用户通过 @ 或显式声明在填写 4 维度槽位（话题 / 态度 / 偏见 / 情绪）。
 - search：用户想要搜索资料、找素材、查信息。
 - control：用户想要停止、结束、退出、重置、清空当前任务。
 - feedback：用户在审阅阶段给出通过、修改、重写、继续等反馈。
-- chat：普通闲聊或问候，没有明确创作/搜索/控制意图。
+- chat：普通闲聊或问候，没有明确创作/搜索/控制/填槽意图。
 
 当前会话阶段：{phase}
 用户输入：{user_input}
 
 请输出意图、置信度（0-1）和一句话理由。"""
 
-# 规则兜底关键词（在 LLM 不可用时使用）
+# 规则兜底关键词
 _WRITING_KEYWORDS = (
     "写", "创作", "来一段", "写一段", "写个", "来个", "段子", "脱口秀",
     "小品", "相声", "漫才", "剧本", "关于", "话题",
@@ -39,6 +40,7 @@ _WRITING_KEYWORDS = (
 _SEARCH_KEYWORDS = ("搜索", "查一下", "查", "找", "资料", "素材")
 _CONTROL_KEYWORDS = ("停止", "结束", "退出", "重置", "清空")
 _FEEDBACK_KEYWORDS = ("通过", "修改", "重写", "继续", "ok", "yes", "no")
+_SLOT_KEYWORDS = ("话题", "态度", "偏见", "情绪", "@")
 
 
 class IntentClassifierAgent:
@@ -79,20 +81,27 @@ class IntentClassifierAgent:
 
     def _rule_classify(self, state: ComedyState) -> IntentClassification:
         """规则兜底分类。"""
-        user_input = state.user_input.strip().lower()
+        user_input = state.user_input.strip()
+        lowered = user_input.lower()
         phase = state.phase
 
         if phase in ("reviewing", "human_review", "routing_feedback"):
-            if any(kw in user_input for kw in _FEEDBACK_KEYWORDS):
+            if any(kw in lowered for kw in _FEEDBACK_KEYWORDS):
                 return IntentClassification(
                     intent=UserIntent.FEEDBACK, confidence=0.8
                 )
 
-        if any(kw in user_input for kw in _CONTROL_KEYWORDS):
+        if any(kw in lowered for kw in _CONTROL_KEYWORDS):
             return IntentClassification(intent=UserIntent.CONTROL, confidence=0.9)
-        if any(kw in user_input for kw in _SEARCH_KEYWORDS):
+
+        if any(kw in lowered for kw in _SEARCH_KEYWORDS):
             return IntentClassification(intent=UserIntent.SEARCH, confidence=0.8)
-        if any(kw in state.user_input for kw in _WRITING_KEYWORDS):
+
+        # 包含 @ 或 4 维度关键词 -> 视为填槽
+        if "@" in user_input or any(kw in user_input for kw in _SLOT_KEYWORDS):
+            return IntentClassification(intent=UserIntent.FILL_SLOT, confidence=0.9)
+
+        if any(kw in user_input for kw in _WRITING_KEYWORDS):
             return IntentClassification(intent=UserIntent.WRITING, confidence=0.85)
 
         return IntentClassification(intent=UserIntent.CHAT, confidence=0.9)
@@ -101,7 +110,10 @@ class IntentClassifierAgent:
     def _intent_to_phase(intent: str, current_phase: str) -> str:
         """根据意图映射到下一个 phase。"""
         if intent == "writing":
-            return "analyzing"
+            # 专业版流程：先收集 4 维度槽位
+            return "filling_slots"
+        if intent == "fill_slot":
+            return "filling_slots"
         if intent == "search":
             return "searching"
         if intent == "control":

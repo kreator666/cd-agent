@@ -30,6 +30,8 @@ from comedy_agent.nodes import (
     process_feedback_node,
     review_node,
     search_node,
+    slot_checker_node,
+    slot_filler_node,
     write_node,
 )
 from comedy_agent.state.schema import ComedyState
@@ -37,6 +39,8 @@ from comedy_agent.state.schema import ComedyState
 # Worker 节点名与节点函数的映射
 WORKER_NODES = {
     "intent_classifier": entry_node,
+    "slot_filler": slot_filler_node,
+    "slot_checker": slot_checker_node,
     "context_analyzer": analyze_node,
     "planner": plan_node,
     "writer": write_node,
@@ -76,6 +80,8 @@ def build_supervisor_graph() -> CompiledStateGraph:
         supervisor.route,
         {
             "intent_classifier": "intent_classifier",
+            "slot_filler": "slot_filler",
+            "slot_checker": "slot_checker",
             "context_analyzer": "context_analyzer",
             "planner": "planner",
             "writer": "writer",

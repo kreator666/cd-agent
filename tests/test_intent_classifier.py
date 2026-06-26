@@ -18,16 +18,18 @@ def agent():
 
 
 @pytest.mark.parametrize(
-    "user_input,expected_intent",
+    "user_input,expected_intent,expected_phase",
     [
-        ("写一段关于加班的脱口秀", UserIntent.WRITING),
-        ("来个小品", UserIntent.WRITING),
-        ("搜索一下最近的 comedy 理论", UserIntent.SEARCH),
-        ("停止创作", UserIntent.CONTROL),
-        ("你好", UserIntent.CHAT),
+        ("写一段关于加班的脱口秀", UserIntent.WRITING, "filling_slots"),
+        ("来个小品", UserIntent.WRITING, "filling_slots"),
+        ("@话题 加班", UserIntent.FILL_SLOT, "filling_slots"),
+        ("态度：讽刺", UserIntent.FILL_SLOT, "filling_slots"),
+        ("搜索一下最近的 comedy 理论", UserIntent.SEARCH, "searching"),
+        ("停止创作", UserIntent.CONTROL, "finalizing"),
+        ("你好", UserIntent.CHAT, "chatting"),
     ],
 )
-def test_intent_classification_structured(agent, user_input, expected_intent):
+def test_intent_classification_structured(agent, user_input, expected_intent, expected_phase):
     """LLM 结构化输出正常时，分类结果正确。"""
     llm = make_structured_mock_llm(
         responses={
@@ -43,7 +45,7 @@ def test_intent_classification_structured(agent, user_input, expected_intent):
     )
 
     assert result["intent"] == expected_intent.value
-    assert result["phase"] == agent._intent_to_phase(expected_intent.value, "idle")
+    assert result["phase"] == expected_phase
 
 
 def test_intent_classification_fallback_on_structured_error(agent):
@@ -57,7 +59,7 @@ def test_intent_classification_fallback_on_structured_error(agent):
     )
 
     assert result["intent"] == "writing"
-    assert result["phase"] == "analyzing"
+    assert result["phase"] == "filling_slots"
 
 
 def test_intent_classifier_no_llm_uses_factory(agent):

@@ -12,6 +12,7 @@ class UserIntent(str, Enum):
     """用户意图枚举。"""
 
     WRITING = "writing"
+    FILL_SLOT = "fill_slot"
     CONTROL = "control"
     SEARCH = "search"
     FEEDBACK = "feedback"

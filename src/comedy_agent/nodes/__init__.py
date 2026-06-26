@@ -15,6 +15,8 @@ from comedy_agent.nodes.plan_node import plan_node
 from comedy_agent.nodes.process_feedback_node import process_feedback_node
 from comedy_agent.nodes.review_node import review_node
 from comedy_agent.nodes.search_node import search_node
+from comedy_agent.nodes.slot_checker_node import slot_checker_node
+from comedy_agent.nodes.slot_filler_node import slot_filler_node
 from comedy_agent.nodes.write_node import write_node
 
 __all__ = [
@@ -27,5 +29,7 @@ __all__ = [
     "process_feedback_node",
     "review_node",
     "search_node",
+    "slot_checker_node",
+    "slot_filler_node",
     "write_node",
 ]

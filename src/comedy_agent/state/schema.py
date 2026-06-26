@@ -25,6 +25,8 @@ class ComedyState(BaseModel):
     phase: Literal[
         "idle",
         "chatting",
+        "filling_slots",
+        "slot_checking",
         "analyzing",
         "planning",
         "writing",
@@ -74,7 +76,7 @@ class ComedyState(BaseModel):
     # ------------------------------------------------------------------ #
     # 意图与创作流程
     # ------------------------------------------------------------------ #
-    intent: Literal["writing", "control", "search", "feedback", "chat"] | None = Field(
+    intent: Literal["writing", "fill_slot", "control", "search", "feedback", "chat"] | None = Field(
         default=None,
         description="用户意图分类",
     )
@@ -117,6 +119,22 @@ class ComedyState(BaseModel):
     search_results: list[dict[str, Any]] | None = Field(
         default=None,
         description="Search Worker 返回的搜索结果",
+    )
+
+    # ------------------------------------------------------------------ #
+    # 槽位收集（专业版 B @ 填槽流程）
+    # ------------------------------------------------------------------ #
+    slots: dict[str, str] | None = Field(
+        default=None,
+        description="已收集的 4 维度槽位：话题/态度/偏见/情绪",
+    )
+
+    # ------------------------------------------------------------------ #
+    # 响应类型标记（用于前端区分 guide / script）
+    # ------------------------------------------------------------------ #
+    response_type: Literal["guide", "script", "error"] | None = Field(
+        default=None,
+        description="当前响应类型：guide 引导 / script 最终稿件 / error 错误",
     )
 
     # ------------------------------------------------------------------ #

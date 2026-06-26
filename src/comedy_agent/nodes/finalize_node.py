@@ -31,4 +31,5 @@ def finalize_node(state: ComedyState) -> dict:
     return {
         "output": output,
         "phase": "complete",
+        "response_type": "script",
     }

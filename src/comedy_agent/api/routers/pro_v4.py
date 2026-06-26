@@ -173,7 +173,21 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
         graph_state = raw
 
     output = graph_state.output or "（无输出）"
-    is_script = graph_state.phase == "complete" and output and output != "（未生成内容）"
+    response_type = graph_state.response_type
+
+    # 默认兜底：未设置 response_type 的 complete + 有输出，按 script 处理
+    is_script = (
+        graph_state.phase == "complete"
+        and response_type == "script"
+    ) or (
+        graph_state.phase == "complete"
+        and response_type is None
+        and output
+        and output != "（未生成内容）"
+        and output != "（无输出）"
+    )
+
+    slots = _merge_slots(graph_state.slots, graph_state.analysis)
 
     if is_script:
         return ProChatV4Response(
@@ -200,31 +214,40 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                     created_by="writer",
                 )
             ],
-            slots=_analysis_to_slots(graph_state.analysis),
+            slots=slots,
         )
 
-    # chat / search 等其它完成态
+    # guide / error / 其它完成态
     return _build_guide_response(
         session_id=session_id,
         content=output,
         workflow_state=graph_state.phase,
         current_role="喜剧龙虾",
         next_role="用户",
-        steps=[{"type": "skill_output", "content": output, "current_role": "喜剧龙虾"}],
-        slots=_analysis_to_slots(graph_state.analysis),
+        steps=[{"type": "guide", "content": output, "current_role": "喜剧龙虾"}],
+        slots=slots,
     )
 
 
-def _analysis_to_slots(analysis: dict[str, Any] | None) -> dict[str, Any] | None:
-    """将 v4 analysis 映射为 pro 前端的 slots 字段。"""
-    if not analysis:
-        return None
-    slots: dict[str, Any] = {}
-    for key in ("topic", "attitude", "bias", "emotion"):
-        value = analysis.get(key)
-        if value:
-            slots[key] = value
-    return slots or None
+def _merge_slots(
+    slots: dict[str, str] | None, analysis: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """合并 state.slots（中文）与 analysis（英文）为前端可用的 slots。"""
+    result: dict[str, Any] = {}
+    if slots:
+        result.update(slots)
+    if analysis:
+        mapping = {
+            "topic": "话题",
+            "attitude": "态度",
+            "bias": "偏见",
+            "emotion": "情绪",
+        }
+        for en, cn in mapping.items():
+            value = analysis.get(en)
+            if value and cn not in result:
+                result[cn] = value
+    return result or None
 
 
 # ------------------------------------------------------------------ #

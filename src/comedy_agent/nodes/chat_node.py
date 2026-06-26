@@ -67,4 +67,5 @@ def chat_node(state: ComedyState) -> dict:
         "output": output,
         "messages": output_messages,
         "phase": "complete",
+        "response_type": "guide",
     }

@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 # Worker 名称列表（与 graph/supervisor_graph.py 中注册的节点名一致）
 MEMBERS = [
     "intent_classifier",
+    "slot_filler",
+    "slot_checker",
     "context_analyzer",
     "planner",
     "writer",
@@ -27,6 +29,8 @@ MEMBERS = [
 # Supervisor 可返回的下一个目标
 NextNode = Literal[
     "intent_classifier",
+    "slot_filler",
+    "slot_checker",
     "context_analyzer",
     "planner",
     "writer",
@@ -61,6 +65,12 @@ class SupervisorAgent:
 
         if phase == "idle":
             return "intent_classifier"
+
+        if phase == "filling_slots":
+            return "slot_filler"
+
+        if phase == "slot_checking":
+            return "slot_checker"
 
         if phase == "analyzing":
             return "context_analyzer"

@@ -73,7 +73,9 @@ class TestProChatV4:
             return ComedyState(
                 output="最终剧本内容",
                 phase="complete",
+                response_type="script",
                 analysis={"topic": "通勤", "attitude": "讽刺"},
+                slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"},
             )
 
         state.graph = MagicMock()
@@ -90,6 +92,32 @@ class TestProChatV4:
         assert data["content"] == "最终剧本内容"
         assert data["workflow_state"] == "complete"
         assert any(a["type"] == "script" for a in (data.get("artifacts") or []))
+        assert data["slots"].get("话题") == "通勤"
+
+    def test_chat_v4_slot_guide(self, client):
+        """槽位未填满时，返回 guide 引导用户继续填槽。"""
+        from comedy_agent.api.server import state
+
+        async def _ainvoke(state_input, config=None):
+            return ComedyState(
+                output="请先填满 4 个维度",
+                phase="complete",
+                response_type="guide",
+                slots={"话题": "通勤"},
+            )
+
+        state.graph = MagicMock()
+        state.graph.get_state.return_value = None
+        state.graph.ainvoke = _ainvoke
+
+        response = client.post(
+            "/pro/chat-v4",
+            json={"message": "写一段关于通勤的脱口秀"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "guide"
+        assert "话题" in data["slots"]
 
     def test_chat_v4_interrupt(self, client):
         """v4 Graph 触发 interrupt 时，返回 human_review 引导。"""
@@ -124,6 +152,7 @@ class TestProChatV4:
             return ComedyState(
                 output="最终剧本",
                 phase="complete",
+                response_type="script",
             )
 
         state.graph = MagicMock()
@@ -150,6 +179,7 @@ class TestProChatV4:
         snapshot.values = ComedyState(
             output="已完成的剧本",
             phase="complete",
+            response_type="script",
         ).model_dump()
         state.graph.get_state.return_value = snapshot
 

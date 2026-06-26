@@ -17,6 +17,8 @@ def supervisor():
     "phase,expected",
     [
         ("idle", "intent_classifier"),
+        ("filling_slots", "slot_filler"),
+        ("slot_checking", "slot_checker"),
         ("analyzing", "context_analyzer"),
         ("planning", "planner"),
         ("writing", "writer"),

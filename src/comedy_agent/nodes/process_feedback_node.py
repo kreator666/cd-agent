@@ -32,7 +32,7 @@ def process_feedback_node(state: ComedyState) -> dict:
     outline = (state.plan or {}).get("outline", [])
     total_sections = len(outline)
 
-    # 人工编辑：直接采用编辑后的文本，不调用模型重写
+    # 人工编辑：直接采用编辑后的文本，回到 human_review 让用户确认或继续修改
     if feedback.startswith(MANUAL_EDIT_PREFIX):
         edited_text = raw_feedback[len(MANUAL_EDIT_PREFIX):].strip()
         sections = list(state.sections)
@@ -41,22 +41,12 @@ def process_feedback_node(state: ComedyState) -> dict:
         else:
             sections.append(edited_text)
 
-        next_section = state.current_section + 1
-        if next_section >= total_sections:
-            logger.debug("process_feedback: manual edit of last section, finalize")
-            return {
-                "sections": sections,
-                "current_section": next_section,
-                "feedback": "",
-                "phase": "finalizing",
-            }
-
-        logger.debug("process_feedback: manual edit adopted, move to section %d", next_section)
+        logger.debug("process_feedback: manual edit adopted, return to human_review")
         return {
             "sections": sections,
-            "current_section": next_section,
+            "current_section": state.current_section,
             "feedback": "",
-            "phase": "writing",
+            "phase": "human_review",
         }
 
     # 通过类反馈：进入下一段或收尾

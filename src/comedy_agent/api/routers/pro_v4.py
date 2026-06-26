@@ -378,9 +378,10 @@ async def pro_chat_v4(
         current = state.graph.get_state(config)
         phase = current.values.get("phase") if current and current.values else "idle"
 
-        if phase == "plan_review":
+        if phase in ("plan_review", "human_review"):
+            # 计划审阅/段落审阅阶段：任何用户输入都视为反馈（支持 [manual] 人工编辑）
             is_feedback = True
-        elif phase in ("human_review", "routing_feedback"):
+        elif phase == "routing_feedback":
             is_feedback = _is_feedback_message(request.message)
         else:
             is_feedback = False

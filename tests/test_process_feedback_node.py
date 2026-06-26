@@ -42,7 +42,7 @@ def test_modify_rewrites_current_section():
     assert result["feedback"] == "这里再讽刺一点"
 
 
-def test_manual_edit_adopts_edited_text_and_moves_on():
+def test_manual_edit_adopts_edited_text_and_returns_to_human_review():
     state = ComedyState(
         feedback="[manual]\n编辑后的段落内容",
         current_section=0,
@@ -50,12 +50,12 @@ def test_manual_edit_adopts_edited_text_and_moves_on():
         plan={"outline": ["a", "b"]},
     )
     result = process_feedback_node(state)
-    assert result["phase"] == "writing"
-    assert result["current_section"] == 1
+    assert result["phase"] == "human_review"
+    assert result["current_section"] == 0
     assert result["sections"][0] == "编辑后的段落内容"
 
 
-def test_manual_edit_on_last_section_finalizes():
+def test_manual_edit_on_last_section_returns_to_human_review():
     state = ComedyState(
         feedback="[manual]\n最后一段编辑版",
         current_section=1,
@@ -63,5 +63,6 @@ def test_manual_edit_on_last_section_finalizes():
         plan={"outline": ["a", "b"]},
     )
     result = process_feedback_node(state)
-    assert result["phase"] == "finalizing"
+    assert result["phase"] == "human_review"
+    assert result["current_section"] == 1
     assert result["sections"][1] == "最后一段编辑版"

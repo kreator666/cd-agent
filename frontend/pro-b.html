@@ -1137,9 +1137,9 @@ async function runAgentTurn(text, silent = false) {
     // 记录当前角色
     if (data.current_role) currentRole = data.current_role;
 
-    // 最终剧本场景：先清空右侧 section 草稿卡片，只保留最终剧本
+    // 最终剧本场景：清空右侧工作区，只显示最终剧本一张卡片
     if (data.type === 'final_script') {
-      clearSectionArtifacts();
+      clearArtifacts();
     }
 
     // Render artifacts 到右侧面板

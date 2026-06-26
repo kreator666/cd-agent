@@ -241,7 +241,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
             next_actions=[
                 {"label": "✅ 通过", "action": "approve", "value": "通过"},
                 {"label": "✏️ 修改", "action": "modify", "value": "修改"},
-                {"label": "🔄 重写", "action": "rewrite", "value": "重写"},
+                {"label": "🔄 重新生成", "action": "regenerate", "value": "重新生成"},
             ],
             steps=[
                 {
@@ -252,6 +252,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                     "next_actions": [
                         {"label": "通过", "action": "approve", "value": "通过"},
                         {"label": "修改", "action": "modify", "value": "修改"},
+                        {"label": "重新生成", "action": "regenerate", "value": "重新生成"},
                     ],
                 }
             ],

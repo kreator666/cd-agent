@@ -224,6 +224,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
         workflow_state=graph_state.phase,
         current_role="喜剧龙虾",
         next_role="用户",
+        next_actions=graph_state.suggested_actions or [],
         steps=[{"type": "guide", "content": output, "current_role": "喜剧龙虾"}],
         slots=slots,
     )

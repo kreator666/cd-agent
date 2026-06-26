@@ -1,0 +1,82 @@
+"""GuideAgent 单元测试。"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from comedy_agent.agents.guide import GuideAgent
+from comedy_agent.state.schema import ComedyState
+
+
+def _make_llm(content: str) -> MagicMock:
+    llm = MagicMock()
+    llm.invoke.return_value = MagicMock(content=content)
+    return llm
+
+
+@pytest.fixture
+def agent():
+    return GuideAgent()
+
+
+def test_guide_parses_abc_options(agent):
+    """正常解析回复与 A/B/C 选项。"""
+    content = (
+        "回复: 我们可以先确定话题\n"
+        "选项:\n"
+        "A. @话题 加班\n"
+        "B. @话题 通勤\n"
+        "C. 什么是好的话题？"
+    )
+    result = agent.run(
+        ComedyState(user_input="我不知道写什么", phase="consulting"),
+        llm=_make_llm(content),
+    )
+    assert result["response_type"] == "guide"
+    assert result["phase"] == "complete"
+    assert "确定话题" in result["output"]
+    assert len(result["suggested_actions"]) == 3
+    assert result["suggested_actions"][0]["value"] == "@话题 加班"
+
+
+def test_guide_fills_missing_options(agent):
+    """选项不足 3 个时，使用兜底补全。"""
+    content = "回复: 请继续\n选项:\nA. 继续"
+    result = agent.run(
+        ComedyState(user_input="继续", phase="consulting"),
+        llm=_make_llm(content),
+    )
+    assert len(result["suggested_actions"]) == 3
+
+
+def test_guide_fallback_for_missing_slots(agent):
+    """LLM 失败且槽位缺失时，返回填槽建议。"""
+    llm = MagicMock()
+    llm.invoke.side_effect = RuntimeError("API error")
+    result = agent.run(
+        ComedyState(
+            user_input="怎么填槽",
+            phase="consulting",
+            slots={"话题": "加班"},
+        ),
+        llm=llm,
+    )
+    assert result["response_type"] == "guide"
+    assert any("态度" in a["value"] for a in result["suggested_actions"])
+
+
+def test_guide_no_llm_uses_factory(agent):
+    """未传入 LLM 时，应调用 ModelFactory。"""
+    from comedy_agent.models.factory import ModelFactory
+
+    mock_llm = _make_llm(
+        "回复: 测试\n选项:\nA. 选项一\nB. 选项二\nC. 选项三"
+    )
+
+    with patch.object(ModelFactory, "get_model", return_value=mock_llm):
+        result = agent.run(ComedyState(user_input="测试", phase="consulting"))
+
+    assert result["response_type"] == "guide"
+    assert len(result["suggested_actions"]) == 3

@@ -25,6 +25,7 @@ class ComedyState(BaseModel):
     phase: Literal[
         "idle",
         "chatting",
+        "consulting",
         "filling_slots",
         "slot_checking",
         "analyzing",
@@ -76,7 +77,7 @@ class ComedyState(BaseModel):
     # ------------------------------------------------------------------ #
     # 意图与创作流程
     # ------------------------------------------------------------------ #
-    intent: Literal["writing", "fill_slot", "control", "search", "feedback", "chat"] | None = Field(
+    intent: Literal["writing", "fill_slot", "control", "search", "feedback", "consult", "chat"] | None = Field(
         default=None,
         description="用户意图分类",
     )
@@ -135,6 +136,14 @@ class ComedyState(BaseModel):
     response_type: Literal["guide", "script", "error"] | None = Field(
         default=None,
         description="当前响应类型：guide 引导 / script 最终稿件 / error 错误",
+    )
+
+    # ------------------------------------------------------------------ #
+    # Guide Agent 建议选项
+    # ------------------------------------------------------------------ #
+    suggested_actions: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Guide Agent 给出的 A/B/C 可选项",
     )
 
     # ------------------------------------------------------------------ #

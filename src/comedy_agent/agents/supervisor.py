@@ -18,6 +18,7 @@ MEMBERS = [
     "intent_classifier",
     "slot_filler",
     "slot_checker",
+    "guide",
     "context_analyzer",
     "planner",
     "writer",
@@ -31,6 +32,7 @@ NextNode = Literal[
     "intent_classifier",
     "slot_filler",
     "slot_checker",
+    "guide",
     "context_analyzer",
     "planner",
     "writer",
@@ -95,6 +97,9 @@ class SupervisorAgent:
 
         if phase == "chatting":
             return "chat"
+
+        if phase == "consulting":
+            return "guide"
 
         if phase == "finalizing":
             return "finalize"

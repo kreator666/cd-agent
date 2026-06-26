@@ -35,13 +35,9 @@ class SlotCheckingAgent:
         missing = [s for s in _REQUIRED_SLOTS if not slots.get(s)]
 
         if missing:
-            guide = self._build_guide_message(slots, missing)
-            logger.debug("slot_checker: missing %s", missing)
-            return {
-                "output": guide,
-                "response_type": "guide",
-                "phase": "complete",
-            }
+            logger.debug("slot_checker: missing %s, route to guide", missing)
+            # 不直接输出引导语，交给 GuideAgent 生成 A/B/C 选项
+            return {"phase": "consulting"}
 
         logger.debug("slot_checker: all slots filled, move to planning")
         return {
@@ -53,27 +49,3 @@ class SlotCheckingAgent:
             },
             "phase": "planning",
         }
-
-    def _build_guide_message(
-        self, slots: dict[str, str], missing: list[str]
-    ) -> str:
-        """构造引导用户继续填槽的消息。"""
-        lines = ["在开始写作前，请先通过 @ 选择填满以下维度："]
-        for slot in _REQUIRED_SLOTS:
-            value = slots.get(slot)
-            if value:
-                lines.append(f"✅ {slot}：{value}")
-            else:
-                lines.append(f"⬜ {slot}：未填写")
-
-        missing_examples = {
-            "话题": "例如：@话题 加班",
-            "态度": "例如：@态度 讽刺",
-            "偏见": "例如：@偏见 领导永远是对的",
-            "情绪": "例如：@情绪 无奈",
-        }
-        lines.append("\n还需要你补充：")
-        for slot in missing:
-            lines.append(f"• {slot} {missing_examples.get(slot, '')}")
-
-        return "\n".join(lines)

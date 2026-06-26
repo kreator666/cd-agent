@@ -16,6 +16,7 @@ class UserIntent(str, Enum):
     CONTROL = "control"
     SEARCH = "search"
     FEEDBACK = "feedback"
+    CONSULT = "consult"
     CHAT = "chat"
 
 

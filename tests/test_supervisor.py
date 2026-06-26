@@ -27,6 +27,7 @@ def supervisor():
         ("routing_feedback", "process_feedback"),
         ("searching", "search"),
         ("chatting", "chat"),
+        ("consulting", "guide"),
         ("finalizing", "finalize"),
         ("complete", "__end__"),
     ],

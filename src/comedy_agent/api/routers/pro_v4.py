@@ -104,6 +104,7 @@ def _extract_interrupt_info(raw: dict) -> dict[str, Any]:
 
     return {
         "review_type": "section",
+        "section_index": value.get("section_index", 0),
         "section_text": value.get("section_text", ""),
         "message": value.get("message", section_default["message"]),
     }
@@ -224,6 +225,8 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
             )
 
         section_text = info["section_text"]
+        section_index = info.get("section_index", 0)
+        section_label = f"第 {section_index + 1} 段"
         content = (
             f"{info['message']}\n\n{section_text}"
             if section_text
@@ -254,9 +257,9 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
             ],
             artifacts=[
                 Artifact(
-                    id=f"{session_id}-section",
+                    id=f"{session_id}-section-{section_index}",
                     type="section",
-                    title="当前段落",
+                    title=section_label,
                     content=section_text,
                     created_by="writer",
                 )

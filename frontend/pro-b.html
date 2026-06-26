@@ -232,6 +232,15 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .model-select{font-size:12px;font-weight:650;color:var(--muted);background:transparent;border:none;outline:none;cursor:pointer;max-width:140px;}
 .model-select option{color:#333;}
 
+/* Slot status chips */
+.slot-status-bar{display:flex;gap:8px;padding:4px 0 8px;flex-wrap:wrap;min-height:34px;}
+.slot-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:10px;background:#f5f6f8;font-size:12px;font-weight:650;color:#555;border:1px solid var(--line);transition:.2s;max-width:25%;}
+.slot-chip.filled{background:#e8f5e9;border-color:#18a058;color:#166534;}
+.slot-chip.pending{background:#fff3e0;border-color:#ff9800;color:#e65100;}
+.slot-dot{width:7px;height:7px;border-radius:50%;background:#bbb;}
+.slot-chip.filled .slot-dot{background:#18a058;}
+.slot-chip.pending .slot-dot{background:#ff9800;}
+
 .chat-messages{flex:1;overflow-y:auto;padding:4px 0 12px;display:flex;flex-direction:column;gap:2px;min-height:0;}
 
 .msg-welcome{display:flex;gap:12px;padding:12px 0 16px;margin-bottom:4px;border-bottom:1px solid var(--line);}
@@ -314,6 +323,8 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
         <div class="config-item" id="configPersona" onclick="$('#teamBtn').click()"><span class="config-label">🎭</span><span id="personaPreview">未选择画像</span></div>
         <div class="config-item" id="configModel"><span class="config-label">🤖</span><select id="model-select" class="model-select"><option value="">使用默认配置</option></select></div>
       </div>
+      <!-- 4 维度槽位状态 -->
+      <div class="slot-status-bar" id="slotStatusBar"></div>
 
       <!-- 消息列表 -->
       <div class="chat-messages" id="chatMessages">
@@ -922,6 +933,7 @@ function newConversation() {
 
   // Clear artifacts panel
   clearArtifacts();
+  updateSlotStatus({});
   currentRole = '主持人';
 
   // Refresh UI state
@@ -1146,6 +1158,9 @@ async function sendPrompt() {
       const topicText = data.slots['话题'].slice(0, 20) + (data.slots['话题'].length > 20 ? '…' : '');
       $('#pageTitle').textContent = topicText;
     }
+
+    // 更新 4 维度槽位状态
+    updateSlotStatus(data.slots || {});
 
     // 非最终剧本场景立即保存；final_script / typewriteArtifact 场景等待动画完成后再保存
     const hasFinalScript = data.steps && data.steps.some(s => s.type === 'final_script');
@@ -1500,6 +1515,25 @@ function renderTodoBoard(todoBoard) {
     return `<div class="todo-item ${doneClass} ${inProgressClass} ${blockedClass}"><span class="todo-check ${doneClass} ${inProgressClass}">${check}</span><span>${escapeHtml(item.label)}</span>${roleTag}</div>`;
   }).join('');
   return `<div class="todo-board"><div class="todo-board-title">📋 创作流程</div>${items}</div>`;
+}
+
+function updateSlotStatus(slots) {
+  const bar = $('#slotStatusBar');
+  if (!bar) return;
+  const required = [
+    { key: '话题', label: '话题' },
+    { key: '态度', label: '态度' },
+    { key: '偏见', label: '偏见' },
+    { key: '情绪', label: '情绪' },
+  ];
+  bar.innerHTML = required.map(({ key, label }) => {
+    const value = slots && slots[key];
+    const filled = value && String(value).trim();
+    const cls = filled ? 'filled' : 'pending';
+    const dot = filled ? '●' : '○';
+    const text = filled ? `${label}：${escapeHtml(String(value).slice(0, 16))}` : `${label}：待填写`;
+    return `<div class="slot-chip ${cls}" title="${text}"><span class="slot-dot"></span>${text}</div>`;
+  }).join('');
 }
 
 function clearArtifacts() {

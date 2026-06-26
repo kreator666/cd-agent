@@ -1198,7 +1198,7 @@ function renderWorkflowSteps(data) {
   if (data.steps && data.steps.length > 0) {
     data.steps.forEach((step, idx) => {
       const isLast = idx === data.steps.length - 1;
-      renderWorkflowStep(step, isLast);
+      renderWorkflowStep(step, isLast, data.workflow_state, isLast, data.artifacts);
     });
   } else {
     // 兼容旧版单步响应
@@ -1318,7 +1318,7 @@ function finishSectionEdit(sectionEl, save, artifactId) {
   runAgentTurn('[manual]\n' + editedText, true);
 }
 
-function renderWorkflowStep(step, bindEvents = false, workflowState = '', isLast = false) {
+function renderWorkflowStep(step, bindEvents = false, workflowState = '', isLast = false, parentArtifacts = null) {
   const type = step.type;
   const content = step.content;
   const skillName = step.skill_name || '喜剧龙虾';
@@ -1339,7 +1339,7 @@ function renderWorkflowStep(step, bindEvents = false, workflowState = '', isLast
     if (bindEvents) {
       bindGuideActions(msgDiv, {
         allowManualEdit: isLast && workflowState === 'human_review',
-        sectionArtifactId: getSectionArtifactId(step.artifacts),
+        sectionArtifactId: getSectionArtifactId(step.artifacts || parentArtifacts),
         workflowState
       });
     }

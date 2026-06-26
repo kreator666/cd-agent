@@ -30,6 +30,8 @@ class ComedyState(BaseModel):
         "slot_checking",
         "analyzing",
         "planning",
+        "plan_review",
+        "routing_plan_feedback",
         "writing",
         "reviewing",
         "human_review",

@@ -13,7 +13,9 @@ from comedy_agent.nodes.finalize_node import finalize_node
 from comedy_agent.nodes.guide_node import guide_node
 from comedy_agent.nodes.human_node import human_node
 from comedy_agent.nodes.plan_node import plan_node
+from comedy_agent.nodes.plan_review_node import plan_review_node
 from comedy_agent.nodes.process_feedback_node import process_feedback_node
+from comedy_agent.nodes.process_plan_feedback_node import process_plan_feedback_node
 from comedy_agent.nodes.review_node import review_node
 from comedy_agent.nodes.search_node import search_node
 from comedy_agent.nodes.slot_checker_node import slot_checker_node
@@ -28,7 +30,9 @@ __all__ = [
     "guide_node",
     "human_node",
     "plan_node",
+    "plan_review_node",
     "process_feedback_node",
+    "process_plan_feedback_node",
     "review_node",
     "search_node",
     "slot_checker_node",

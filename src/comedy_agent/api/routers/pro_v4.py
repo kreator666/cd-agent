@@ -79,18 +79,65 @@ def _is_feedback_message(message: str) -> bool:
 
 
 def _extract_interrupt_info(raw: dict) -> dict[str, Any]:
-    """从 LangGraph 中断结果中提取段落文本。"""
-    default = {"section_text": "", "message": "请审阅当前段落并提供反馈"}
+    """从 LangGraph 中断结果中提取计划审阅或段落审阅信息。"""
+    section_default = {
+        "review_type": "section",
+        "section_text": "",
+        "message": "请审阅当前段落并提供反馈",
+    }
     interrupts = raw.get("__interrupt__")
     if not interrupts:
-        return default
+        return section_default
     value = interrupts[0].value if hasattr(interrupts[0], "value") else interrupts[0]
-    if isinstance(value, dict):
+    if not isinstance(value, dict):
+        return {**section_default, "section_text": str(value)}
+
+    # 计划审阅：payload 里包含 outline
+    if "outline" in value:
         return {
-            "section_text": value.get("section_text", ""),
-            "message": value.get("message", default["message"]),
+            "review_type": "plan",
+            "message": value.get("message", "计划已生成，请确认或调整"),
+            "todo": value.get("todo", []),
+            "outline": value.get("outline", []),
+            "tone": value.get("tone", ""),
         }
-    return {**default, "section_text": str(value)}
+
+    return {
+        "review_type": "section",
+        "section_text": value.get("section_text", ""),
+        "message": value.get("message", section_default["message"]),
+    }
+
+
+def _format_plan_review_content(
+    message: str,
+    slots: dict[str, Any] | None,
+    todo: list[str],
+    outline: list[str],
+    tone: str,
+) -> str:
+    """把 Planner 输出汇总为给用户的结构化反馈文本。"""
+    parts = [f"给用户的反馈：{message}", "", "当前处于什么状态："]
+
+    if slots:
+        for cn in ("话题", "态度", "偏见", "情绪"):
+            if slots.get(cn):
+                parts.append(f"• {cn}：{slots[cn]}")
+    if tone:
+        parts.append(f"• 整体语气：{tone}")
+
+    if todo:
+        parts.extend(["", "待办事项："] + [f"{i}. {t}" for i, t in enumerate(todo, 1)])
+    if outline:
+        parts.extend(["", "段落大纲："] + [f"{i}. {t}" for i, t in enumerate(outline, 1)])
+
+    parts.extend(
+        [
+            "",
+            "提示用户应该做什么：点击 A 开始写作，B 重新规划，C 修改计划（或直接输入修改意见）。",
+        ]
+    )
+    return "\n".join(parts)
 
 
 def _build_guide_response(
@@ -121,9 +168,61 @@ def _build_guide_response(
 
 def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Response:
     """将 v4 Graph 输出封装为前端可渲染的 ProChatResponse。"""
-    # 处理 interrupt（人类审阅等待）
+    # 处理 interrupt（计划审阅 / 人类审阅等待）
     if isinstance(raw, dict) and "__interrupt__" in raw:
         info = _extract_interrupt_info(raw)
+
+        if info.get("review_type") == "plan":
+            slots = _merge_slots(
+                raw.get("slots") if isinstance(raw, dict) else None,
+                raw.get("analysis") if isinstance(raw, dict) else None,
+            )
+            content = _format_plan_review_content(
+                info["message"],
+                slots,
+                info.get("todo", []),
+                info.get("outline", []),
+                info.get("tone", ""),
+            )
+            return _build_guide_response(
+                session_id=session_id,
+                content=content,
+                workflow_state="plan_review",
+                current_role="planner",
+                next_role="用户",
+                next_actions=[
+                    {"label": "A. 开始写作", "action": "approve_plan", "value": "开始写作"},
+                    {"label": "B. 重新规划", "action": "replan", "value": "重新规划"},
+                    {"label": "C. 修改计划", "action": "modify_plan", "value": "修改计划"},
+                ],
+                steps=[
+                    {
+                        "type": "guide",
+                        "content": content,
+                        "current_role": "planner",
+                        "todo_board": [],
+                        "next_actions": [
+                            {"label": "A. 开始写作", "action": "approve_plan", "value": "开始写作"},
+                            {"label": "B. 重新规划", "action": "replan", "value": "重新规划"},
+                            {"label": "C. 修改计划", "action": "modify_plan", "value": "修改计划"},
+                        ],
+                    }
+                ],
+                artifacts=[
+                    Artifact(
+                        id=f"{session_id}-outline",
+                        type="outline",
+                        title="创作计划",
+                        content="\n".join(
+                            [f"{i}. {t}" for i, t in enumerate(info.get("outline", []), 1)]
+                        ),
+                        created_by="planner",
+                    )
+                ]
+                if info.get("outline")
+                else None,
+            )
+
         section_text = info["section_text"]
         content = (
             f"{info['message']}\n\n{section_text}"
@@ -272,11 +371,16 @@ async def pro_chat_v4(
     start_usage_tracking()
 
     try:
-        # 查看当前 checkpoint 状态：若处于人类审阅阶段，则将用户输入作为 feedback 恢复
+        # 查看当前 checkpoint 状态：若处于计划审阅/人类审阅阶段，则将用户输入作为 feedback 恢复
         current = state.graph.get_state(config)
         phase = current.values.get("phase") if current and current.values else "idle"
-        in_review = phase in ("human_review", "routing_feedback")
-        is_feedback = in_review and _is_feedback_message(request.message)
+
+        if phase == "plan_review":
+            is_feedback = True
+        elif phase in ("human_review", "routing_feedback"):
+            is_feedback = _is_feedback_message(request.message)
+        else:
+            is_feedback = False
 
         if is_feedback:
             raw_result = await state.graph.ainvoke(

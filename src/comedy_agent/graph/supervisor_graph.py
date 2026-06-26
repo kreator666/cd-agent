@@ -28,7 +28,9 @@ from comedy_agent.nodes import (
     guide_node,
     human_node,
     plan_node,
+    plan_review_node,
     process_feedback_node,
+    process_plan_feedback_node,
     review_node,
     search_node,
     slot_checker_node,
@@ -45,6 +47,8 @@ WORKER_NODES = {
     "guide": guide_node,
     "context_analyzer": analyze_node,
     "planner": plan_node,
+    "plan_review": plan_review_node,
+    "process_plan_feedback": process_plan_feedback_node,
     "writer": write_node,
     "reviewer": review_node,
     "search": search_node,
@@ -87,6 +91,8 @@ def build_supervisor_graph() -> CompiledStateGraph:
             "guide": "guide",
             "context_analyzer": "context_analyzer",
             "planner": "planner",
+            "plan_review": "plan_review",
+            "process_plan_feedback": "process_plan_feedback",
             "writer": "writer",
             "reviewer": "reviewer",
             "search": "search",
@@ -100,8 +106,8 @@ def build_supervisor_graph() -> CompiledStateGraph:
 
     # Worker 执行完后回到 Supervisor
     for name in WORKER_NODES:
-        if name == "chat":
-            # chat 直接结束，不再回到 supervisor（减少一次空转）
+        if name in ("chat", "plan_review", "process_plan_feedback"):
+            # chat 直接结束；计划审阅链路单独定义
             continue
         builder.add_edge(name, "supervisor")
 
@@ -112,6 +118,10 @@ def build_supervisor_graph() -> CompiledStateGraph:
     # 人类审阅链路：human -> process_feedback -> supervisor
     builder.add_edge("human", "process_feedback")
     builder.add_edge("process_feedback", "supervisor")
+
+    # 计划审阅链路：plan_review -> process_plan_feedback -> supervisor
+    builder.add_edge("plan_review", "process_plan_feedback")
+    builder.add_edge("process_plan_feedback", "supervisor")
 
     checkpointer = get_memory_saver()
     return builder.compile(checkpointer=checkpointer)

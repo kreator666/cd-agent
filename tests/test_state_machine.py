@@ -107,7 +107,18 @@ def _make_analytical_mock_llm(
             AnalysisResult: analysis,
             PlanResult: plan,
             ReviewResult: review,
-        }
+        },
+        plain_content=(
+            "todo:\n"
+            "1. 分析话题\n"
+            "2. 生成大纲\n"
+            "3. 逐段写作\n\n"
+            "outline:\n"
+            "1. 铺垫通勤\n"
+            "2. 展开观察\n"
+            "3. callback 收尾\n\n"
+            "tone: 讽刺"
+        ),
     )
 
 
@@ -115,9 +126,12 @@ class TestSupervisorFlow:
     """Supervisor 图端到端流程测试。"""
 
     def test_writing_path_to_interrupt(self, graph):
-        """创作路径：应停在第一段人类审阅。"""
+        """创作路径：Planner 后停在计划审阅，确认后停在第一段人类审阅。"""
+        from langgraph.types import Command
+
         analytical_llm = _make_analytical_mock_llm()
         creative_llm = _make_creative_mock_llm(["第一段内容"])
+        thread_id = "sm-writing"
 
         with patch("comedy_agent.nodes.entry_node.ModelFactory") as mock_entry, \
              patch("comedy_agent.nodes.analyze_node.ModelFactory") as mock_analyze, \
@@ -141,12 +155,20 @@ class TestSupervisorFlow:
                         "情绪": "无奈",
                     },
                 ),
-                config={"configurable": {"thread_id": "sm-writing"}},
+                config={"configurable": {"thread_id": thread_id}},
             )
 
-        assert "__interrupt__" in result
-        interrupt = result["__interrupt__"][0].value
-        assert interrupt["section_text"] == "第一段内容"
+            assert "__interrupt__" in result
+            assert "outline" in result["__interrupt__"][0].value
+
+            result = graph.invoke(
+                Command(resume="开始写作"),
+                config={"configurable": {"thread_id": thread_id}},
+            )
+
+            assert "__interrupt__" in result
+            interrupt = result["__interrupt__"][0].value
+            assert interrupt["section_text"] == "第一段内容"
 
     def test_chat_path_to_end(self, graph):
         """闲聊路径：chat 后直接结束。"""
@@ -189,7 +211,12 @@ class TestSupervisorFlow:
                     outline=["o1", "o2", "o3"],
                     tone="讽刺",
                 ),
-            }
+            },
+            plain_content=(
+                "todo:\n1. t1\n\n"
+                "outline:\n1. o1\n2. o2\n3. o3\n\n"
+                "tone: 讽刺"
+            ),
         )
 
         with patch("comedy_agent.nodes.plan_node.ModelFactory") as mock_factory:
@@ -209,4 +236,4 @@ class TestSupervisorFlow:
         assert result["plan"]["todo"] == ["t1"]
         assert result["plan"]["outline"] == ["o1", "o2", "o3"]
         assert result["plan"]["tone"] == "讽刺"
-        assert result["phase"] == "writing"
+        assert result["phase"] == "plan_review"

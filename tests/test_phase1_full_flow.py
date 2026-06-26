@@ -48,7 +48,18 @@ def _make_analytical_llm() -> MagicMock:
             ReviewResult: ReviewResult(
                 decision="修改", comments="再犀利一点", score=7
             ),
-        }
+        },
+        plain_content=(
+            "todo:\n"
+            "1. 分析话题\n"
+            "2. 生成大纲\n"
+            "3. 逐段写作\n\n"
+            "outline:\n"
+            "1. 铺垫通勤烦恼\n"
+            "2. 展开观察\n"
+            "3. callback 收尾\n\n"
+            "tone: 讽刺"
+        ),
     )
 
 
@@ -86,6 +97,13 @@ def test_full_writing_flow_with_human_in_the_loop(graph):
 
         result = graph.invoke(
             ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+        assert "__interrupt__" in result
+        assert "outline" in result["__interrupt__"][0].value
+
+        result = graph.invoke(
+            Command(resume="开始写作"),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result
@@ -136,6 +154,13 @@ def test_modify_feedback_rewrites_current_section(graph):
 
         result = graph.invoke(
             ComedyState(user_input="写一段关于加班的脱口秀", slots={"话题": "加班", "态度": "自嘲", "偏见": "无", "情绪": "疲惫"}),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+        assert "__interrupt__" in result
+        assert "outline" in result["__interrupt__"][0].value
+
+        result = graph.invoke(
+            Command(resume="开始写作"),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result

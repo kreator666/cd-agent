@@ -1,11 +1,13 @@
 """创作计划 Worker。
 
 根据用户请求和分析结果生成 Todo List 与段落 Outline。
+使用普通文本输出 + 稳健解析，兼容返回 markdown/非 JSON 的模型。
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -25,12 +27,34 @@ PROMPT = """你是一位脱口秀结构规划师。请根据以下分析和用�
 - 偏见注意：{bias}
 - 情绪基调：{emotion}
 
-请输出：
-- todo: 创作步骤清单
-- outline: 3-5 个段落，每个段落一句话描述
-- tone: 整体语气建议
+请严格按以下格式输出：
 
-只输出结构化结果，不要解释。"""
+todo:
+1. 第一步任务
+2. 第二步任务
+3. 第三步任务
+
+outline:
+1. 第一段一句话描述
+2. 第二段一句话描述
+3. 第三段一句话描述
+4. 第四段一句话描述（可选）
+5. 第五段一句话描述（可选）
+
+tone: 整体语气建议，如“讽刺、自嘲、温暖”
+
+只输出上述格式，不要解释、不要 markdown 代码块。"""
+
+_DEFAULT_RESULT = PlanResult(
+    todo=["分析话题", "生成大纲", "逐段写作", "整体审核"],
+    outline=[
+        "第一段：开场/铺垫，引入话题",
+        "第二段：展开观察，建立共鸣",
+        "第三段：转折或升级，强化冲突",
+        "第四段：收尾/Callback，给出结论",
+    ],
+    tone="日常观察",
+)
 
 
 class PlannerAgent:
@@ -61,45 +85,65 @@ class PlannerAgent:
         )
 
         try:
-            structured_llm = llm.with_structured_output(PlanResult)
-            result: PlanResult = structured_llm.invoke([("human", prompt)])
+            response = llm.invoke([("human", prompt)])
+            content = str(getattr(response, "content", response))
+            result = self._parse_content(content)
         except Exception as e:
-            logger.warning("计划结构化输出失败，使用文本兜底: %s", e)
-            result = self._text_fallback(llm, prompt)
+            logger.warning("计划生成调用失败，使用默认大纲: %s", e)
+            result = _DEFAULT_RESULT
 
         logger.debug("planner: outline=%d", len(result.outline))
         return {
             "plan": result.model_dump(),
-            "phase": "writing",
+            "phase": "plan_review",
             "current_section": 0,
             "sections": [],
         }
 
-    def _text_fallback(self, llm: BaseChatModel, prompt: str) -> PlanResult:
-        """结构化输出失败时的文本兜底。"""
-        import json
-        import re
+    def _parse_content(self, content: str) -> PlanResult:
+        """从普通文本中解析 todo / outline / tone。"""
+        # 尝试先去掉可能的 markdown 代码块标记
+        text = re.sub(r"```(?:json|markdown|text)?\s*", "", content)
+        text = text.replace("```", "")
 
-        response = llm.invoke([("human", prompt)])
-        content = str(getattr(response, "content", response))
+        sections: dict[str, str] = {}
+        current_key: str | None = None
+        current_lines: list[str] = []
 
-        code_match = re.search(r"```(?:json)?\s*(.*?)```", content, re.DOTALL)
-        if code_match:
-            content = code_match.group(1).strip()
+        for line in text.splitlines():
+            stripped = line.strip()
+            header_match = re.match(r"^(todo|outline|tone)[:：]\s*(.*)$", stripped, re.IGNORECASE)
+            if header_match:
+                if current_key is not None:
+                    sections[current_key] = "\n".join(current_lines)
+                current_key = header_match.group(1).lower()
+                rest = header_match.group(2).strip()
+                current_lines = [rest] if rest else []
+            elif current_key is not None and stripped:
+                current_lines.append(stripped)
 
-        try:
-            data = json.loads(content)
-            return PlanResult(**data)
-        except Exception:
-            logger.warning("计划文本兜底解析失败，使用默认大纲")
+        if current_key is not None:
+            sections[current_key] = "\n".join(current_lines)
 
-        return PlanResult(
-            todo=["分析", "写作", "审核"],
-            outline=[
-                "第一段：开场/铺垫，引入话题",
-                "第二段：展开观察，建立共鸣",
-                "第三段：转折或升级，强化冲突",
-                "第四段：收尾/Callback，给出结论",
-            ],
-            tone="日常观察",
-        )
+        todo = self._extract_list_items(sections.get("todo", ""))
+        outline = self._extract_list_items(sections.get("outline", ""))
+        tone = sections.get("tone", "").strip() or _DEFAULT_RESULT.tone
+
+        if not todo or not outline:
+            logger.warning("计划解析结果不完整，使用默认大纲")
+            return _DEFAULT_RESULT
+
+        return PlanResult(todo=todo, outline=outline, tone=tone)
+
+    @staticmethod
+    def _extract_list_items(text: str) -> list[str]:
+        """从编号/ bullet 列表中提取条目。"""
+        items: list[str] = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            match = re.match(r"^(?:\d+[.．、]|[-\*•])\s*(.+)$", line)
+            if match:
+                items.append(match.group(1).strip())
+        return items

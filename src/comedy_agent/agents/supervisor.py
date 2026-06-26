@@ -35,6 +35,8 @@ NextNode = Literal[
     "guide",
     "context_analyzer",
     "planner",
+    "plan_review",
+    "process_plan_feedback",
     "writer",
     "reviewer",
     "search",
@@ -79,6 +81,12 @@ class SupervisorAgent:
 
         if phase == "planning":
             return "planner"
+
+        if phase == "plan_review":
+            return "plan_review"
+
+        if phase == "routing_plan_feedback":
+            return "process_plan_feedback"
 
         if phase == "writing":
             return "writer"

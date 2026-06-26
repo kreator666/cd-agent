@@ -170,6 +170,64 @@ class TestProChatV4:
         assert data["type"] == "final_script"
         assert data["content"] == "最终剧本"
 
+    def test_chat_v4_plan_review(self, client):
+        """Planner 完成后返回 plan_review 引导，包含 A/B/C 选项。"""
+        from comedy_agent.api.server import state
+
+        class _InterruptValue:
+            value = {
+                "message": "计划已生成",
+                "todo": ["分析话题", "生成大纲", "逐段写作"],
+                "outline": ["铺垫", "展开", "callback"],
+                "tone": "讽刺",
+            }
+
+        async def _ainvoke(state_input, config=None):
+            return {"__interrupt__": [_InterruptValue()]}
+
+        state.graph = MagicMock()
+        state.graph.get_state.return_value = None
+        state.graph.ainvoke = _ainvoke
+
+        response = client.post(
+            "/pro/chat-v4",
+            json={"message": "写一段关于通勤的脱口秀"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "guide"
+        assert data["workflow_state"] == "plan_review"
+        assert data["current_role"] == "planner"
+        assert "给用户的反馈" in data["content"]
+        assert "当前处于什么状态" in data["content"]
+        assert "提示用户应该做什么" in data["content"]
+        assert len(data["next_actions"]) == 3
+
+    def test_chat_v4_resume_plan_review(self, client):
+        """处于 plan_review 时，用户消息作为 feedback 恢复。"""
+        from comedy_agent.api.server import state
+
+        async def _ainvoke(state_input, config=None):
+            return ComedyState(
+                output="第一段内容",
+                phase="human_review",
+            )
+
+        state.graph = MagicMock()
+        snapshot = MagicMock()
+        snapshot.values = {"phase": "plan_review"}
+        state.graph.get_state.return_value = snapshot
+        state.graph.ainvoke = _ainvoke
+
+        response = client.post(
+            "/pro/chat-v4",
+            json={"message": "开始写作", "session_id": "sess-123"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["type"] == "guide"
+        assert data["workflow_state"] == "human_review"
+
     def test_chat_v4_load_session(self, client):
         """加载会话状态。"""
         from comedy_agent.api.server import state

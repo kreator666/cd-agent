@@ -44,7 +44,18 @@ def _make_analytical_llm() -> MagicMock:
             ReviewResult: ReviewResult(
                 decision="修改", comments="再犀利一点", score=7
             ),
-        }
+        },
+        plain_content=(
+            "todo:\n"
+            "1. 分析话题\n"
+            "2. 生成大纲\n"
+            "3. 逐段写作\n\n"
+            "outline:\n"
+            "1. 铺垫通勤\n"
+            "2. 展开观察\n"
+            "3. callback 收尾\n\n"
+            "tone: 讽刺"
+        ),
     )
 
 
@@ -57,9 +68,10 @@ def _make_creative_llm(section_texts: list[str]) -> MagicMock:
 
 
 def test_interrupt_pauses_at_human_node(graph):
-    """创作流程在 human_node 暂停并返回 interrupt。"""
+    """创作流程在 Planner 后暂停计划审阅，确认后在 human_node 暂停。"""
     analytical_llm = _make_analytical_llm()
     creative_llm = _make_creative_llm(["第一段内容"])
+    thread_id = "int-pause"
 
     with patch("comedy_agent.nodes.entry_node.ModelFactory") as mock_entry, \
          patch("comedy_agent.nodes.analyze_node.ModelFactory") as mock_analyze, \
@@ -75,13 +87,21 @@ def test_interrupt_pauses_at_human_node(graph):
 
         result = graph.invoke(
             ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}),
-            config={"configurable": {"thread_id": "int-pause"}},
+            config={"configurable": {"thread_id": thread_id}},
         )
 
-    assert "__interrupt__" in result
-    interrupt_value = result["__interrupt__"][0].value
-    assert interrupt_value["message"] == "请审阅当前段落并提供反馈"
-    assert interrupt_value["section_text"] == "第一段内容"
+        assert "__interrupt__" in result
+        assert "outline" in result["__interrupt__"][0].value
+
+        result = graph.invoke(
+            Command(resume="开始写作"),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+
+        assert "__interrupt__" in result
+        interrupt_value = result["__interrupt__"][0].value
+        assert interrupt_value["message"] == "请审阅当前段落并提供反馈"
+        assert interrupt_value["section_text"] == "第一段内容"
 
 
 def test_resume_with_approve_feedback(graph):
@@ -105,6 +125,13 @@ def test_resume_with_approve_feedback(graph):
 
         result = graph.invoke(
             ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+        assert "__interrupt__" in result
+        assert "outline" in result["__interrupt__"][0].value
+
+        result = graph.invoke(
+            Command(resume="开始写作"),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result
@@ -146,6 +173,13 @@ def test_resume_with_modify_feedback(graph):
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result
+        assert "outline" in result["__interrupt__"][0].value
+
+        result = graph.invoke(
+            Command(resume="开始写作"),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+        assert "__interrupt__" in result
         assert result["__interrupt__"][0].value["section_text"] == first_draft
 
         result = graph.invoke(
@@ -153,5 +187,5 @@ def test_resume_with_modify_feedback(graph):
             config={"configurable": {"thread_id": thread_id}},
         )
 
-    assert "__interrupt__" in result
-    assert result["__interrupt__"][0].value["section_text"] == revised_draft
+        assert "__interrupt__" in result
+        assert result["__interrupt__"][0].value["section_text"] == revised_draft

@@ -115,6 +115,14 @@ class ComedyState(BaseModel):
         default=None,
         description="最后一次 Skill 调用的元数据",
     )
+    selected_skill: str | None = Field(
+        default=None,
+        description="当前选中的 Skill 标识（如 my_skill / zhou_qimo）",
+    )
+    selected_style: str | None = Field(
+        default=None,
+        description="当前选中的风格子选项",
+    )
 
     # ------------------------------------------------------------------ #
     # Search Worker 结果（Phase 2 新增）

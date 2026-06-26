@@ -298,14 +298,14 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
             type="final_script",
             content=output,
             workflow_state="complete",
-            skill_name="writer",
-            current_role="writer",
+            skill_name="chief_editor",
+            current_role="总编",
             next_role=None,
             steps=[
                 {
                     "type": "final_script",
                     "content": output,
-                    "current_role": "writer",
+                    "current_role": "总编",
                 }
             ],
             artifacts=[
@@ -314,7 +314,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                     type="script",
                     title="最终剧本",
                     content=output,
-                    created_by="writer",
+                    created_by="总编",
                 )
             ],
             slots=slots,

@@ -31,6 +31,7 @@ class ComedyState(BaseModel):
         "reviewing",
         "human_review",
         "routing_feedback",
+        "searching",
         "finalizing",
         "complete",
     ] = Field(
@@ -108,6 +109,14 @@ class ComedyState(BaseModel):
     skill_meta: dict[str, Any] | None = Field(
         default=None,
         description="最后一次 Skill 调用的元数据",
+    )
+
+    # ------------------------------------------------------------------ #
+    # Search Worker 结果（Phase 2 新增）
+    # ------------------------------------------------------------------ #
+    search_results: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Search Worker 返回的搜索结果",
     )
 
     # ------------------------------------------------------------------ #

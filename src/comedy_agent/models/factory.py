@@ -362,6 +362,31 @@ class ModelFactory:
         )
 
     @classmethod
+    def get_structured_model(
+        cls,
+        schema: Any,
+        name: str | None = None,
+        task_type: str | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """获取绑定了结构化输出的模型 Runnable。
+
+        底层调用 ``.with_structured_output(schema)``，让 LLM 直接返回
+        Pydantic 对象或 JSON Schema 对应的 dict。
+
+        Args:
+            schema: Pydantic BaseModel 类或 JSON Schema dict。
+            name: 模型标识，为 None 时按 task_type 解析。
+            task_type: 任务类型，如 ``creative`` / ``analytical`` / ``fast``。
+            **kwargs: 额外参数传递给模型构造器。
+
+        Returns:
+            已绑定结构化输出的 Runnable。
+        """
+        llm = cls.get_model(name=name, task_type=task_type, **kwargs)
+        return llm.with_structured_output(schema)
+
+    @classmethod
     def get_model_with_fallback(
         cls,
         name: str | None = None,

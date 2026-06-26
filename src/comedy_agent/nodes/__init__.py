@@ -1,4 +1,8 @@
-"""LangGraph 节点模块。"""
+"""LangGraph 节点模块。
+
+Phase 2 后，节点本身成为 Worker Agent 的薄适配层，
+负责模型获取并将状态委托给对应 Agent。
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ from comedy_agent.nodes.human_node import human_node
 from comedy_agent.nodes.plan_node import plan_node
 from comedy_agent.nodes.process_feedback_node import process_feedback_node
 from comedy_agent.nodes.review_node import review_node
+from comedy_agent.nodes.search_node import search_node
 from comedy_agent.nodes.write_node import write_node
 
 __all__ = [
@@ -21,5 +26,6 @@ __all__ = [
     "plan_node",
     "process_feedback_node",
     "review_node",
+    "search_node",
     "write_node",
 ]

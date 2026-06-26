@@ -1,0 +1,97 @@
+"""Supervisor Worker。
+
+负责检查全局状态并决定下一步派发到哪个 Worker。
+所有 Worker 执行完后回到 Supervisor，由 Supervisor 根据 ``phase`` 路由。
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Literal
+
+from comedy_agent.state.schema import ComedyState
+
+logger = logging.getLogger(__name__)
+
+# Worker 名称列表（与 graph/supervisor_graph.py 中注册的节点名一致）
+MEMBERS = [
+    "intent_classifier",
+    "context_analyzer",
+    "planner",
+    "writer",
+    "reviewer",
+    "search",
+    "chat",
+]
+
+# Supervisor 可返回的下一个目标
+NextNode = Literal[
+    "intent_classifier",
+    "context_analyzer",
+    "planner",
+    "writer",
+    "reviewer",
+    "search",
+    "chat",
+    "human",
+    "process_feedback",
+    "finalize",
+    "__end__",
+]
+
+
+class SupervisorAgent:
+    """Supervisor Agent：纯代码条件路由，模型不决定流程。"""
+
+    def run(self, state: ComedyState) -> dict[str, Any]:
+        """Supervisor 节点函数（可为空操作，仅用于图拓扑）。"""
+        logger.debug("supervisor: current phase=%s", state.phase)
+        return {}
+
+    def route(self, state: ComedyState) -> NextNode:
+        """根据当前状态决定下一个节点。
+
+        Args:
+            state: 当前图状态。
+
+        Returns:
+            下一个节点名称，或 ``__end__`` 结束流程。
+        """
+        phase = state.phase
+
+        if phase == "idle":
+            return "intent_classifier"
+
+        if phase == "analyzing":
+            return "context_analyzer"
+
+        if phase == "planning":
+            return "planner"
+
+        if phase == "writing":
+            return "writer"
+
+        if phase == "reviewing":
+            return "reviewer"
+
+        if phase == "human_review":
+            return "human"
+
+        if phase == "routing_feedback":
+            return "process_feedback"
+
+        if phase == "searching":
+            return "search"
+
+        if phase == "chatting":
+            return "chat"
+
+        if phase == "finalizing":
+            return "finalize"
+
+        if phase == "complete":
+            return "__end__"
+
+        # 未知 phase 兜底：直接结束，避免死循环
+        logger.warning("supervisor: unknown phase '%s', ending", phase)
+        return "__end__"

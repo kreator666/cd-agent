@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
 import re
 import sys
@@ -164,6 +165,204 @@ class SkillMeta:
             prompt_template=prompt_template,
             metadata=frontmatter.get("metadata", {}),
         )
+
+
+# ------------------------------------------------------------------ #
+# Phase 3 SkillConfig 模型（供 Writer / state_modifier 使用）
+# ------------------------------------------------------------------ #
+
+
+class SkillExample(BaseModel):
+    """Skill few-shot 示例。"""
+
+    input: str = Field(default="", description="示例输入/上下文")
+    output: str = Field(default="", description="示例输出")
+
+
+class SkillConfig(BaseModel):
+    """面向 Writer 的 Skill 配置。
+
+    从新版 ``skill.yaml + system_prompt.md + examples/`` 读取，
+    也可从旧版 ``SKILL.md`` 回退生成。
+    """
+
+    id: str = Field(description="Skill 目录标识符")
+    name: str = Field(description="展示名称")
+    description: str = Field(default="", description="简介")
+    task_type: str = Field(default="creative", description="creative / analytical / fast")
+    system_prompt: str = Field(default="", description="System Prompt 原始文本")
+    prompt_template: str = Field(default="", description="用户层 Prompt 模板（可选）")
+    examples: list[SkillExample] = Field(default_factory=list, description="Few-shot 示例")
+    styles: list[str] = Field(default_factory=list, description="可用风格子选项")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="附加元数据")
+    skill_dir: Path = Field(description="Skill 目录路径")
+
+
+# ------------------------------------------------------------------ #
+# 新版 Skill 文件加载
+# ------------------------------------------------------------------ #
+
+
+def _load_examples(examples_dir: Path) -> list[SkillExample]:
+    """读取 examples/ 目录下的 JSON/Markdown 示例。"""
+    examples: list[SkillExample] = []
+    if not examples_dir.exists():
+        return examples
+
+    for path in sorted(examples_dir.iterdir()):
+        if path.suffix.lower() == ".json":
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as e:
+                logger.warning("示例文件解析失败 %s: %s", path, e)
+                continue
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                if isinstance(item, dict):
+                    examples.append(
+                        SkillExample(
+                            input=str(item.get("input", "")),
+                            output=str(item.get("output", "")),
+                        )
+                    )
+        elif path.suffix.lower() in (".md", ".txt"):
+            text = path.read_text(encoding="utf-8").strip()
+            if text:
+                examples.append(SkillExample(output=text))
+
+    return examples
+
+
+def _load_skill_yaml(skill_dir: Path) -> dict[str, Any] | None:
+    """读取 skill.yaml，失败返回 None。"""
+    yaml_path = skill_dir / "skill.yaml"
+    if not yaml_path.exists():
+        return None
+    try:
+        return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    except Exception as e:
+        logger.warning("skill.yaml 解析失败 %s: %s", yaml_path, e)
+        return None
+
+
+def _load_system_prompt(skill_dir: Path) -> str:
+    """优先读取 system_prompt.md，其次 system_prompt.txt。"""
+    for name in ("system_prompt.md", "system_prompt.txt"):
+        path = skill_dir / name
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _load_prompt_template(skill_dir: Path) -> str:
+    """优先读取 prompt_template.md，其次 prompt_template.txt。"""
+    for name in ("prompt_template.md", "prompt_template.txt"):
+        path = skill_dir / name
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def load_skill_config(skill_dir: Path | str) -> SkillConfig | None:
+    """加载单个 Skill 的配置（新格式优先，旧格式回退）。"""
+    path = Path(skill_dir)
+    if not path.is_dir():
+        return None
+
+    skill_id = path.name
+    config = _load_skill_yaml(path)
+
+    if config is not None:
+        # 新版格式
+        name = config.get("name") or skill_id
+        description = config.get("description", "")
+        task_type = config.get("task_type", "creative")
+        styles = config.get("styles", []) or []
+        metadata = config.get("metadata", {}) or {}
+        system_prompt = _load_system_prompt(path)
+        prompt_template = _load_prompt_template(path)
+        examples = _load_examples(path / "examples")
+    else:
+        # 旧版 SKILL.md 回退
+        skill_md = path / "SKILL.md"
+        if not skill_md.exists():
+            return None
+        try:
+            meta = SkillMeta.from_markdown(skill_md.read_text(encoding="utf-8"), path)
+        except Exception as e:
+            logger.error("解析 %s 失败: %s", skill_md, e)
+            return None
+        name = meta.name
+        description = meta.description
+        task_type = meta.task_type
+        styles = meta.metadata.get("styles", [])
+        metadata = meta.metadata
+        system_prompt = meta.system_prompt
+        prompt_template = meta.prompt_template
+        examples = _load_examples(path / "examples")
+
+    return SkillConfig(
+        id=skill_id,
+        name=name,
+        description=description,
+        task_type=task_type,
+        system_prompt=system_prompt,
+        prompt_template=prompt_template,
+        examples=examples,
+        styles=styles,
+        metadata=metadata,
+        skill_dir=path,
+    )
+
+
+def load_skill_configs(skills_dir: Path | str | None = None) -> list[SkillConfig]:
+    """扫描 Skill 目录，返回所有可识别的 SkillConfig。
+
+    同时兼容新版 ``skill.yaml`` 与旧版 ``SKILL.md``。
+    """
+    if skills_dir is None:
+        skills_dir = settings.skills_dir
+    path = Path(skills_dir)
+    if not path.exists():
+        logger.info("Skill 目录不存在: %s", path)
+        return []
+
+    configs: list[SkillConfig] = []
+    for subdir in sorted(path.iterdir()):
+        if not subdir.is_dir():
+            continue
+        if subdir.name.startswith(".") or subdir.name.startswith("__"):
+            continue
+        cfg = load_skill_config(subdir)
+        if cfg is not None:
+            configs.append(cfg)
+
+    return configs
+
+
+def get_default_skill_config(skills_dir: Path | str | None = None) -> SkillConfig:
+    """返回默认 Skill，未找到时返回内置兜底配置。"""
+    configs = load_skill_configs(skills_dir)
+    for cfg in configs:
+        if cfg.id == "my_skill":
+            return cfg
+    # 兜底：与旧 Writer PROMPT 等价的默认配置
+    return SkillConfig(
+        id="default",
+        name="默认写手",
+        description="保留旧行为的默认脱口秀写手",
+        task_type="creative",
+        system_prompt=(
+            "你是一位脱口秀写手。请根据用户提供的计划、已完成段落和反馈，"
+            "撰写当前段落的正文。保持口语化、有画面感，适合舞台表演，"
+            "不要解释笑点。"
+        ),
+        prompt_template="",
+        examples=[],
+        styles=[],
+        metadata={},
+        skill_dir=Path("."),
+    )
 
 
 def _parse_param_table(table_text: str) -> list[dict[str, Any]]:

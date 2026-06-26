@@ -1,0 +1,8 @@
+id: my_skill
+name: 我的默认风格
+description: 项目作者的默认脱口秀写作风格，口语化、有画面感、注重细节。
+task_type: creative
+styles: []
+metadata:
+  kind: standup
+  author: default

@@ -1,0 +1,8 @@
+id: hu_lan
+name: 呼兰风格
+description: 高密度文本脱口秀，善用金融/职场隐喻、快节奏输出与知识型幽默。
+task_type: creative
+styles: []
+metadata:
+  kind: standup
+  comedian: 呼兰

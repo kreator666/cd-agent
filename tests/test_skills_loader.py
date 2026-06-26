@@ -232,3 +232,79 @@ class TestScanAndLoadSingle:
             skill = load_single_skill(d)
             assert skill is not None
             assert skill.name == "Single Skill"
+
+
+class TestSkillConfig:
+    """测试新版 skill.yaml + system_prompt.md + examples/ 加载。"""
+
+    def test_load_new_format_skill(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_dir = Path(tmpdir) / "new_skill"
+            skill_dir.mkdir()
+            (skill_dir / "skill.yaml").write_text(
+                "id: new_skill\nname: 新格式 Skill\ndescription: 用于测试\n"
+                "task_type: creative\nstyles:\n  - 日常\n  - 自嘲\n",
+                encoding="utf-8",
+            )
+            (skill_dir / "system_prompt.md").write_text(
+                "你是测试写手。", encoding="utf-8"
+            )
+            examples_dir = skill_dir / "examples"
+            examples_dir.mkdir()
+            (examples_dir / "01.json").write_text(
+                '[{"input": "hello", "output": "world"}]', encoding="utf-8"
+            )
+
+            from comedy_agent.skills.loader import load_skill_config
+
+            cfg = load_skill_config(skill_dir)
+            assert cfg is not None
+            assert cfg.id == "new_skill"
+            assert cfg.name == "新格式 Skill"
+            assert cfg.task_type == "creative"
+            assert "测试写手" in cfg.system_prompt
+            assert len(cfg.examples) == 1
+            assert cfg.examples[0].output == "world"
+            assert "自嘲" in cfg.styles
+
+    def test_load_skill_configs_mixed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 新版
+            new_dir = Path(tmpdir) / "new_skill"
+            new_dir.mkdir()
+            (new_dir / "skill.yaml").write_text(
+                "id: new_skill\nname: New\n", encoding="utf-8"
+            )
+            (new_dir / "system_prompt.md").write_text("sys", encoding="utf-8")
+            # 旧版
+            old_dir = Path(tmpdir) / "old_skill"
+            old_dir.mkdir()
+            (old_dir / "SKILL.md").write_text(
+                "# Old Skill\n\n## 描述\n\nOld desc.\n", encoding="utf-8"
+            )
+
+            from comedy_agent.skills.loader import load_skill_configs
+
+            configs = load_skill_configs(tmpdir)
+            ids = {c.id for c in configs}
+            assert ids == {"new_skill", "old_skill"}
+
+    def test_default_skill_fallback(self):
+        from comedy_agent.skills.loader import get_default_skill_config
+
+        cfg = get_default_skill_config("/nonexistent_dir")
+        assert cfg.id == "default"
+        assert "脱口秀写手" in cfg.system_prompt
+
+    def test_core_skill_loader_re_export(self):
+        from comedy_agent.core.skill_loader import (
+            SkillConfig,
+            load_skill_config,
+            load_skill_configs,
+            get_default_skill_config,
+        )
+
+        assert SkillConfig is not None
+        assert load_skill_config is not None
+        assert load_skill_configs is not None
+        assert get_default_skill_config is not None

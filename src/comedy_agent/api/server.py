@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from langgraph.types import Command
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -49,7 +50,6 @@ from comedy_agent.rag.retriever import ComedyRetriever
 from comedy_agent.rag.vector_store import VectorStore
 from comedy_agent.skills.loader import load_plugin_skills, load_single_skill
 from comedy_agent.core.prompt_manager import PromptManager
-from comedy_agent.models.factory import ModelFactory
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,7 @@ class ChatRequest(BaseModel):
     chat_history: list[tuple[str, str]] | None = Field(
         default=None, description="历史消息 [(role, content), ...]"
     )
+    feedback: str | None = Field(default=None, description="人类审阅反馈，用于恢复 interrupt")
     source: str = Field(default="chat", description="来源标识：chat / actor")
 
 
@@ -86,6 +87,7 @@ class ChatResponse(BaseModel):
     output: str = Field(description="Agent 输出文本")
     session_id: str | None = Field(default=None, description="会话标识")
     model: str | None = Field(default=None, description="使用的模型")
+    status: str = Field(default="complete", description="状态：complete / waiting_feedback")
     messages: list[dict[str, Any]] = Field(
         default_factory=list, description="完整消息链"
     )
@@ -609,16 +611,49 @@ async def chat(
             input_data={"prompt": request.prompt[:200], "user_id": user_id},
             metadata={"model": request.model, "endpoint": "/chat", "session_id": session_id},
         ) as span:
-            result = await state.graph.ainvoke(
-                ComedyState(
-                    user_input=request.prompt,
-                    chat_history=request.chat_history,
+            # 如果前端提供了 feedback，说明要恢复 interrupt
+            if request.feedback is not None:
+                raw_result = await state.graph.ainvoke(
+                    Command(resume=request.feedback),
+                    config={"configurable": {"thread_id": session_id}},
+                )
+            else:
+                raw_result = await state.graph.ainvoke(
+                    ComedyState(
+                        user_input=request.prompt,
+                        chat_history=request.chat_history,
+                        user_id=user_id,
+                        model=request.model,
+                        session_id=session_id,
+                    ),
+                    config={"configurable": {"thread_id": session_id}},
+                )
+
+            # 检查是否触发 interrupt（人类审阅等待）
+            if isinstance(raw_result, dict) and "__interrupt__" in raw_result:
+                interrupt_info = raw_result["__interrupt__"]
+                section_text = ""
+                if interrupt_info and len(interrupt_info) > 0:
+                    section_text = interrupt_info[0].value.get("section_text", "")
+                span.output_data = {"output": section_text[:200], "status": "waiting_feedback"}
+                metrics.record("api.chat.duration_ms", span.duration_ms)
+                charge_model_usage(
                     user_id=user_id,
-                    model=request.model,
+                    endpoint="/chat",
+                    description="Agent 等待反馈",
                     session_id=session_id,
-                ),
-                config={"configurable": {"thread_id": session_id}},
-            )
+                    fallback_cost=CHAT_MIN_COST,
+                )
+                return ChatResponse(
+                    output=section_text,
+                    session_id=session_id,
+                    model=request.model or settings.default_model,
+                    status="waiting_feedback",
+                    messages=[],
+                )
+
+            result = ComedyState.model_validate(raw_result)
+
             # 将消息对象序列化为 dict
             messages = []
             for msg in result.messages:
@@ -682,7 +717,12 @@ async def chat(
             )
 
             return ChatResponse(
-                output=result.output, session_id=session_id, model=model_used, messages=messages, suggestion=suggestion
+                output=result.output,
+                session_id=session_id,
+                model=model_used,
+                status="complete",
+                messages=messages,
+                suggestion=suggestion,
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

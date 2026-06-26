@@ -1,7 +1,7 @@
 """LangGraph 状态定义。
 
 v4 重构后的核心状态 Schema，所有 Agent 节点通过该 Schema 传递状态。
-Phase 0 先包含 Chat 所需的最小字段，后续 Phase 逐步扩展。
+Phase 0-1 逐步扩展：从 Chat 到完整创作状态机。
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from langchain_core.messages import AnyMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ComedyState(BaseModel):
@@ -22,7 +22,18 @@ class ComedyState(BaseModel):
     # ------------------------------------------------------------------ #
     # 会话与元信息
     # ------------------------------------------------------------------ #
-    phase: Literal["idle", "chatting", "complete"] = Field(
+    phase: Literal[
+        "idle",
+        "chatting",
+        "analyzing",
+        "planning",
+        "writing",
+        "reviewing",
+        "human_review",
+        "routing_feedback",
+        "finalizing",
+        "complete",
+    ] = Field(
         default="idle",
         description="当前会话阶段",
     )
@@ -60,6 +71,38 @@ class ComedyState(BaseModel):
     )
 
     # ------------------------------------------------------------------ #
+    # 意图与创作流程
+    # ------------------------------------------------------------------ #
+    intent: Literal["writing", "control", "search", "feedback", "chat"] | None = Field(
+        default=None,
+        description="用户意图分类",
+    )
+    analysis: dict[str, Any] | None = Field(
+        default=None,
+        description="上下文分析结果：话题/态度/偏见/情绪",
+    )
+    plan: dict[str, Any] | None = Field(
+        default=None,
+        description="创作计划：todo list + outline",
+    )
+    current_section: int = Field(
+        default=0,
+        description="当前写作段落索引",
+    )
+    sections: list[str] = Field(
+        default_factory=list,
+        description="已完成的段落文本",
+    )
+    review: dict[str, Any] | None = Field(
+        default=None,
+        description="审核结果：decision + comments",
+    )
+    feedback: str = Field(
+        default="",
+        description="人类审阅反馈",
+    )
+
+    # ------------------------------------------------------------------ #
     # Skill 元信息（复用 v3 约定）
     # ------------------------------------------------------------------ #
     skill_meta: dict[str, Any] | None = Field(
@@ -68,33 +111,6 @@ class ComedyState(BaseModel):
     )
 
     # ------------------------------------------------------------------ #
-    # 预留字段（Phase 1+ 逐步启用）
+    # LangGraph interrupt 相关（非 Schema 字段，可能出现在返回 dict 中）
     # ------------------------------------------------------------------ #
-    intent: Literal["writing", "control", "search", "feedback", "chat"] | None = Field(
-        default=None,
-        description="用户意图分类",
-    )
-    analysis: dict[str, Any] | None = Field(
-        default=None,
-        description="上下文分析结果",
-    )
-    plan: dict[str, Any] | None = Field(
-        default=None,
-        description="创作计划",
-    )
-    current_section: int = Field(
-        default=0,
-        description="当前写作段落索引",
-    )
-    sections: list[str] = Field(
-        default_factory=list,
-        description="已完成的段落",
-    )
-    review: dict[str, Any] | None = Field(
-        default=None,
-        description="审核结果",
-    )
-    feedback: str = Field(
-        default="",
-        description="人类审阅反馈",
-    )
+    model_config = ConfigDict(extra="allow")

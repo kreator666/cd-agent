@@ -121,6 +121,7 @@ class TestChat:
         assert response.status_code == 200
         data = response.json()
         assert data["output"] == "Agent 回答"
+        assert data["status"] == "complete"
         assert len(data["messages"]) == 2
 
     def test_chat_with_history(self, client):

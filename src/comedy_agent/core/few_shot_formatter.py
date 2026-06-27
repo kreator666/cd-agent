@@ -46,6 +46,13 @@ def format_examples(
                 punchline=ex.metadata.get("punchline", ""),
                 tags=ex.metadata.get("tags", []),
             )
+        elif hasattr(ex, "input") and hasattr(ex, "output"):
+            # 兼容 SkillExample（静态 Skill 示例）
+            item = AnnotatedExample(
+                content=ex.output,
+                setup=ex.input,
+                punchline=ex.output,
+            )
         else:
             item = ex
 

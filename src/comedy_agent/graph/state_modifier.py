@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from jinja2 import Template, UndefinedError
 
+from comedy_agent.core.few_shot_formatter import format_examples
 from comedy_agent.core.skill_loader import SkillConfig
 from comedy_agent.state.schema import ComedyState
 
@@ -64,7 +65,11 @@ def _render(template_text: str, variables: dict) -> str:
         return template_text
 
 
-def build_prompts(state: ComedyState, skill_config: SkillConfig) -> tuple[str, str]:
+def build_prompts(
+    state: ComedyState,
+    skill_config: SkillConfig,
+    retrieved_examples: list | None = None,
+) -> tuple[str, str]:
     """根据 State 和 Skill 构建 (system_prompt, user_prompt)。
 
     Args:
@@ -101,7 +106,18 @@ def build_prompts(state: ComedyState, skill_config: SkillConfig) -> tuple[str, s
 
     # System Prompt：基础层 + Skill 层 + 示例层
     skill_system = _render(skill_config.system_prompt, variables)
-    examples_text = _format_examples(skill_config.examples)
+
+    # 动态检索示例 + Skill 静态示例
+    dynamic_text = format_examples(
+        retrieved_examples or [],
+        include_setup=True,
+        include_punchline=True,
+        include_tags=True,
+    )
+    static_text = _format_examples(skill_config.examples)
+    examples_text = "\n\n".join(
+        part for part in [dynamic_text, static_text] if part.strip()
+    )
 
     system_parts = [BASE_SYSTEM_PROMPT, skill_system, examples_text]
     system_prompt = "\n\n".join(part for part in system_parts if part.strip())

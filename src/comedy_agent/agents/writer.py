@@ -11,6 +11,7 @@ from typing import Any
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from comedy_agent.core.config import settings
+from comedy_agent.core.example_retriever import retrieve_examples
 from comedy_agent.core.skill_loader import (
     SkillConfig,
     get_default_skill_config,
@@ -50,10 +51,27 @@ class WriterAgent:
                 state.model, task_type=skill_config.task_type
             )
 
+        # 动态检索相关示例（失败时回退到 Skill 静态示例）
+        retrieved_examples: list = []
+        section_goal = (state.plan or {}).get("outline", [])[state.current_section] if state.current_section < len((state.plan or {}).get("outline", [])) else ""
+        if section_goal:
+            try:
+                retrieved_examples = retrieve_examples(
+                    query=section_goal,
+                    kind=skill_config.metadata.get("kind"),
+                    style=state.selected_style,
+                    user_id=state.user_id,
+                    top_k=5,
+                )
+            except Exception as e:
+                logger.warning("动态示例检索失败，使用 Skill 静态示例: %s", e)
+
         # 延迟导入避免与 graph 包产生循环引用
         from comedy_agent.graph.state_modifier import build_prompts
 
-        system_prompt, user_prompt = build_prompts(state, skill_config)
+        system_prompt, user_prompt = build_prompts(
+            state, skill_config, retrieved_examples=retrieved_examples
+        )
 
         response = llm.invoke(
             [("system", system_prompt), ("human", user_prompt)]

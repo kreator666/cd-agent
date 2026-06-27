@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from comedy_agent.core.annotation import AnnotatedExample
 from comedy_agent.core.skill_loader import SkillConfig
 from comedy_agent.graph.state_modifier import build_prompts
 from comedy_agent.state.schema import ComedyState
@@ -62,6 +63,24 @@ class TestBuildPrompts:
         system_prompt, _ = build_prompts(sample_state, skill)
         assert "【参考示例】" in system_prompt
         assert "我旅行从来不带脑子" in system_prompt
+
+    def test_dynamic_examples_in_system_prompt(self, sample_state, sample_skill):
+        retrieved = [
+            AnnotatedExample(
+                content="动态示例文本",
+                setup="动态铺垫",
+                punchline="动态笑点",
+                topic="上班",
+                style="自嘲",
+                tags=["职场"],
+            )
+        ]
+        system_prompt, _ = build_prompts(
+            sample_state, sample_skill, retrieved_examples=retrieved
+        )
+        assert "动态铺垫" in system_prompt
+        assert "动态笑点" in system_prompt
+        assert "职场" in system_prompt
 
     def test_no_feedback_section_when_empty(self, sample_state, sample_skill):
         sample_state.feedback = ""

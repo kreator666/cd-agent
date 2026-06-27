@@ -330,7 +330,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       </div>
       <!-- 4 维度槽位状态 -->
       <div class="slot-status-bar" id="slotStatusBar"></div>
-      <div id="selectedSkillBadge" style="display:none;margin:0 0 8px;font-size:12px;font-weight:650;color:#166534;background:#e8f5e9;border:1px solid #18a058;border-radius:10px;padding:5px 10px;width:fit-content;"></div>
+      <div id="currentMentionBadge" style="display:none;margin:0 0 8px;font-size:12px;font-weight:650;color:#166534;background:#e8f5e9;border:1px solid #18a058;border-radius:10px;padding:5px 10px;width:fit-content;"></div>
 
       <!-- 消息列表 -->
       <div class="chat-messages" id="chatMessages">
@@ -461,6 +461,7 @@ let selectedSkills = new Set();
 let selectedPersonaId = '';
 let selectedSkillId = '';
 let selectedStyle = '';
+let currentMention = null; // { type: 'slot'|'skill', id, label, value }
 let currentConversationId = null;
 let conversations = [];
 let isGenerating = false;
@@ -470,6 +471,16 @@ let currentRole = '主持人';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
+
+/* ========== Core slots definition ========== */
+const CORE_SLOTS = [
+  { id: '话题', label: '话题', name: '话题小灵通', icon: '/static/images/slots/topic.png', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
+  { id: '态度', label: '态度', name: '态度女王', icon: '/static/images/slots/attitude.png', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c95e)' },
+  { id: '偏见', label: '偏见', name: '偏见侦探', icon: '/static/images/slots/bias.png', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
+  { id: '情绪', label: '情绪', name: '情绪魔法师', icon: '/static/images/slots/emotion.png', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
+  { id: '素材', label: '素材', name: '素材搜集员', icon: '/static/images/slots/material.png', desc: '搜索网络创作资料', gradient: 'linear-gradient(135deg,#fef9c3,#eab308)' },
+  { id: '排版', label: '排版', name: '排版设计师', icon: '/static/images/slots/layout.png', desc: '转换为平台文章格式', gradient: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)' },
+];
 
 /* ========== Helpers ========== */
 function toast(msg) {
@@ -611,8 +622,8 @@ function addMention(name) {
 let mentionSelectedIndex = -1;
 
 function getMentionCandidates() {
-  // 核心创作团队（仅 6 个维度）
-  return [
+  // 核心创作团队（6 个维度）
+  const candidates = [
     { name: '话题', desc: '确定创作主题与背景' },
     { name: '态度', desc: '明确核心态度与立场' },
     { name: '偏见', desc: '挖掘独特视角与偏见' },
@@ -620,6 +631,12 @@ function getMentionCandidates() {
     { name: '素材', desc: '搜索网络创作资料' },
     { name: '排版', desc: '转换为平台文章格式' },
   ];
+  // 加上写作风格 Skill（支持 @zhou_qimo / @周奇墨风格）
+  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing');
+  writingSkills.forEach(skill => {
+    candidates.push({ name: skill.id, desc: skill.name + ' · ' + (skill.description || '写作风格') });
+  });
+  return candidates;
 }
 
 function getMentionSearchTerm() {
@@ -701,6 +718,14 @@ function insertMention(name) {
   input.setSelectionRange(newPos, newPos);
   input.style.height = 'auto';
   input.style.height = input.scrollHeight + 'px';
+  // 同步 currentMention 状态
+  const skill = (allSkills || []).find(s => s.id === name && s.skill_type === 'writing');
+  if (skill) {
+    setMention('skill', skill.id, skill.name, skill.id);
+  } else if (['话题','态度','偏见','情绪','素材','排版'].includes(name)) {
+    const slot = CORE_SLOTS.find(s => s.id === name);
+    if (slot) setMention('slot', slot.id, slot.name, slot.id);
+  }
 }
 
 function hideMentionSuggestions() {
@@ -838,7 +863,7 @@ async function loadSkills() {
     const res = await apiFetch('/pro/skills');
     allSkills = await res.json();
     renderTeamSkills();
-    updateSelectedSkillDisplay();
+    updateMentionBadge();
     updateEstimate();
   } catch (err) {
     console.error('加载 Skill 失败', err);
@@ -849,23 +874,16 @@ function renderTeamSkills() {
   const container = $('#teamSkills');
   if (!container) return;
 
-  // 核心工作流程维度（由 喜剧龙虾 内部处理，非外部 Skill）
-  const coreSlots = [
-    { id: '话题', label: '话题', name: '话题小灵通', icon: '/static/images/slots/topic.png', desc: '创作主题与背景', gradient: 'linear-gradient(135deg,#dbeafe,#3b82f6)' },
-    { id: '态度', label: '态度', name: '态度女王', icon: '/static/images/slots/attitude.png', desc: '核心态度与立场', gradient: 'linear-gradient(135deg,#dcfce7,#22c55e)' },
-    { id: '偏见', label: '偏见', name: '偏见侦探', icon: '/static/images/slots/bias.png', desc: '独特视角与偏见', gradient: 'linear-gradient(135deg,#f3e8ff,#9333ea)' },
-    { id: '情绪', label: '情绪', name: '情绪魔法师', icon: '/static/images/slots/emotion.png', desc: '情感节奏与曲线', gradient: 'linear-gradient(135deg,#fce7f3,#ec4899)' },
-    { id: '素材', label: '素材', name: '素材搜集员', icon: '/static/images/slots/material.png', desc: '搜索网络创作资料', gradient: 'linear-gradient(135deg,#fef9c3,#eab308)' },
-    { id: '排版', label: '排版', name: '排版设计师', icon: '/static/images/slots/layout.png', desc: '转换为平台文章格式', gradient: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)' },
-  ];
-
   let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">点击 @维度 填槽；点击 🎭 风格切换写作 Skill</div>';
   html += '<div class="slot-list">';
-  coreSlots.forEach(slot => {
-    html += `<div class="slot-row" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient}">
+  CORE_SLOTS.forEach(slot => {
+    const isActive = currentMention && currentMention.type === 'slot' && currentMention.id === slot.id;
+    const activeStyle = isActive ? 'border:2px solid #333;box-sizing:border-box;' : '';
+    const check = isActive ? '✓ ' : '';
+    html += `<div class="slot-row" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient};${activeStyle}">
       <img src="${slot.icon}" alt="${slot.label}" class="slot-avatar">
       <div class="slot-info">
-        <div class="slot-name">${slot.name}</div>
+        <div class="slot-name">${check}${slot.name}</div>
         <div class="slot-meta">@${slot.label} · ${slot.desc}</div>
       </div>
     </div>`;
@@ -879,9 +897,10 @@ function renderTeamSkills() {
     html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">🎭 写作风格</div>';
     html += '<div class="slot-list">';
     writingSkills.forEach(skill => {
-      const isSelected = skill.id === selectedSkillId;
-      const check = isSelected ? '✓ ' : '';
-      html += `<div class="slot-row" onclick="selectSkill('${skill.id}')" title="${escapeHtml(skill.description || '')}" style="background:linear-gradient(135deg,#ffedd5,#f97316)">
+      const isActive = currentMention && currentMention.type === 'skill' && currentMention.id === skill.id;
+      const activeStyle = isActive ? 'border:2px solid #333;box-sizing:border-box;' : '';
+      const check = isActive ? '✓ ' : '';
+      html += `<div class="slot-row" onclick="selectSkill('${skill.id}')" title="${escapeHtml(skill.description || '')}" style="background:linear-gradient(135deg,#ffedd5,#f97316);${activeStyle}">
         <div class="slot-avatar" style="display:flex;align-items:center;justify-content:center;font-size:18px;">🎤</div>
         <div class="slot-info">
           <div class="slot-name">${check}${escapeHtml(skill.name)}</div>
@@ -897,30 +916,109 @@ function renderTeamSkills() {
 }
 
 function selectSkill(skillId) {
-  selectedSkillId = skillId;
   const skill = (allSkills || []).find(s => s.id === skillId);
-  toast('已切换写作风格：' + (skill?.name || skillId));
-  renderTeamSkills();
-  updateSelectedSkillDisplay();
+  if (!skill) return;
+  setMention('skill', skill.id, skill.name, skill.id);
+  toast('已切换写作风格：' + skill.name);
   closeAll();
 }
 
-function updateSelectedSkillDisplay(skillMeta) {
-  const badge = $('#selectedSkillBadge');
-  if (!badge) return;
-  const skill = (allSkills || []).find(s => s.id === selectedSkillId);
-  if (selectedSkillId && skill) {
-    let text = '🎭 ' + skill.name;
-    const count = skillMeta?.retrieved_examples_count;
-    if (typeof count === 'number' && count > 0) {
-      text += ' · 参考了 ' + count + ' 条历史示例';
-    }
-    badge.textContent = text;
-    badge.style.display = 'inline-block';
+function mentionSlot(slotId) {
+  const slot = CORE_SLOTS.find(s => s.id === slotId);
+  if (!slot) return;
+  setMention('slot', slot.id, slot.name, slot.id);
+}
+
+function setMention(type, id, label, value) {
+  currentMention = { type, id, label, value };
+  if (type === 'skill') {
+    selectedSkillId = id;
+    selectedStyle = '';
   } else {
+    selectedSkillId = '';
+    selectedStyle = '';
+  }
+  applyMentionPrefix(value);
+  renderTeamSkills();
+  updateMentionBadge();
+}
+
+function applyMentionPrefix(value) {
+  const input = $('#chatInput');
+  if (!input) return;
+  const text = input.value;
+  const match = text.match(/^@\S+\s*/);
+  const rest = match ? text.slice(match[0].length) : text;
+  input.value = '@' + value + ' ' + rest;
+  input.focus();
+  input.style.height = 'auto';
+  input.style.height = input.scrollHeight + 'px';
+}
+
+function parseInputMention() {
+  const input = $('#chatInput');
+  const text = input.value;
+  const match = text.match(/^@(\S+)\s/);
+  if (!match) {
+    if (currentMention && !text.startsWith('@')) {
+      currentMention = null;
+      selectedSkillId = '';
+      selectedStyle = '';
+      updateMentionBadge();
+      renderTeamSkills();
+    }
+    return;
+  }
+  const name = match[1];
+  // 优先匹配 Skill（写作风格）
+  const skill = (allSkills || []).find(s => s.id === name || s.name === name);
+  if (skill && skill.skill_type === 'writing') {
+    if (!currentMention || currentMention.type !== 'skill' || currentMention.id !== skill.id) {
+      currentMention = { type: 'skill', id: skill.id, label: skill.name, value: skill.id };
+      selectedSkillId = skill.id;
+      selectedStyle = '';
+      updateMentionBadge();
+      renderTeamSkills();
+    }
+    return;
+  }
+  // 再匹配槽位
+  const slot = CORE_SLOTS.find(s => s.id === name);
+  if (slot) {
+    if (!currentMention || currentMention.type !== 'slot' || currentMention.id !== slot.id) {
+      currentMention = { type: 'slot', id: slot.id, label: slot.name, value: slot.id };
+      selectedSkillId = '';
+      selectedStyle = '';
+      updateMentionBadge();
+      renderTeamSkills();
+    }
+    return;
+  }
+  // 未知 @ 对象，清空当前 mention
+  if (currentMention) {
+    currentMention = null;
+    selectedSkillId = '';
+    selectedStyle = '';
+    updateMentionBadge();
+    renderTeamSkills();
+  }
+}
+
+function updateMentionBadge(skillMeta) {
+  const badge = $('#currentMentionBadge');
+  if (!badge) return;
+  if (!currentMention) {
     badge.textContent = '';
     badge.style.display = 'none';
+    return;
   }
+  let text = '@' + currentMention.value + ' · ' + currentMention.label;
+  const count = skillMeta?.retrieved_examples_count;
+  if (currentMention.type === 'skill' && typeof count === 'number' && count > 0) {
+    text += ' · 参考了 ' + count + ' 条历史示例';
+  }
+  badge.textContent = text;
+  badge.style.display = 'inline-block';
 }
 
 function toggleSkillChip(el) {
@@ -973,6 +1071,8 @@ function newConversation() {
   selectedSkills = new Set();
   selectedSkillId = '';
   selectedStyle = '';
+  currentMention = null;
+  updateMentionBadge();
 
   // Reset chat messages
   const area = $('#chatMessages');
@@ -1215,8 +1315,8 @@ async function runAgentTurn(text, silent = false) {
     // 更新 4 维度槽位状态
     updateSlotStatus(data.slots || {});
 
-    // 更新 Skill/动态示例徽章
-    updateSelectedSkillDisplay(data.skill_meta || {});
+    // 更新当前 @ 徽章（含动态示例数）
+    updateMentionBadge(data.skill_meta || {});
 
     // 非最终剧本场景立即保存；final_script / typewriteArtifact 场景等待动画完成后再保存
     const hasFinalScript = data.steps && data.steps.some(s => s.type === 'final_script');
@@ -1247,7 +1347,8 @@ async function sendPrompt() {
 
   // Add user message
   addChatMessage('user', '我', '创作主理人', text);
-  input.value = '';
+  // 发送后保留 @ 前缀，方便继续同一对象对话
+  input.value = currentMention ? '@' + currentMention.value + ' ' : '';
   input.style.height = 'auto';
 
   await runAgentTurn(text, false);
@@ -1798,10 +1899,10 @@ async function createPersona() {
 function replaceMention(newName) {
   const input = $('#chatInput');
   let current = input.value;
-  // 核心维度 + 所有 Skill 名称都可能被替换
-  const coreSlots = ['话题', '态度', '偏见', '情绪', '素材', '排版'];
-  const allSkillNames = allSkills.map(s => s.name);
-  const allMentions = [...coreSlots, ...allSkillNames];
+  // 核心维度 + 所有 Skill ID/名称都可能被替换
+  const slotNames = CORE_SLOTS.map(s => s.id);
+  const skillNames = allSkills.flatMap(s => [s.id, s.name]);
+  const allMentions = [...slotNames, ...skillNames];
   let replaced = false;
   for (const name of allMentions) {
     const pattern = '@' + name;
@@ -1822,17 +1923,6 @@ function replaceMention(newName) {
 
 function mentionSkill(name) {
   addMention(name);
-  closeAll();
-}
-
-function mentionSlot(slotName) {
-  const input = $('#chatInput');
-  let current = input.value;
-  current = current + (current && !current.endsWith(' ') ? ' ' : '') + '@' + slotName + ' ';
-  input.value = current;
-  input.focus();
-  input.style.height = 'auto';
-  input.style.height = input.scrollHeight + 'px';
   closeAll();
 }
 
@@ -1880,6 +1970,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatInput.style.height = chatInput.scrollHeight + 'px';
     updateEstimate();
     renderMentionSuggestions();
+    parseInputMention();
   });
   chatInput.addEventListener('keydown', e => {
     const box = $('#mentionSuggestions');

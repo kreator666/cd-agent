@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "description": "喜剧创作核心理论目录，用于知识蒸馏与向量检索",
+  "corpus_file": "data/knowledge/theory_corpus.md",
+  "items": [
+    {
+      "id": "theory-rhythm-expectation",
+      "title": "喜剧节奏与预期管理",
+      "category": "concept",
+      "source": "comedy_theory.md"
+    },
+    {
+      "id": "theory-three-setup-four-punch",
+      "title": "三番四抖",
+      "category": "technique",
+      "source": "comedy_theory.md"
+    },
+    {
+      "id": "theory-callback",
+      "title": "Callback（回扣）",
+      "category": "technique",
+      "source": "喜剧通用技法"
+    },
+    {
+      "id": "theory-expectation-violation",
+      "title": "预期违背",
+      "category": "technique",
+      "source": "喜剧通用技法"
+    },
+    {
+      "id": "theory-character-building",
+      "title": "角色塑造",
+      "category": "concept",
+      "source": "comedy_theory.md"
+    },
+    {
+      "id": "rule-no-explain-joke",
+      "title": "不要解释笑点",
+      "category": "rule",
+      "source": "comedy_theory.md"
+    },
+    {
+      "id": "rule-adequate-setup",
+      "title": "铺垫要充分",
+      "category": "rule",
+      "source": "comedy_theory.md"
+    },
+    {
+      "id": "rule-cute-flaws",
+      "title": "缺点可爱化",
+      "category": "rule",
+      "source": "comedy_theory.md"
+    },
+    {
+      "id": "pattern-sketch-three-act",
+      "title": "小品三幕结构",
+      "category": "pattern",
+      "source": "sketch_structure.md"
+    },
+    {
+      "id": "concept-sitcom",
+      "title": "情景喜剧的特殊性",
+      "category": "concept",
+      "source": "sketch_structure.md"
+    },
+    {
+      "id": "concept-conflict-types",
+      "title": "喜剧冲突类型",
+      "category": "concept",
+      "source": "sketch_structure.md"
+    }
+  ]
+}

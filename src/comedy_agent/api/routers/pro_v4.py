@@ -67,6 +67,9 @@ class ProChatV4Response(BaseModel):
         default=None, description="链式执行的所有步骤"
     )
     slots: dict[str, Any] | None = Field(default=None, description="当前已收集的槽位")
+    skill_meta: dict[str, Any] | None = Field(
+        default=None, description="当前 Skill/写作元信息（如风格、检索示例数）"
+    )
     artifacts: list[Artifact] | None = Field(default=None, description="工作台内容更新")
 
 
@@ -153,6 +156,7 @@ def _build_guide_response(
     steps: list[dict[str, Any]] | None = None,
     artifacts: list[Artifact] | None = None,
     slots: dict[str, Any] | None = None,
+    skill_meta: dict[str, Any] | None = None,
 ) -> ProChatV4Response:
     """构造 guide 类型响应。"""
     return ProChatV4Response(
@@ -166,6 +170,7 @@ def _build_guide_response(
         steps=steps or [],
         artifacts=artifacts,
         slots=slots,
+        skill_meta=skill_meta,
     )
 
 
@@ -224,6 +229,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                 ]
                 if info.get("outline")
                 else None,
+                skill_meta=raw.get("skill_meta") if isinstance(raw, dict) else None,
             )
 
         section_text = info["section_text"]
@@ -269,6 +275,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
             ]
             if section_text
             else None,
+            skill_meta=raw.get("skill_meta") if isinstance(raw, dict) else None,
         )
 
     # 正常完成状态
@@ -320,6 +327,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                 )
             ],
             slots=slots,
+            skill_meta=graph_state.skill_meta,
         )
 
     # guide / error / 其它完成态
@@ -332,6 +340,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
         next_actions=graph_state.suggested_actions or [],
         steps=[{"type": "guide", "content": output, "current_role": "喜剧龙虾"}],
         slots=slots,
+        skill_meta=graph_state.skill_meta,
     )
 
 

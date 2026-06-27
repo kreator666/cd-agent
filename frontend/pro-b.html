@@ -859,7 +859,8 @@ function renderTeamSkills() {
     { id: '排版', label: '排版', name: '排版设计师', icon: '/static/images/slots/layout.png', desc: '转换为平台文章格式', gradient: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)' },
   ];
 
-  let html = '<div class="slot-list">';
+  let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">点击 @维度 填槽；点击 🎭 风格切换写作 Skill</div>';
+  html += '<div class="slot-list">';
   coreSlots.forEach(slot => {
     html += `<div class="slot-row" onclick="mentionSlot('${slot.id}')" title="${slot.desc}" style="background:${slot.gradient}">
       <img src="${slot.icon}" alt="${slot.label}" class="slot-avatar">
@@ -904,12 +905,17 @@ function selectSkill(skillId) {
   closeAll();
 }
 
-function updateSelectedSkillDisplay() {
+function updateSelectedSkillDisplay(skillMeta) {
   const badge = $('#selectedSkillBadge');
   if (!badge) return;
   const skill = (allSkills || []).find(s => s.id === selectedSkillId);
   if (selectedSkillId && skill) {
-    badge.textContent = '🎭 ' + skill.name;
+    let text = '🎭 ' + skill.name;
+    const count = skillMeta?.retrieved_examples_count;
+    if (typeof count === 'number' && count > 0) {
+      text += ' · 参考了 ' + count + ' 条历史示例';
+    }
+    badge.textContent = text;
     badge.style.display = 'inline-block';
   } else {
     badge.textContent = '';
@@ -1208,6 +1214,9 @@ async function runAgentTurn(text, silent = false) {
 
     // 更新 4 维度槽位状态
     updateSlotStatus(data.slots || {});
+
+    // 更新 Skill/动态示例徽章
+    updateSelectedSkillDisplay(data.skill_meta || {});
 
     // 非最终剧本场景立即保存；final_script / typewriteArtifact 场景等待动画完成后再保存
     const hasFinalScript = data.steps && data.steps.some(s => s.type === 'final_script');

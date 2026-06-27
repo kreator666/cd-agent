@@ -92,6 +92,7 @@ class WriterAgent:
                 "skill_id": skill_config.id,
                 "skill_name": skill_config.name,
                 "style": state.selected_style,
+                "retrieved_examples_count": len(retrieved_examples),
             },
         }
 

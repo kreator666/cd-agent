@@ -185,6 +185,16 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                 raw.get("slots") if isinstance(raw, dict) else None,
                 raw.get("analysis") if isinstance(raw, dict) else None,
             )
+            # 从 plan 中提取知识引用，供前端展示
+            plan_data = raw.get("plan") if isinstance(raw, dict) else {}
+            plan_knowledge_refs = plan_data.get("knowledge_references") if isinstance(plan_data, dict) else None
+            plan_skill_meta = raw.get("skill_meta") if isinstance(raw, dict) else None
+            if plan_skill_meta:
+                plan_skill_meta = dict(plan_skill_meta)
+                if plan_knowledge_refs and "knowledge_references" not in plan_skill_meta:
+                    plan_skill_meta["knowledge_references"] = plan_knowledge_refs
+            else:
+                plan_skill_meta = {"knowledge_references": plan_knowledge_refs} if plan_knowledge_refs else None
             content = _format_plan_review_content(
                 info["message"],
                 slots,
@@ -229,7 +239,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                 ]
                 if info.get("outline")
                 else None,
-                skill_meta=raw.get("skill_meta") if isinstance(raw, dict) else None,
+                skill_meta=plan_skill_meta,
             )
 
         section_text = info["section_text"]

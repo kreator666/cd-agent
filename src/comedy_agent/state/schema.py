@@ -115,6 +115,18 @@ class ComedyState(BaseModel):
         default=None,
         description="最后一次 Skill 调用的元数据",
     )
+
+    # ------------------------------------------------------------------ #
+    # 知识系统上下文（Phase 5 新增）
+    # ------------------------------------------------------------------ #
+    knowledge_context: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="当前注入的知识上下文",
+    )
+    knowledge_references: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="当前引用的理论知识条目",
+    )
     selected_skill: str | None = Field(
         default=None,
         description="当前选中的 Skill 标识（如 my_skill / zhou_qimo）",

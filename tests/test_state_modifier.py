@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from comedy_agent.core.annotation import AnnotatedExample
+from comedy_agent.core.knowledge_models import KnowledgeItem
 from comedy_agent.core.skill_loader import SkillConfig
 from comedy_agent.graph.state_modifier import build_prompts
 from comedy_agent.state.schema import ComedyState
@@ -97,3 +98,20 @@ class TestBuildPrompts:
         _, user_prompt = build_prompts(sample_state, skill)
         assert "整体计划" in user_prompt
         assert "当前段落目标" in user_prompt
+
+
+    def test_knowledge_in_system_prompt(self, sample_state, sample_skill):
+        knowledge = [
+            KnowledgeItem(
+                id="three-setup-four-punch",
+                title="三番四抖",
+                category="technique",
+                content="三番四抖是相声经典结构技巧。",
+                summary="通过三次铺垫和一次转折制造笑点。",
+            )
+        ]
+        system_prompt, _ = build_prompts(
+            sample_state, sample_skill, retrieved_knowledge=knowledge
+        )
+        assert "【理论知识参考】" in system_prompt
+        assert "三番四抖" in system_prompt

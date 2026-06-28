@@ -12,6 +12,7 @@ from __future__ import annotations
 from jinja2 import Template, UndefinedError
 
 from comedy_agent.core.few_shot_formatter import format_examples
+from comedy_agent.core.knowledge_models import KnowledgeItem
 from comedy_agent.core.skill_loader import SkillConfig
 from comedy_agent.state.schema import ComedyState
 
@@ -56,6 +57,18 @@ def _format_examples(examples: list) -> str:
     return "\n".join(lines).strip()
 
 
+def _format_knowledge(items: list[KnowledgeItem]) -> str:
+    """将理论知识条目格式化为 Prompt 文本。"""
+    if not items:
+        return ""
+    lines = ["【理论知识参考】"]
+    for idx, item in enumerate(items, 1):
+        lines.append(f"{idx}. {item.title}（{item.category}）")
+        body = item.summary or item.content
+        lines.append(body)
+    return "\n".join(lines).strip()
+
+
 def _render(template_text: str, variables: dict) -> str:
     """使用 Jinja2 渲染模板，变量缺失时静默保留空字符串。"""
     try:
@@ -69,6 +82,7 @@ def build_prompts(
     state: ComedyState,
     skill_config: SkillConfig,
     retrieved_examples: list | None = None,
+    retrieved_knowledge: list[KnowledgeItem] | None = None,
 ) -> tuple[str, str]:
     """根据 State 和 Skill 构建 (system_prompt, user_prompt)。
 
@@ -104,7 +118,7 @@ def build_prompts(
         "slots": state.slots or {},
     }
 
-    # System Prompt：基础层 + Skill 层 + 示例层
+    # System Prompt：基础层 + Skill 层 + 示例层 + 理论知识层
     skill_system = _render(skill_config.system_prompt, variables)
 
     # 动态检索示例 + Skill 静态示例
@@ -119,7 +133,9 @@ def build_prompts(
         part for part in [dynamic_text, static_text] if part.strip()
     )
 
-    system_parts = [BASE_SYSTEM_PROMPT, skill_system, examples_text]
+    knowledge_text = _format_knowledge(retrieved_knowledge or [])
+
+    system_parts = [BASE_SYSTEM_PROMPT, skill_system, examples_text, knowledge_text]
     system_prompt = "\n\n".join(part for part in system_parts if part.strip())
 
     # User Prompt：优先使用 Skill 自带模板，否则使用默认模板

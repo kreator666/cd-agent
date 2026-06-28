@@ -13,12 +13,13 @@ from typing import Any
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from comedy_agent.agents.schemas import PlanResult
+from comedy_agent.core.knowledge_system import retrieve_knowledge
 from comedy_agent.models.factory import ModelFactory
 from comedy_agent.state.schema import ComedyState
 
 logger = logging.getLogger(__name__)
 
-PROMPT = """你是一位脱口秀结构规划师。请根据以下分析和用户请求，生成一个创作计划。
+PROMPT = """你是一位脱口秀结构规划师。请根据以下分析、用户请求和相关喜剧理论知识，生成一个创作计划。
 
 用户请求：{user_input}
 分析结果：
@@ -26,6 +27,11 @@ PROMPT = """你是一位脱口秀结构规划师。请根据以下分析和用�
 - 态度：{attitude}
 - 偏见注意：{bias}
 - 情绪基调：{emotion}
+
+可参考的喜剧理论/技法/结构模板：
+{knowledge_context}
+
+请在大纲中适当引用上述技法或结构模板名称，让计划更具喜剧专业度。
 
 请严格按以下格式输出：
 
@@ -76,12 +82,14 @@ class PlannerAgent:
             )
 
         analysis = state.analysis or {}
+        knowledge_context, knowledge_references = self._retrieve_knowledge(analysis, state.user_input)
         prompt = PROMPT.format(
             user_input=state.user_input,
             topic=analysis.get("topic", ""),
             attitude=analysis.get("attitude", ""),
             bias=analysis.get("bias", ""),
             emotion=analysis.get("emotion", ""),
+            knowledge_context=knowledge_context,
         )
 
         try:
@@ -93,12 +101,55 @@ class PlannerAgent:
             result = _DEFAULT_RESULT
 
         logger.debug("planner: outline=%d", len(result.outline))
+        plan_dict = result.model_dump()
+        if knowledge_references:
+            plan_dict["knowledge_references"] = knowledge_references
         return {
-            "plan": result.model_dump(),
+            "plan": plan_dict,
             "phase": "plan_review",
             "current_section": 0,
             "sections": [],
         }
+
+    @staticmethod
+    def _retrieve_knowledge(
+        analysis: dict[str, Any],
+        user_input: str,
+        top_k: int = 5,
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """根据话题检索相关理论知识。
+
+        Returns:
+            (knowledge_context, knowledge_references)
+        """
+        query = analysis.get("topic") or user_input
+        if not query:
+            return "（无）", []
+
+        try:
+            items = retrieve_knowledge(query, top_k=top_k)
+        except Exception as e:
+            logger.warning("Planner 知识检索失败: %s", e)
+            return "（无）", []
+
+        if not items:
+            return "（无）", []
+
+        lines: list[str] = []
+        references: list[dict[str, Any]] = []
+        for idx, item in enumerate(items, 1):
+            lines.append(
+                f"{idx}. {item.title}（{item.category}）：{item.summary or item.content}"
+            )
+            references.append(
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "category": item.category,
+                    "source": item.source,
+                }
+            )
+        return "\n".join(lines), references
 
     def _parse_content(self, content: str) -> PlanResult:
         """从普通文本中解析 todo / outline / tone。"""

@@ -294,6 +294,32 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .wf-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
 .wf-action-btn{padding:6px 14px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--line-dark);background:#fff;color:#444;transition:.2s;}
 .wf-action-btn:hover{background:var(--orange);color:#fff;border-color:var(--orange);}
+
+/* Feedback & annotation */
+.msg-feedback{display:flex;gap:8px;margin-top:4px;padding-left:42px;opacity:0;transition:opacity .2s;}
+.msg:hover .msg-feedback{opacity:1;}
+.feedback-btn{font-size:12px;background:transparent;border:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;}
+.feedback-btn:hover{background:var(--light);color:var(--orange);}
+.feedback-btn.up.active{color:#18a058;}
+.feedback-btn.down.active{color:#e94560;}
+.artifact-tools{display:flex;gap:8px;align-items:center;}
+.artifact-tools .feedback-btn{margin-left:auto;}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:1000;}
+.modal-overlay.active{display:flex;}
+.annotation-modal{background:#fff;border-radius:18px;width:min(560px,92vw);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:16px;font-weight:800;}
+.modal-close{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;}
+.modal-body{padding:16px 20px;overflow-y:auto;}
+.modal-field{margin-bottom:12px;}
+.modal-field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px;}
+.modal-field input,.modal-field textarea,.modal-field select{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;}
+.modal-field textarea{min-height:72px;resize:vertical;}
+.modal-footer{padding:12px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;}
+.modal-btn{padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:none;}
+.modal-btn.primary{background:var(--orange);color:#fff;}
+.modal-btn.secondary{background:var(--light);color:var(--ink);}
 </style>
 </head>
 <body>
@@ -595,6 +621,8 @@ function addChatMessage(role, name, roleLabel, content, options = {}) {
     : (options.gradient || 'background:linear-gradient(135deg,#eee,#ba7a5a)');
 
   const bubbleContent = content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`;
+  const msgId = crypto.randomUUID();
+  div.dataset.messageId = msgId;
 
   div.innerHTML = `
     <span class="msg-avatar" style="${avatarStyle}"></span>
@@ -603,9 +631,145 @@ function addChatMessage(role, name, roleLabel, content, options = {}) {
       <div class="msg-bubble">${bubbleContent}</div>
     </div>
   `;
+
+  if (role !== 'user') {
+    messageContentMap[msgId] = content;
+    const feedbackRow = document.createElement('div');
+    feedbackRow.className = 'msg-feedback';
+    feedbackRow.innerHTML = `
+      <button class="feedback-btn up" title="收藏为示例" onclick="handleMessageFeedback(this, '${msgId}', 1)">👍</button>
+      <button class="feedback-btn down" title="反馈不好" onclick="handleMessageFeedback(this, '${msgId}', -1)">👎</button>
+    `;
+    div.querySelector('.msg-body').appendChild(feedbackRow);
+  }
+
   area.appendChild(div);
   area.scrollTop = area.scrollHeight;
   return div;
+}
+
+/* ========== Feedback & Annotation ========== */
+const messageContentMap = {};
+let annotationSubmitting = false;
+
+async function submitFeedback(targetType, targetId, rating, comment = null) {
+  const body = {
+    session_id: workflowSessionId,
+    target_type: targetType,
+    target_id: targetId,
+    rating,
+  };
+  if (comment) body.comment = comment;
+  await apiFetch('/annotations/feedback/message', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+function markFeedbackButton(btn, active = true) {
+  if (!btn) return;
+  btn.classList.toggle('active', active);
+  const sibling = btn.classList.contains('up')
+    ? btn.parentElement.querySelector('.down')
+    : btn.parentElement.querySelector('.up');
+  if (sibling) sibling.classList.remove('active');
+}
+
+async function handleMessageFeedback(btn, msgId, rating) {
+  try {
+    if (rating === 1) {
+      const content = messageContentMap[msgId] || '';
+      openAnnotationModal('message', msgId, content);
+    } else {
+      await submitFeedback('message', msgId, -1);
+      markFeedbackButton(btn, true);
+      toast('已记录反馈');
+    }
+  } catch (err) {
+    toast('反馈失败：' + err.message);
+  }
+}
+
+async function handleArtifactFeedback(btn, artifactId, rating) {
+  try {
+    const artifact = artifactsState[artifactId];
+    if (!artifact) return;
+    if (rating === 1) {
+      openAnnotationModal('artifact', artifactId, artifact.content || '');
+    } else {
+      await submitFeedback('artifact', artifactId, -1);
+      markFeedbackButton(btn, true);
+      toast('已记录反馈');
+    }
+  } catch (err) {
+    toast('反馈失败：' + err.message);
+  }
+}
+
+function openAnnotationModal(targetType, targetId, content) {
+  $('#annContent').value = content;
+  $('#annSetup').value = '';
+  $('#annPunchline').value = '';
+  $('#annTags').value = '';
+  const topic = $('#pageTitle').textContent;
+  $('#annTopic').value = (topic && topic !== '新对话') ? topic : '';
+  $('#annStyle').value = selectedStyle || '';
+  $('#annKind').value = 'standup';
+  $('#annStructure').value = 'script';
+  $('#annHumor').value = '7';
+  $('#annSource').value = workflowSessionId || '';
+  $('#annTargetType').value = targetType;
+  $('#annTargetId').value = targetId;
+  $('#annotationModal').classList.add('active');
+}
+
+function closeAnnotationModal() {
+  $('#annotationModal').classList.remove('active');
+  annotationSubmitting = false;
+}
+
+async function submitAnnotation() {
+  if (annotationSubmitting) return;
+  annotationSubmitting = true;
+  try {
+    const content = $('#annContent').value.trim();
+    if (!content) {
+      toast('请填写完整文本');
+      return;
+    }
+    const payload = {
+      content,
+      setup: $('#annSetup').value.trim(),
+      punchline: $('#annPunchline').value.trim(),
+      tags: $('#annTags').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+      topic: $('#annTopic').value.trim(),
+      style: $('#annStyle').value.trim(),
+      kind: $('#annKind').value,
+      structure_type: $('#annStructure').value,
+      humor_score: parseFloat($('#annHumor').value) || 7,
+      source: $('#annSource').value,
+    };
+    await apiFetch('/annotations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    toast('已收录到个人知识库');
+    closeAnnotationModal();
+    // 尝试标记对应的 👍 按钮为激活状态
+    const targetType = $('#annTargetType').value;
+    const targetId = $('#annTargetId').value;
+    if (targetType && targetId) {
+      const selector = targetType === 'message'
+        ? `[data-message-id="${targetId}"] .feedback-btn.up`
+        : `[data-artifact-id="${targetId}"] .feedback-btn.up`;
+      const btn = document.querySelector(selector);
+      if (btn) markFeedbackButton(btn, true);
+    }
+  } catch (err) {
+    toast('保存失败：' + err.message);
+  } finally {
+    annotationSubmitting = false;
+  }
 }
 
 /* ========== Chat UI helpers ========== */
@@ -1647,6 +1811,8 @@ function createArtifactCard(artifact) {
     <div class="artifact-tools">
       <button onclick="copyArtifact('${artifact.id}')">复制</button>
       <button onclick="downloadArtifact('${artifact.id}')">下载</button>
+      <button class="feedback-btn up" title="收藏为示例" onclick="handleArtifactFeedback(this, '${artifact.id}', 1)">👍</button>
+      <button class="feedback-btn down" title="反馈不好" onclick="handleArtifactFeedback(this, '${artifact.id}', -1)">👎</button>
     </div>
   `;
   panel.appendChild(card);
@@ -2093,5 +2259,71 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 </script>
+
+<!-- 标注示例弹窗 -->
+<div class="modal-overlay" id="annotationModal">
+  <div class="annotation-modal">
+    <div class="modal-header">
+      <div class="modal-title">📚 收藏为示例</div>
+      <button class="modal-close" onclick="closeAnnotationModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-field">
+        <label>完整文本</label>
+        <textarea id="annContent" placeholder="段子完整文本"></textarea>
+      </div>
+      <div class="modal-field">
+        <label>铺垫</label>
+        <textarea id="annSetup" placeholder="引发预期的部分"></textarea>
+      </div>
+      <div class="modal-field">
+        <label>笑点 / 反转</label>
+        <textarea id="annPunchline" placeholder="包袱或反转部分"></textarea>
+      </div>
+      <div class="modal-field">
+        <label>标签（逗号分隔）</label>
+        <input type="text" id="annTags" placeholder="职场, 自嘲, 加班">
+      </div>
+      <div class="modal-field">
+        <label>话题</label>
+        <input type="text" id="annTopic" placeholder="核心话题，如：加班">
+      </div>
+      <div class="modal-field">
+        <label>风格</label>
+        <input type="text" id="annStyle" placeholder="自嘲 / 观察 / 反讽 / 吐槽">
+      </div>
+      <div class="modal-field">
+        <label>喜剧种类</label>
+        <select id="annKind">
+          <option value="standup">standup</option>
+          <option value="sketch">sketch</option>
+          <option value="crosstalk">crosstalk</option>
+          <option value="sitcom">sitcom</option>
+          <option value="manzai">manzai</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>结构类型</label>
+        <select id="annStructure">
+          <option value="script">script</option>
+          <option value="one_liner">one_liner</option>
+          <option value="story">story</option>
+          <option value="dialogue">dialogue</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>幽默评分 1–10</label>
+        <input type="number" id="annHumor" min="1" max="10" step="0.5" value="7">
+      </div>
+      <input type="hidden" id="annSource">
+      <input type="hidden" id="annTargetType">
+      <input type="hidden" id="annTargetId">
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="closeAnnotationModal()">取消</button>
+      <button class="modal-btn primary" onclick="submitAnnotation()">保存到知识库</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

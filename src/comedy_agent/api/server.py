@@ -24,6 +24,7 @@ from comedy_agent.graph.builder import build_chat_graph
 from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.admin import require_admin, router as admin_router
+from comedy_agent.api.routers.annotations import router as annotations_router
 from comedy_agent.api.routers.export import router as export_router
 from comedy_agent.api.routers.ip_styles import router as ip_styles_router
 from comedy_agent.api.routers.projects import router as projects_router
@@ -409,6 +410,7 @@ app.include_router(projects_router)
 app.include_router(pro_router)
 app.include_router(pro_workflow_router)
 app.include_router(pro_v4_router)
+app.include_router(annotations_router)
 app.include_router(salt_router)
 app.include_router(speed_router)
 app.include_router(ip_styles_router)

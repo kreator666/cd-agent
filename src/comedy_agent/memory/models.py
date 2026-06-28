@@ -272,6 +272,21 @@ class FollowData(BaseModel):
     created_at: datetime | None = Field(default=None, description="关注时间")
 
 
+class FeedbackEventData(BaseModel):
+    """用户反馈事件数据。"""
+
+    event_id: str | None = Field(default=None, description="事件唯一标识")
+    user_id: str = Field(description="用户 ID")
+    session_id: str | None = Field(default=None, description="会话 ID")
+    target_type: str = Field(description="反馈对象类型：message / artifact")
+    target_id: str = Field(description="对象标识，如消息索引或 artifact id")
+    rating: int = Field(description="1 赞 / -1 踩 / 0 撤销")
+    comment: str | None = Field(default=None, description="文字反馈")
+    payload: dict[str, Any] | None = Field(default=None, description="原始内容等 JSON")
+    ingested: bool = Field(default=False, description="是否已回流到向量库")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
 class BannedWordData(BaseModel):
     """敏感词数据。"""
 

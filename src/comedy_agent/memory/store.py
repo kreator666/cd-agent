@@ -14,6 +14,7 @@ from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
     EarningRecordData,
+    FeedbackEventData,
     IPStyleData,
     KnowledgeCardData,
     PersonaData,
@@ -237,6 +238,54 @@ class MemoryStore(ABC):
 
         Returns:
             bool: 是否成功更新评分。
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 中期记忆 —— 用户反馈事件
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_feedback_event(self, event: FeedbackEventData) -> FeedbackEventData:
+        """保存用户反馈事件。
+
+        Args:
+            event: 反馈事件数据。
+
+        Returns:
+            FeedbackEventData: 保存后的事件（含自动生成的 event_id）。
+        """
+        ...
+
+    @abstractmethod
+    def list_feedback_events(
+        self,
+        user_id: str,
+        target_type: str | None = None,
+        ingested: bool | None = None,
+        limit: int = 100,
+    ) -> list[FeedbackEventData]:
+        """列出用户反馈事件。
+
+        Args:
+            user_id: 用户 ID。
+            target_type: 可选过滤 message / artifact。
+            ingested: 可选过滤是否已回流。
+            limit: 最大返回数量。
+
+        Returns:
+            list[FeedbackEventData]: 反馈事件列表，按创建时间倒序。
+        """
+        ...
+
+    @abstractmethod
+    def mark_feedback_event_ingested(self, event_id: str) -> bool:
+        """标记反馈事件已回流到向量库。
+
+        Args:
+            event_id: 事件 ID。
+
+        Returns:
+            bool: 是否成功。
         """
         ...
 

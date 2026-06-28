@@ -627,6 +627,44 @@ class TokenConsumptionRecord(Base):
 # ------------------------------------------------------------------ #
 # BannedWord —— 敏感词
 # ------------------------------------------------------------------ #
+class FeedbackEvent(Base):
+    """用户反馈事件表。
+
+    记录消息/Artifact 级的 👍/👎 反馈，用于后续数据回流和模型改进。
+    """
+
+    __tablename__ = "feedback_events"
+
+    event_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="用户 ID"
+    )
+    session_id: Mapped[str | None] = mapped_column(
+        String(64), index=True, nullable=True, comment="会话 ID"
+    )
+    target_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, comment="message / artifact"
+    )
+    target_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, comment="消息索引或 artifact id"
+    )
+    rating: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="1 赞 / -1 踩 / 0 撤销"
+    )
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True, comment="文字反馈")
+    payload: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="原始内容、artifact 类型等 JSON"
+    )
+    ingested: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="是否已回流到向量库"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
 class BannedWord(Base):
     """敏感词配置表。"""
 

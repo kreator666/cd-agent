@@ -16,6 +16,7 @@ from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
     EarningRecordData,
+    FeedbackEventData,
     IPStyleData,
     KnowledgeCardData,
     PersonaData,
@@ -140,6 +141,21 @@ class UnifiedMemory(MemoryStore):
 
     def rate_script(self, script_id: str, rating: float) -> bool:
         return self._store.rate_script(script_id, rating)
+
+    def save_feedback_event(self, event: FeedbackEventData) -> FeedbackEventData:
+        return self._store.save_feedback_event(event)
+
+    def list_feedback_events(
+        self,
+        user_id: str,
+        target_type: str | None = None,
+        ingested: bool | None = None,
+        limit: int = 100,
+    ) -> list[FeedbackEventData]:
+        return self._store.list_feedback_events(user_id, target_type, ingested, limit)
+
+    def mark_feedback_event_ingested(self, event_id: str) -> bool:
+        return self._store.mark_feedback_event_ingested(event_id)
 
     def build_user_context(
         self, user_id: str, max_conversations: int = 3

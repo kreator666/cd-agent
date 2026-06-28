@@ -22,6 +22,7 @@ from comedy_agent.memory.models import (
     ConversationData,
     DocumentData,
     EarningRecordData,
+    FeedbackEventData,
     IPStyleData,
     KnowledgeCardData,
     PersonaData,
@@ -39,6 +40,7 @@ from comedy_agent.memory.schema import (
     Base,
     BannedWord,
     EarningRecord,
+    FeedbackEvent,
     Follow,
     IPStyle,
     KnowledgeCard,
@@ -604,6 +606,107 @@ class SQLMemoryStore(MemoryStore):
             row.updated_at = self._now()
             session.commit()
             logger.debug("Rated script: %s -> %.1f", script_id, rating)
+            return True
+
+    # ------------------------------------------------------------------ #
+    # 用户反馈事件
+    # ------------------------------------------------------------------ #
+    def save_feedback_event(self, event: FeedbackEventData) -> FeedbackEventData:
+        """保存或更新反馈事件。"""
+        event_id = event.event_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            existing = (
+                session.query(FeedbackEvent)
+                .filter_by(event_id=event_id)
+                .first()
+            )
+            if existing is None:
+                # 同一用户、同一对象、同一 session 的反馈去重：更新 rating
+                existing = (
+                    session.query(FeedbackEvent)
+                    .filter_by(
+                        user_id=event.user_id,
+                        session_id=event.session_id,
+                        target_type=event.target_type,
+                        target_id=event.target_id,
+                    )
+                    .first()
+                )
+            if existing is None:
+                row = FeedbackEvent(
+                    event_id=event_id,
+                    user_id=event.user_id,
+                    session_id=event.session_id,
+                    target_type=event.target_type,
+                    target_id=event.target_id,
+                    rating=event.rating,
+                    comment=event.comment,
+                    payload=event.payload,
+                    ingested=event.ingested,
+                )
+                session.add(row)
+            else:
+                existing.rating = event.rating
+                existing.comment = event.comment
+                existing.payload = event.payload
+                existing.ingested = event.ingested
+                existing.created_at = self._now()
+                row = existing
+            session.commit()
+            logger.debug("Saved feedback event: %s", row.event_id)
+            return FeedbackEventData(
+                event_id=row.event_id,
+                user_id=row.user_id,
+                session_id=row.session_id,
+                target_type=row.target_type,
+                target_id=row.target_id,
+                rating=row.rating,
+                comment=row.comment,
+                payload=row.payload,
+                ingested=row.ingested,
+                created_at=row.created_at,
+            )
+
+    def list_feedback_events(
+        self,
+        user_id: str,
+        target_type: str | None = None,
+        ingested: bool | None = None,
+        limit: int = 100,
+    ) -> list[FeedbackEventData]:
+        """列出用户反馈事件。"""
+        with self._new_session() as session:
+            query = session.query(FeedbackEvent).filter_by(user_id=user_id)
+            if target_type is not None:
+                query = query.filter_by(target_type=target_type)
+            if ingested is not None:
+                query = query.filter_by(ingested=ingested)
+            rows = query.order_by(FeedbackEvent.created_at.desc()).limit(limit).all()
+            return [
+                FeedbackEventData(
+                    event_id=r.event_id,
+                    user_id=r.user_id,
+                    session_id=r.session_id,
+                    target_type=r.target_type,
+                    target_id=r.target_id,
+                    rating=r.rating,
+                    comment=r.comment,
+                    payload=r.payload,
+                    ingested=r.ingested,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    def mark_feedback_event_ingested(self, event_id: str) -> bool:
+        """标记反馈事件已回流。"""
+        with self._new_session() as session:
+            row = session.query(FeedbackEvent).filter_by(event_id=event_id).first()
+            if row is None:
+                return False
+            row.ingested = True
+            session.commit()
+            logger.debug("Marked feedback event ingested: %s", event_id)
             return True
 
     # ------------------------------------------------------------------ #

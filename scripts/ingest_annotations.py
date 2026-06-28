@@ -2,11 +2,11 @@
 """将标注示例写入向量库，供 Writer 动态检索使用。
 
 用法示例：
-    python scripts/ingest_annotations.py --input data/annotation_examples.jsonl
+    python scripts/ingest_annotations.py --input examples/annotation_examples.jsonl
 
 也可以指定用户个人库：
     python scripts/ingest_annotations.py \
-        --input data/annotation_examples.jsonl \
+        --input examples/annotation_examples.jsonl \
         --user-id user_123 \
         --collection user_knowledge_user_123
 """

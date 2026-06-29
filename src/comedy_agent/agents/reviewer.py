@@ -22,12 +22,14 @@ PROMPT = """你是一位喜剧编辑。请审核以下脱口秀段落，给出�
 当前段落：
 {section_text}
 
-请输出结构化审核结果：
-- decision: 通过 | 修改 | 重写
-- comments: 具体修改建议，1-3 条
-- score: 1-10
+请严格输出 JSON 格式（不要 markdown 列表，不要额外解释）：
+{{
+  "decision": "通过 | 修改 | 重写",
+  "comments": "具体修改建议，1-3 条",
+  "score": 8
+}}
 
-只输出结构化结果，不要解释。"""
+只输出 JSON，不要任何其他内容。"""
 
 
 class ReviewerAgent:
@@ -90,15 +92,36 @@ class ReviewerAgent:
         if code_match:
             content = code_match.group(1).strip()
 
+        # 1. 先尝试按 JSON 解析
         try:
             data = json.loads(content)
             return ReviewResult(**data)
         except Exception:
-            lowered = content.lower()
-            if "通过" in lowered:
-                decision = ReviewDecision.APPROVE
-            elif "重写" in lowered:
-                decision = ReviewDecision.REWRITE
-            else:
-                decision = ReviewDecision.MODIFY
-            return ReviewResult(decision=decision, comments=content[:200], score=5)
+            pass
+
+        # 2. 再尝试解析 markdown 列表 / key-value 形式
+        def _extract(pattern: str, default: str = "") -> str:
+            m = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
+            return m.group(1).strip() if m else default
+
+        decision_text = _extract(r"[-*]\s*decision[:：]\s*(.+?)(?:\n|$)")
+        comments_text = _extract(r"[-*]\s*comments[:：]\s*(.+?)(?:\n[-*]|$)")
+        score_text = _extract(r"[-*]\s*score[:：]\s*(\d+)")
+
+        lowered = (decision_text or content).lower()
+        if "通过" in lowered:
+            decision = ReviewDecision.APPROVE
+        elif "重写" in lowered:
+            decision = ReviewDecision.REWRITE
+        else:
+            decision = ReviewDecision.MODIFY
+
+        score = 5
+        if score_text:
+            try:
+                score = max(1, min(10, int(score_text)))
+            except ValueError:
+                pass
+
+        comments = comments_text or content[:200]
+        return ReviewResult(decision=decision, comments=comments, score=score)

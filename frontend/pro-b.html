@@ -734,24 +734,36 @@ function addMention(name) {
 function triggerMentionSuggestions() {
   const input = $('#chatInput');
   if (!input) return;
-  const wasFocused = document.activeElement === input;
-  if (!wasFocused) {
-    input.value = input.value + (input.value && !input.value.endsWith(' ') ? ' ' : '') + '@';
-    input.focus();
-  } else {
-    const start = input.selectionStart || 0;
-    const end = input.selectionEnd || 0;
-    const before = input.value.slice(0, start);
-    const after = input.value.slice(end);
-    const prefix = before.length && !/\s$/.test(before) ? ' ' : '';
-    input.value = before + prefix + '@' + after;
-    const newPos = start + prefix.length + 1;
-    input.setSelectionRange(newPos, newPos);
+  // 如果已有 @ 开头的前缀，先移除旧的，避免同时存在两个 @
+  const leadingMatch = input.value.match(/^@\S+\s*/);
+  if (leadingMatch) {
+    input.value = input.value.slice(leadingMatch[0].length).replace(/^\s+/, '');
   }
+  input.value = '@' + (input.value ? input.value.trimStart() : '');
+  input.focus();
+  input.setSelectionRange(1, 1);
   input.dispatchEvent(new Event('input'));
   // Auto resize
   input.style.height = 'auto';
   input.style.height = input.scrollHeight + 'px';
+}
+
+function normalizeMultipleMentions() {
+  /* 保证输入框里最多只有一个 @，且位于开头。 */
+  const input = $('#chatInput');
+  const value = input.value;
+  const leadingMatch = value.match(/^@\S+\s*/);
+  if (!leadingMatch) return false;
+  const leadingEnd = leadingMatch[0].length;
+  const rest = value.slice(leadingEnd);
+  if (!rest.includes('@')) return false;
+  const lastAt = value.lastIndexOf('@');
+  const term = value.slice(lastAt + 1);
+  const middle = value.slice(leadingEnd, lastAt);
+  input.value = '@' + term + (middle ? middle.trimStart() : '');
+  const newCursor = 1 + term.length;
+  input.setSelectionRange(newCursor, newCursor);
+  return true;
 }
 
 /* ========== @ Mention auto-complete ========== */
@@ -1962,6 +1974,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     chatInput.style.height = 'auto';
     chatInput.style.height = chatInput.scrollHeight + 'px';
     updateEstimate();
+    normalizeMultipleMentions();
     renderMentionSuggestions();
     parseInputMention();
   });

@@ -424,17 +424,22 @@ async def pro_chat_v4(
                 config=config,
             )
         else:
+            # 读取 checkpoint 中的历史状态，避免用默认值覆盖 slots/analysis/plan
+            current = state.graph.get_state(config)
+            prev_values = (current.values or {}) if current else {}
+            merged_state = {
+                **prev_values,
+                # 重置 phase 为 idle，让 Supervisor 从 START 重新调度，否则上一轮 complete 会直接结束
+                "phase": "idle",
+                "user_input": request.message,
+                "model": request.model,
+                "messages": [HumanMessage(content=request.message)],
+                "session_id": session_id,
+                "user_id": user_id,
+                **state_updates,
+            }
             raw_result = await state.graph.ainvoke(
-                Command(
-                    update={
-                        "user_input": request.message,
-                        "model": request.model,
-                        "messages": [HumanMessage(content=request.message)],
-                        "session_id": session_id,
-                        "user_id": user_id,
-                        **state_updates,
-                    }
-                ),
+                ComedyState(**merged_state),
                 config=config,
             )
 

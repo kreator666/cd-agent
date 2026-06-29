@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from sqlalchemy import StaticPool, create_engine
 
 from comedy_agent.api.server import app, state
+from comedy_agent.state.schema import ComedyState
 
 
 def _patched_create_engine(*args, **kwargs):
@@ -64,11 +65,19 @@ def client():
 
 
 class TestProV4State:
-    def test_non_feedback_request_uses_command_update(self, client):
-        """非反馈请求应使用 Command(update=...) 而不是完整 ComedyState，避免覆盖历史状态。"""
+    def test_non_feedback_request_uses_merged_comedystate(self, client):
+        """非反馈请求应读取 checkpoint、合并历史状态，并用 ComedyState 重新跑图。"""
         from comedy_agent.api.server import state
 
-        state.graph.get_state.return_value = MagicMock(values={"phase": "idle"})
+        state.graph.get_state.return_value = MagicMock(
+            values={
+                "phase": "complete",
+                "slots": {"话题": "加班"},
+                "analysis": {"topic": "加班", "attitude": "讽刺"},
+                "plan": {"todo": ["t1"], "outline": ["o1"], "tone": "讽刺"},
+                "messages": [],
+            }
+        )
         state.graph.ainvoke = AsyncMock(
             return_value={
                 "phase": "consulting",
@@ -84,15 +93,44 @@ class TestProV4State:
         )
         assert resp.status_code == 200
 
-        call_args = state.graph.ainvoke.call_args
-        invoked = call_args.args[0]
-        assert isinstance(invoked, Command)
-        assert "user_input" in invoked.update
-        assert invoked.update["user_input"] == "我想写一段关于加班的脱口秀"
-        # 不能带 slots / analysis / plan，否则会用默认值覆盖 checkpoint
-        assert "slots" not in invoked.update
-        assert "analysis" not in invoked.update
-        assert "plan" not in invoked.update
+        invoked = state.graph.ainvoke.call_args.args[0]
+        assert isinstance(invoked, ComedyState)
+        # 必须重置为 idle，否则上一轮 complete 会直接结束
+        assert invoked.phase == "idle"
+        assert invoked.user_input == "我想写一段关于加班的脱口秀"
+        # 历史状态必须被保留，而不是被默认值覆盖
+        assert invoked.slots == {"话题": "加班"}
+        assert invoked.analysis == {"topic": "加班", "attitude": "讽刺"}
+        assert invoked.plan == {"todo": ["t1"], "outline": ["o1"], "tone": "讽刺"}
+        # 本轮用户消息应被追加
+        assert len(invoked.messages) == 1
+        assert isinstance(invoked.messages[0], HumanMessage)
+        assert invoked.messages[0].content == "我想写一段关于加班的脱口秀"
+
+    def test_non_feedback_request_response_changes_with_input(self, client):
+        """不同输入应产生不同回复，验证图确实被重新执行。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = MagicMock(values={"phase": "complete"})
+
+        async def _dynamic_invoke(invoked, config=None):
+            user_input = invoked.user_input if isinstance(invoked, ComedyState) else ""
+            return {
+                "phase": "complete",
+                "output": f"针对「{user_input}」的回复",
+            }
+
+        state.graph.ainvoke = AsyncMock(side_effect=_dynamic_invoke)
+        state.graph.update_state.return_value = None
+
+        resp1 = client.post("/pro/chat-v4", json={"message": "输入 A"})
+        resp2 = client.post("/pro/chat-v4", json={"message": "输入 B"})
+
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+        assert "输入 A" in resp1.json()["content"]
+        assert "输入 B" in resp2.json()["content"]
+        assert resp1.json()["content"] != resp2.json()["content"]
 
     def test_feedback_request_uses_command_resume(self, client):
         """反馈请求应使用 Command(resume=...)。"""

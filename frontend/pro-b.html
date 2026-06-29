@@ -434,7 +434,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 
 let allSkills = [];
 let selectedSkills = new Set();
-let selectedSkillId = '';
+let selectedSkillId = 'standup_coach';
 let selectedStyle = '';
 let currentMention = null; // { type: 'slot'|'skill', id, label, value }
 let currentConversationId = null;
@@ -944,8 +944,24 @@ async function loadSkills() {
     renderTeamSkills();
     updateMentionBadge();
     updateEstimate();
+    ensureDefaultSkillSelected();
   } catch (err) {
     console.error('加载 Skill 失败', err);
+  }
+}
+
+function ensureDefaultSkillSelected() {
+  /* 如果没有显式选择，默认选中 standup_coach */
+  if (!selectedSkillId) {
+    selectedSkillId = 'standup_coach';
+  }
+  if (!currentMention) {
+    const defaultSkill = (allSkills || []).find(s => s.id === 'standup_coach');
+    if (defaultSkill) {
+      currentMention = { type: 'skill', id: defaultSkill.id, label: defaultSkill.name, value: defaultSkill.id };
+      renderTeamSkills();
+      updateMentionBadge();
+    }
   }
 }
 
@@ -1170,10 +1186,11 @@ function newConversation() {
   // Reset workflow state to start a fresh server session
   workflowSessionId = null;
   selectedSkills = new Set();
-  selectedSkillId = '';
+  selectedSkillId = 'standup_coach';
   selectedStyle = '';
   currentMention = null;
   updateMentionBadge();
+  ensureDefaultSkillSelected();
 
   // Reset chat messages
   const area = $('#chatMessages');

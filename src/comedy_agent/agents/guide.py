@@ -12,6 +12,7 @@ from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
+from comedy_agent.core.config import settings
 from comedy_agent.models.factory import ModelFactory
 from comedy_agent.state.schema import ComedyState
 
@@ -68,7 +69,13 @@ class GuideAgent:
                 state.model, task_type="fast"
             )
 
-        prompt = PROMPT.format(
+        collection_prompt = self._load_collection_prompt(state)
+        if collection_prompt and not self._slots_full(state):
+            prompt_text = collection_prompt
+        else:
+            prompt_text = PROMPT
+
+        prompt = prompt_text.format(
             phase=state.phase,
             skills=_format_skills(getattr(state, "available_skills", None)),
             slots=_format_slots(state.slots),
@@ -92,6 +99,22 @@ class GuideAgent:
             "phase": "complete",
             "suggested_actions": actions,
         }
+
+    def _load_collection_prompt(self, state: ComedyState) -> str | None:
+        """若当前选中的 Skill 提供 collection_prompt.md，则加载之。"""
+        skill_id = getattr(state, "selected_skill", None) or "standup_coach"
+        if not skill_id:
+            return None
+        prompt_path = settings.skills_dir / skill_id / "collection_prompt.md"
+        if prompt_path.exists():
+            return prompt_path.read_text(encoding="utf-8").strip()
+        return None
+
+    @staticmethod
+    def _slots_full(state: ComedyState) -> bool:
+        """检查四维度槽位是否已收集完整。"""
+        slots = state.slots or {}
+        return all(slots.get(s) for s in ("话题", "态度", "偏见", "情绪"))
 
     def _parse_content(self, content: str) -> tuple[str, list[dict[str, str]]]:
         """解析 LLM 输出为回复与选项列表。"""

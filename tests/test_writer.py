@@ -38,7 +38,7 @@ class TestWriterAgent:
 
         assert result["phase"] == "reviewing"
         assert result["sections"] == ["这是生成的段落。"]
-        assert result["skill_meta"]["skill_id"] == "my_skill"
+        assert result["skill_meta"]["skill_id"] == "standup_coach"
 
         # 验证调用了 LLM 且包含 system + human 两条消息
         call_args = mock_llm.invoke.call_args[0][0]
@@ -65,7 +65,7 @@ class TestWriterAgent:
         system_prompt = call_args[0][1]
         assert "周奇墨" in system_prompt or "观察" in system_prompt
 
-    def test_unknown_skill_fallback_to_my_skill(self, mock_llm):
+    def test_unknown_skill_fallback_to_standup_coach(self, mock_llm):
         state = ComedyState(
             user_input="讲讲加班",
             plan={"outline": ["开头"]},
@@ -76,7 +76,7 @@ class TestWriterAgent:
         result = agent.run(state, llm=mock_llm)
 
         assert result["phase"] == "reviewing"
-        assert result["skill_meta"]["skill_id"] == "my_skill"
+        assert result["skill_meta"]["skill_id"] == "standup_coach"
 
     def test_dynamic_examples_injected_into_prompt(self, mock_llm):
         retrieved = [

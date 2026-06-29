@@ -80,3 +80,42 @@ def test_guide_no_llm_uses_factory(agent):
 
     assert result["response_type"] == "guide"
     assert len(result["suggested_actions"]) == 3
+
+
+def test_guide_uses_collection_prompt_when_slots_missing(agent):
+    """槽位缺失且 Skill 提供 collection_prompt.md 时，应使用教练式收集提示词。"""
+    llm = _make_llm(
+        "回复: 我们可以先确定话题\n选项:\nA. @话题 加班\nB. @话题 通勤\nC. 什么是好的话题？"
+    )
+    state = ComedyState(
+        user_input="我想写脱口秀",
+        phase="consulting",
+        slots={"话题": "加班"},
+        selected_skill="standup_coach",
+    )
+    result = agent.run(state, llm=llm)
+
+    assert result["response_type"] == "guide"
+    prompt = llm.invoke.call_args[0][0][0][1]
+    assert "四维度收集阶段" in prompt
+    assert "BVT" in prompt
+    assert "ER" in prompt
+
+
+def test_guide_falls_back_to_default_prompt_when_slots_full(agent):
+    """槽位已全时，应回退到默认引导提示词。"""
+    llm = _make_llm(
+        "回复: 4 个维度齐了\n选项:\nA. 生成计划\nB. 修改槽位\nC. 直接开始写作"
+    )
+    state = ComedyState(
+        user_input="开始吧",
+        phase="consulting",
+        slots={"话题": "加班", "态度": "难", "偏见": "剥削", "情绪": "愤怒"},
+        selected_skill="standup_coach",
+    )
+    result = agent.run(state, llm=llm)
+
+    assert result["response_type"] == "guide"
+    prompt = llm.invoke.call_args[0][0][0][1]
+    assert "专业的喜剧创作助手" in prompt
+    assert "四维度收集阶段" not in prompt

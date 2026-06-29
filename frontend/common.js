@@ -82,7 +82,7 @@ function requireAuth() {
    ================================================ */
 function goHome() { window.location.href = '/static/index.html?_=' + Date.now(); }
 function goSpeed() { window.location.href = '/static/speed.html?_=' + Date.now(); }
-function goPro() { window.location.href = '/static/pro.html?_=' + Date.now(); }
+function goPro() { window.location.href = '/static/pro-b.html?_=' + Date.now(); }
 function goIPRole(roleId) {
     const ts = '_=' + Date.now();
     if (roleId) {

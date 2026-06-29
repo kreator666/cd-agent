@@ -1,4 +1,4 @@
-"""专业版 B 接口：复用 pro.html 的 UI，后端接入 v4 LangGraph StateGraph。"""
+"""专业版 B 接口：供 pro-b.html 使用，后端接入 v4 LangGraph StateGraph。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class Artifact(BaseModel):
 class ProChatV4Response(BaseModel):
     """专业版 B 对话响应。
 
-    字段与 `pro.html` 前端渲染逻辑对齐，便于直接复用现有 UI。
+    字段与 `pro-b.html` 前端渲染逻辑对齐。
     """
 
     session_id: str = Field(description="会话 ID")
@@ -386,7 +386,7 @@ async def pro_chat_v4(
 ) -> ProChatV4Response:
     """专业版 B 对话入口。
 
-    复用 pro.html 的 UI，后端调用 v4 LangGraph StateGraph。
+    供 pro-b.html 调用，后端接入 v4 LangGraph StateGraph。
     """
     if state.graph is None:
         raise HTTPException(status_code=503, detail="Graph 未就绪")

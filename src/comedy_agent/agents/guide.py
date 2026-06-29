@@ -17,7 +17,7 @@ from comedy_agent.state.schema import ComedyState
 
 logger = logging.getLogger(__name__)
 
-PROMPT = """你是一位专业的喜剧创作助手。请根据当前会话状态，回应用户的问题或给出下一步建议。
+PROMPT = """你是一位专业的喜剧创作助手。请根据当前会话状态和最近对话记录，回应用户的问题或给出下一步建议。
 
 请严格按以下格式输出：
 
@@ -32,11 +32,16 @@ C. <第三个可点击选项的具体文案>
 已收集槽位: {slots}
 当前计划: {plan}
 已生成段落: {sections}
-用户输入: {user_input}
+
+最近对话记录（请结合上下文保持回复连贯）：
+{history}
+
+当前用户输入: {user_input}
 
 选项要求：
 - 必须给出 A/B/C 三个选项
 - 选项文案要具体可操作，用户点击后可直接发送
+- 请结合最近对话记录理解上下文，不要脱离上下文回答
 - 如果用户在问“你能做什么 / 能写什么 / 有哪些能力”，回复里必须列举系统支持的能力（如脱口秀、单口喜剧、段子等），并给出相关选项
 - 如果槽位缺失，优先建议补充缺失维度（如“@话题 加班”）
 - 如果槽位已全，建议进入下一步（生成计划 / 开始写作 / 通过当前段）
@@ -69,6 +74,7 @@ class GuideAgent:
             slots=_format_slots(state.slots),
             plan=_format_plan(state.plan),
             sections=_format_sections(state.sections),
+            history=_format_history(getattr(state, "messages", None)),
             user_input=state.user_input,
         )
 
@@ -185,3 +191,14 @@ def _format_skills(skills: list[str] | None) -> str:
     if not skills:
         return "写脱口秀、单口喜剧、段子等喜剧文本"
     return "、".join(skills)
+
+
+def _format_history(messages: list[Any] | None) -> str:
+    if not messages:
+        return "无"
+    lines = []
+    for m in messages[-10:]:
+        role = "用户" if getattr(m, "type", None) == "human" else "助手"
+        content = str(getattr(m, "content", m))
+        lines.append(f"{role}: {content[:200]}")
+    return "\n".join(lines)

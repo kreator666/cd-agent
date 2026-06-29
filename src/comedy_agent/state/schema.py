@@ -116,6 +116,10 @@ class ComedyState(BaseModel):
         default=None,
         description="最后一次 Skill 调用的元数据",
     )
+    available_skills: list[str] = Field(
+        default_factory=list,
+        description="当前系统可用能力/Skill 名称列表，供 GuideAgent 在咨询时列出",
+    )
 
     # ------------------------------------------------------------------ #
     # 知识系统上下文（Phase 5 新增）

@@ -19,9 +19,6 @@ _REQUIRED_SLOTS = ("话题", "态度", "偏见", "情绪")
 # 明确触发大纲/创作的口令
 _START_CREATION_KEYWORDS = ("开始创作", "出大纲", "定大纲", "写大纲", "开始写", "生成大纲")
 
-# 自由对话轮数阈值：用户消息数 >= 该值时，认为信息足够，可进入分析
-_MIN_USER_TURNS = 3
-
 
 class SlotCheckingAgent:
     """槽位检查 Agent。"""
@@ -57,11 +54,6 @@ class SlotCheckingAgent:
         # 用户明确触发创作/大纲
         user_input = (state.user_input or "").strip()
         if any(kw in user_input for kw in _START_CREATION_KEYWORDS):
-            return True
-
-        # 自由对话已积累足够轮数
-        user_turns = sum(1 for m in (state.messages or []) if getattr(m, "type", None) == "human")
-        if user_turns >= _MIN_USER_TURNS:
             return True
 
         return False

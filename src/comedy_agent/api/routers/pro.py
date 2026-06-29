@@ -256,6 +256,8 @@ async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
                 info["skill_type"] = "material"
             elif "layout" in name:
                 info["skill_type"] = "layout"
+            elif "standup" in name or name in ("standup_generator", "generator"):
+                info["skill_type"] = "writing"
             else:
                 info["skill_type"] = "other"
             if skill_type is None or info["skill_type"] == skill_type:

@@ -41,8 +41,8 @@ def test_missing_slots_routes_to_consulting(agent):
     assert "response_type" not in result
 
 
-def test_missing_slots_but_enough_user_turns_moves_to_analyzing(agent):
-    """槽位未填满，但用户已聊够轮数，也进入 analyzing。"""
+def test_missing_slots_with_many_turns_stays_consulting(agent):
+    """槽位未填满且没有触发词时，即使对话轮数多也仍保持 consulting。"""
     from langchain_core.messages import HumanMessage
 
     result = agent.run(
@@ -55,7 +55,7 @@ def test_missing_slots_but_enough_user_turns_moves_to_analyzing(agent):
             ],
         )
     )
-    assert result["phase"] == "analyzing"
+    assert result["phase"] == "consulting"
 
 
 def test_trigger_keyword_moves_to_analyzing(agent):

@@ -71,7 +71,7 @@ class TestProV4State:
 
         state.graph.get_state.return_value = MagicMock(
             values={
-                "phase": "complete",
+                "phase": "consulting",
                 "slots": {"话题": "加班"},
                 "analysis": {"topic": "加班", "attitude": "讽刺"},
                 "plan": {"todo": ["t1"], "outline": ["o1"], "tone": "讽刺"},
@@ -89,7 +89,7 @@ class TestProV4State:
 
         resp = client.post(
             "/pro/chat-v4",
-            json={"message": "我想写一段关于加班的脱口秀"},
+            json={"message": "态度是讽刺"},
         )
         assert resp.status_code == 200
 
@@ -97,7 +97,7 @@ class TestProV4State:
         assert isinstance(invoked, ComedyState)
         # 必须重置为 idle，否则上一轮 complete 会直接结束
         assert invoked.phase == "idle"
-        assert invoked.user_input == "我想写一段关于加班的脱口秀"
+        assert invoked.user_input == "态度是讽刺"
         # 历史状态必须被保留，而不是被默认值覆盖
         assert invoked.slots == {"话题": "加班"}
         assert invoked.analysis == {"topic": "加班", "attitude": "讽刺"}
@@ -105,7 +105,44 @@ class TestProV4State:
         # 本轮用户消息应被追加
         assert len(invoked.messages) == 1
         assert isinstance(invoked.messages[0], HumanMessage)
-        assert invoked.messages[0].content == "我想写一段关于加班的脱口秀"
+        assert invoked.messages[0].content == "态度是讽刺"
+        # GuideAgent 需要的能力列表应被注入
+        assert invoked.available_skills == ["standup_generator"]
+
+    def test_new_creation_request_clears_previous_analysis_and_plan(self, client):
+        """新创作请求开始时，应清理上一轮已完成的 analysis / plan，避免旧计划被复用。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = MagicMock(
+            values={
+                "phase": "complete",
+                "slots": {"话题": "加班"},
+                "analysis": {"topic": "加班", "attitude": "讽刺"},
+                "plan": {"todo": ["t1"], "outline": ["o1"], "tone": "讽刺"},
+                "messages": [],
+            }
+        )
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "consulting",
+                "output": "好的，重新聊",
+                "slots": {"话题": "加班"},
+            }
+        )
+        state.graph.update_state.return_value = None
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "我想写一段关于加班的脱口秀"},
+        )
+        assert resp.status_code == 200
+
+        invoked = state.graph.ainvoke.call_args.args[0]
+        assert isinstance(invoked, ComedyState)
+        assert invoked.phase == "idle"
+        # 新一轮创作请求应清空旧分析/计划
+        assert invoked.analysis is None
+        assert invoked.plan is None
 
     def test_non_feedback_request_response_changes_with_input(self, client):
         """不同输入应产生不同回复，验证图确实被重新执行。"""

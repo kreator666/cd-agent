@@ -427,6 +427,25 @@ async def pro_chat_v4(
             # 读取 checkpoint 中的历史状态，避免用默认值覆盖 slots/analysis/plan
             current = state.graph.get_state(config)
             prev_values = (current.values or {}) if current else {}
+
+            # 新一轮创作请求开始时，清理上一轮已完成的 analysis / plan，避免旧计划被复用
+            is_new_creation = prev_values.get("phase") == "complete" or any(
+                kw in request.message for kw in ("开始创作", "出大纲", "生成计划", "写大纲")
+            )
+            if is_new_creation:
+                prev_values.pop("analysis", None)
+                prev_values.pop("plan", None)
+
+            # 把当前系统可用能力注入状态，供 GuideAgent 在咨询时列举
+            available_skills: list[str] = []
+            if state.orch is not None:
+                try:
+                    available_skills = [
+                        s.get("name", "") for s in state.orch.list_skills() if s.get("name")
+                    ]
+                except Exception:
+                    available_skills = []
+
             merged_state = {
                 **prev_values,
                 # 重置 phase 为 idle，让 Supervisor 从 START 重新调度，否则上一轮 complete 会直接结束
@@ -436,6 +455,7 @@ async def pro_chat_v4(
                 "messages": [HumanMessage(content=request.message)],
                 "session_id": session_id,
                 "user_id": user_id,
+                "available_skills": available_skills,
                 **state_updates,
             }
             raw_result = await state.graph.ainvoke(

@@ -28,6 +28,7 @@ B. <第二个可点击选项的具体文案>
 C. <第三个可点击选项的具体文案>
 
 当前会话阶段: {phase}
+系统支持的能力: {skills}
 已收集槽位: {slots}
 当前计划: {plan}
 已生成段落: {sections}
@@ -36,6 +37,7 @@ C. <第三个可点击选项的具体文案>
 选项要求：
 - 必须给出 A/B/C 三个选项
 - 选项文案要具体可操作，用户点击后可直接发送
+- 如果用户在问“你能做什么 / 能写什么 / 有哪些能力”，回复里必须列举系统支持的能力（如脱口秀、单口喜剧、段子等），并给出相关选项
 - 如果槽位缺失，优先建议补充缺失维度（如“@话题 加班”）
 - 如果槽位已全，建议进入下一步（生成计划 / 开始写作 / 通过当前段）
 - 如果用户在咨询，先回答疑问，再给出可能的下一步
@@ -63,6 +65,7 @@ class GuideAgent:
 
         prompt = PROMPT.format(
             phase=state.phase,
+            skills=_format_skills(getattr(state, "available_skills", None)),
             slots=_format_slots(state.slots),
             plan=_format_plan(state.plan),
             sections=_format_sections(state.sections),
@@ -123,8 +126,22 @@ class GuideAgent:
         """兜底建议。"""
         slots = state.slots or {}
         missing = [s for s in ("话题", "态度", "偏见", "情绪") if not slots.get(s)]
+        user_input = (state.user_input or "").lower()
+        capability_keywords = ("能做什么", "会什么", "能写什么", "有哪些能力", "能写")
+        is_capability_question = any(kw in user_input for kw in capability_keywords)
 
-        if missing:
+        if is_capability_question:
+            skills = getattr(state, "available_skills", None) or ["脱口秀", "单口喜剧", "段子"]
+            reply = (
+                "我可以帮你创作多种喜剧内容，比如：" + "、".join(skills) + "。"
+                "你可以直接说想写什么，或者先和我一起确定话题、态度等 4 个维度。"
+            )
+            actions = [
+                {"label": "A. 写一段脱口秀", "action": "select_option", "value": "写一段脱口秀"},
+                {"label": "B. 先确定 4 个维度", "action": "select_option", "value": "怎么确定 4 个维度"},
+                {"label": "C. 我想重新说明需求", "action": "select_option", "value": "我想重新说明需求"},
+            ]
+        elif missing:
             reply = (
                 "没关系，我们一步步来。创作前需要先明确 4 个维度："
                 "话题、态度、偏见、情绪。你可以直接 @ 我说明，比如："
@@ -162,3 +179,9 @@ def _format_sections(sections: list[str] | None) -> str:
     if not sections:
         return "无"
     return f"{len(sections)} 段"
+
+
+def _format_skills(skills: list[str] | None) -> str:
+    if not skills:
+        return "写脱口秀、单口喜剧、段子等喜剧文本"
+    return "、".join(skills)

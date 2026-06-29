@@ -19,7 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
+from comedy_agent.api.billing import start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.admin import require_admin
 from comedy_agent.auth.dependencies import get_current_user
@@ -177,85 +177,6 @@ def _save_workflow(config: dict[str, Any]) -> None:
     except Exception as e:
         logger.error("工作流配置文件保存失败: %s", e)
         raise HTTPException(status_code=500, detail="工作流保存失败")
-
-
-# ------------------------------------------------------------------ #
-# 请求 / 响应模型
-# ------------------------------------------------------------------ #
-class ProChatRequest(BaseModel):
-    """专业版对话请求。"""
-
-    session_id: str | None = Field(default=None, description="会话 ID，为空则新建")
-    message: str = Field(description="用户消息")
-    outline: str | None = Field(default=None, description="选题大纲（兼容旧字段）")
-    persona_id: str | None = Field(default=None, description="人物画像 ID")
-    model: str | None = Field(default=None, description="使用的模型名称")
-
-
-class Artifact(BaseModel):
-    """工作台（Artifacts）中的内容单元。"""
-
-    id: str = Field(description="artifact 唯一 ID")
-    type: str = Field(description="类型：outline / research / script / review / section")
-    title: str = Field(description="标题")
-    content: str = Field(description="内容")
-    op: str = Field(default="create", description="操作：create / append / update")
-    version: int = Field(default=1, description="版本号")
-    created_by: str = Field(description="生成该内容的角色名")
-
-
-class Attachment(BaseModel):
-    """角色间传递的附件。"""
-
-    id: str = Field(description="附件唯一 ID")
-    name: str = Field(description="附件名称")
-    summary: str = Field(default="", description="长文档摘要")
-    full_text: str = Field(description="全文内容")
-    mime_type: str = Field(default="text/plain", description="MIME 类型")
-
-
-class TodoItem(BaseModel):
-    """TODO 看板条目。"""
-
-    id: str = Field(description="条目 ID")
-    label: str = Field(description="显示文本")
-    done: bool = Field(default=False, description="是否完成")
-    optional: bool = Field(default=False, description="是否可选")
-    blocked: bool = Field(default=False, description="是否被阻塞")
-    role: str | None = Field(default=None, description="负责角色")
-
-
-class ProChatResponse(BaseModel):
-    """专业版对话响应。"""
-
-    session_id: str = Field(description="会话 ID")
-    type: str = Field(description="响应类型：guide / skill_output / final_script / error")
-    content: str = Field(description="响应内容")
-    workflow_state: str = Field(description="当前工作流状态")
-    skill_name: str | None = Field(default=None, description="当前调用的 Skill 名称")
-    current_role: str | None = Field(default=None, description="当前发言角色")
-    next_role: str | None = Field(default=None, description="下一个该发言的角色")
-    next_actions: list[dict[str, Any]] | None = Field(
-        default=None, description="下一步可执行操作"
-    )
-    steps: list[dict[str, Any]] | None = Field(
-        default=None, description="链式执行的所有步骤"
-    )
-    checklist: list[dict[str, Any]] | None = Field(
-        default=None, description="当前流程检查清单"
-    )
-    todo_board: list[TodoItem] | None = Field(
-        default=None, description="结构化 TODO 看板"
-    )
-    slots: dict[str, Any] | None = Field(
-        default=None, description="当前已收集的槽位"
-    )
-    artifacts: list[Artifact] | None = Field(
-        default=None, description="工作台内容更新"
-    )
-    attachments: list[Attachment] | None = Field(
-        default=None, description="角色间传递的附件"
-    )
 
 
 # ------------------------------------------------------------------ #
@@ -892,55 +813,6 @@ def _get_engine() -> ProWorkflowEngine:
         )
         _workflow_mtime = mtime
     return _workflow_engine
-
-
-# ------------------------------------------------------------------ #
-# API 端点
-# ------------------------------------------------------------------ #
-@router.post("/pro/chat", response_model=ProChatResponse)
-async def pro_chat(
-    request: ProChatRequest,
-    user_id: str = Depends(get_current_user),
-) -> ProChatResponse:
-    """专业版 Wizard 对话入口。
-
-    接收用户消息，推进工作流状态机，返回引导消息或 Skill 输出。
-    """
-    engine = _get_engine()
-
-    # 模型切换：专业版默认使用 deepseek-v4-pro，用户可显式覆盖
-    if state.orch:
-        state.orch.set_model(request.model or "deepseek-v4-pro")
-
-    result = engine.process(
-        session_id=request.session_id,
-        user_id=user_id,
-        message=request.message,
-        outline=request.outline,
-        persona_id=request.persona_id,
-        model=request.model,
-    )
-    charge_model_usage(
-        user_id=user_id,
-        endpoint="/pro/chat",
-        description="专业版 Wizard 对话",
-        session_id=result.get("session_id"),
-        fallback_cost=5,
-    )
-    return ProChatResponse(**result)
-
-
-@router.get("/pro/chat/{session_id}")
-async def pro_chat_load(
-    session_id: str,
-    user_id: str = Depends(get_current_user),
-) -> dict[str, Any]:
-    """加载专业版 Wizard 会话状态。"""
-    engine = _get_engine()
-    data = engine.load_session(user_id, session_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail="会话不存在或已过期")
-    return data
 
 
 # ------------------------------------------------------------------ #

@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AnyMessage
 
 from comedy_agent.agents.schemas import PlanResult
 from comedy_agent.core.knowledge_system import retrieve_knowledge
@@ -19,16 +20,21 @@ from comedy_agent.state.schema import ComedyState
 
 logger = logging.getLogger(__name__)
 
-PROMPT = """你是一位脱口秀结构规划师。请根据以下分析、用户请求和相关喜剧理论知识，生成一个创作计划。
+PROMPT = """你是一位脱口秀结构规划师。请根据完整对话历史、分析结果和相关喜剧理论知识，生成一个创作计划。
 
-用户请求：{user_input}
-分析结果：
+## 对话历史
+{conversation_history}
+
+## 上一轮计划（如没有则忽略）
+{previous_plan}
+
+## 当前分析结果
 - 话题：{topic}
 - 态度：{attitude}
 - 偏见注意：{bias}
 - 情绪基调：{emotion}
 
-可参考的喜剧理论/技法/结构模板：
+## 可参考的喜剧理论/技法/结构模板
 {knowledge_context}
 
 请在大纲中适当引用上述技法或结构模板名称，让计划更具喜剧专业度。
@@ -50,6 +56,45 @@ outline:
 tone: 整体语气建议，如“讽刺、自嘲、温暖”
 
 只输出上述格式，不要解释、不要 markdown 代码块。"""
+
+
+def _format_history(messages: list[AnyMessage], max_turns: int = 8) -> str:
+    """把消息链格式化为对话历史文本。"""
+    if not messages:
+        return "（无）"
+    recent = messages[-max_turns * 2:]
+    lines = []
+    for m in recent:
+        role = getattr(m, "type", "unknown")
+        content = str(getattr(m, "content", "")).strip()
+        if not content:
+            continue
+        if role == "human":
+            lines.append(f"用户：{content}")
+        elif role == "ai":
+            lines.append(f"助手：{content}")
+        else:
+            lines.append(f"{role}：{content}")
+    return "\n".join(lines) if lines else "（无）"
+
+
+def _format_previous_plan(plan: dict[str, Any] | None) -> str:
+    """把上一轮计划格式化为文本。"""
+    if not plan:
+        return "（无）"
+    lines = []
+    todo = plan.get("todo") or []
+    outline = plan.get("outline") or []
+    tone = plan.get("tone", "")
+    if todo:
+        lines.append("todo:")
+        lines.extend(f"{i}. {t}" for i, t in enumerate(todo, 1))
+    if outline:
+        lines.append("outline:")
+        lines.extend(f"{i}. {o}" for i, o in enumerate(outline, 1))
+    if tone:
+        lines.append(f"tone: {tone}")
+    return "\n".join(lines) if lines else "（无）"
 
 _DEFAULT_RESULT = PlanResult(
     todo=["分析话题", "生成大纲", "逐段写作", "整体审核"],
@@ -84,7 +129,8 @@ class PlannerAgent:
         analysis = state.analysis or {}
         knowledge_context, knowledge_references = self._retrieve_knowledge(analysis, state.user_input)
         prompt = PROMPT.format(
-            user_input=state.user_input,
+            conversation_history=_format_history(state.messages),
+            previous_plan=_format_previous_plan(state.plan),
             topic=analysis.get("topic", ""),
             attitude=analysis.get("attitude", ""),
             bias=analysis.get("bias", ""),

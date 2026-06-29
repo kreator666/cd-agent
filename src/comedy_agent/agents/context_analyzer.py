@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AnyMessage
 
 from comedy_agent.agents.schemas import AnalysisResult
 from comedy_agent.models.factory import ModelFactory
@@ -17,17 +18,48 @@ from comedy_agent.state.schema import ComedyState
 
 logger = logging.getLogger(__name__)
 
-PROMPT = """你是一位喜剧创作分析助手。请对用户的创作请求进行四维度分析。
+PROMPT = """你是一位喜剧创作分析助手。请根据用户与创作助手的完整对话历史，提炼出四维度分析结果。
 
-用户请求：{user_input}
+## 对话历史
+{conversation_history}
 
-请输出以下 JSON 对应结构：
+## 已收集的槽位（可能为空）
+{slots}
+
+## 上一轮分析（如没有则忽略）
+{previous_analysis}
+
+## 最新用户输入
+{user_input}
+
+请综合以上信息，输出以下 JSON 对应结构：
 - topic: 核心话题（10 字以内）
 - attitude: 创作者对话题的态度，如讽刺/自嘲/观察/批判/温情
 - bias: 可能存在的认知偏见或刻板印象，没有则写'无'
 - emotion: 目标情绪基调，如愤怒/荒诞/尴尬/温暖/无奈
 
 只输出结构化结果，不要解释。"""
+
+
+def _format_history(messages: list[AnyMessage], max_turns: int = 8) -> str:
+    """把消息链格式化为对话历史文本。"""
+    if not messages:
+        return "（无）"
+    # 取最近 N 轮，每轮可能包含 human + ai
+    recent = messages[-max_turns * 2:]
+    lines = []
+    for m in recent:
+        role = getattr(m, "type", "unknown")
+        content = str(getattr(m, "content", "")).strip()
+        if not content:
+            continue
+        if role == "human":
+            lines.append(f"用户：{content}")
+        elif role == "ai":
+            lines.append(f"助手：{content}")
+        else:
+            lines.append(f"{role}：{content}")
+    return "\n".join(lines) if lines else "（无）"
 
 
 class ContextAnalyzerAgent:
@@ -48,14 +80,14 @@ class ContextAnalyzerAgent:
                 state.model, task_type="analytical"
             )
 
-        prompt = PROMPT.format(user_input=state.user_input)
+        prompt = self._build_prompt(state)
 
         try:
             structured_llm = llm.with_structured_output(AnalysisResult)
             result: AnalysisResult = structured_llm.invoke([("human", prompt)])
         except Exception as e:
             logger.warning("上下文分析结构化输出失败，使用文本兜底: %s", e)
-            result = self._text_fallback(llm, state.user_input)
+            result = self._text_fallback(llm, state)
 
         logger.debug("context_analyzer: %s", result.model_dump())
         return {
@@ -63,12 +95,23 @@ class ContextAnalyzerAgent:
             "phase": "planning",
         }
 
-    def _text_fallback(self, llm: BaseChatModel, user_input: str) -> AnalysisResult:
+    def _build_prompt(self, state: ComedyState) -> str:
+        """构造包含完整对话历史的分析 Prompt。"""
+        slots = state.slots or {}
+        previous = state.analysis or {}
+        return PROMPT.format(
+            conversation_history=_format_history(state.messages),
+            slots="\n".join(f"- {k}：{v}" for k, v in slots.items()) or "（无）",
+            previous_analysis="\n".join(f"- {k}：{v}" for k, v in previous.items()) or "（无）",
+            user_input=state.user_input,
+        )
+
+    def _text_fallback(self, llm: BaseChatModel, state: ComedyState) -> AnalysisResult:
         """结构化输出失败时，使用普通文本输出并做简单解析。"""
         import json
         import re
 
-        response = llm.invoke([("human", PROMPT.format(user_input=user_input))])
+        response = llm.invoke([("human", self._build_prompt(state))])
         content = str(getattr(response, "content", response))
 
         code_match = re.search(r"```(?:json)?\s*(.*?)```", content, re.DOTALL)

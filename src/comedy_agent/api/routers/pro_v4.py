@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
@@ -424,17 +425,29 @@ async def pro_chat_v4(
             )
         else:
             raw_result = await state.graph.ainvoke(
-                ComedyState(
-                    user_input=request.message,
-                    model=request.model,
-                    user_id=user_id,
-                    session_id=session_id,
-                    **state_updates,
+                Command(
+                    update={
+                        "user_input": request.message,
+                        "model": request.model,
+                        "messages": [HumanMessage(content=request.message)],
+                        "session_id": session_id,
+                        "user_id": user_id,
+                        **state_updates,
+                    }
                 ),
                 config=config,
             )
 
         response = _build_response(raw_result, session_id)
+
+        # 把本轮 AI 回复追加到 checkpoint，供下一轮 Context Analyzer / Planner 读取
+        try:
+            state.graph.update_state(
+                config,
+                {"messages": [AIMessage(content=response.content)]},
+            )
+        except Exception:
+            logger.debug("追加 AI 消息到 checkpoint 失败，继续返回响应", exc_info=True)
 
         charge_model_usage(
             user_id=user_id,

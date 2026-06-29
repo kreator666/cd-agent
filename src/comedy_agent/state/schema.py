@@ -6,9 +6,10 @@ Phase 0-1 逐步扩展：从 Chat 到完整创作状态机。
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -67,7 +68,7 @@ class ComedyState(BaseModel):
         default=None,
         description="本次请求指定的模型",
     )
-    messages: list[AnyMessage] = Field(
+    messages: Annotated[list[AnyMessage], add_messages] = Field(
         default_factory=list,
         description="LangChain 消息链",
     )

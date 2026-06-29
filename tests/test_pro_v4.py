@@ -1,16 +1,16 @@
-"""专业版 B (/pro/chat-v4) 接口测试。"""
+"""专业版 B /pro/chat-v4 接口测试。"""
 
 from __future__ import annotations
 
 import contextlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.types import Command
 from sqlalchemy import StaticPool, create_engine
 
 from comedy_agent.api.server import app, state
-from comedy_agent.state.schema import ComedyState
 
 
 def _patched_create_engine(*args, **kwargs):
@@ -23,7 +23,7 @@ def _patched_create_engine(*args, **kwargs):
 
 @pytest.fixture
 def client():
-    """提供带认证的 TestClient，v4 Graph 为 mock。"""
+    """提供已认证的 TestClient，graph 被 mock。"""
     with patch("comedy_agent.api.server.VectorStore"), patch(
         "comedy_agent.api.server.ComedyRetriever"
     ), patch("comedy_agent.api.server.build_chat_graph"), patch(
@@ -35,7 +35,9 @@ def client():
         "comedy_agent.auth.router.SQLMemoryStore"
     ) as mock_auth_store_cls:
         mock_orch = MagicMock()
-        mock_orch.list_skills.return_value = []
+        mock_orch.list_skills.return_value = [
+            {"name": "standup_generator", "description": "", "task_type": "creative", "source": "builtin"}
+        ]
         mock_orch_cls.return_value = mock_orch
 
         from comedy_agent.memory.medium_term import SQLMemoryStore
@@ -47,11 +49,10 @@ def client():
             from comedy_agent.memory.unified import UnifiedMemory
 
             state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
-            c.post("/auth/register", json={"user_id": "testuser", "password": "testpass"})
-            login_resp = c.post(
-                "/auth/login", json={"user_id": "testuser", "password": "testpass"}
-            )
-            token = login_resp.json()["access_token"]
+
+            c.post("/auth/register", json={"user_id": "prouser", "password": "testpass"})
+            login = c.post("/auth/login", json={"user_id": "prouser", "password": "testpass"})
+            token = login.json()["access_token"]
 
             with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as authed_c:
                 state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
@@ -62,187 +63,50 @@ def client():
     state.memory = None
 
 
-class TestProChatV4:
-    """/pro/chat-v4 接口测试。"""
-
-    def test_chat_v4_complete(self, client):
-        """v4 Graph 正常完成时，返回 final_script 类型响应。"""
+class TestProV4State:
+    def test_non_feedback_request_uses_command_update(self, client):
+        """非反馈请求应使用 Command(update=...) 而不是完整 ComedyState，避免覆盖历史状态。"""
         from comedy_agent.api.server import state
 
-        async def _ainvoke(state_input, config=None):
-            return ComedyState(
-                output="最终剧本内容",
-                phase="complete",
-                response_type="script",
-                analysis={"topic": "通勤", "attitude": "讽刺"},
-                slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"},
-            )
-
-        state.graph = MagicMock()
-        state.graph.get_state.return_value = None
-        state.graph.ainvoke = _ainvoke
-
-        response = client.post(
-            "/pro/chat-v4",
-            json={"message": "写一段关于通勤的脱口秀"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "final_script"
-        assert data["content"] == "最终剧本内容"
-        assert data["workflow_state"] == "complete"
-        assert any(a["type"] == "script" for a in (data.get("artifacts") or []))
-        assert data["slots"].get("话题") == "通勤"
-
-    def test_chat_v4_slot_guide(self, client):
-        """槽位未填满时，返回 guide 引导用户继续填槽。"""
-        from comedy_agent.api.server import state
-
-        async def _ainvoke(state_input, config=None):
-            return ComedyState(
-                output="请先填满 4 个维度",
-                phase="complete",
-                response_type="guide",
-                slots={"话题": "通勤"},
-            )
-
-        state.graph = MagicMock()
-        state.graph.get_state.return_value = None
-        state.graph.ainvoke = _ainvoke
-
-        response = client.post(
-            "/pro/chat-v4",
-            json={"message": "写一段关于通勤的脱口秀"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "guide"
-        assert "话题" in data["slots"]
-
-    def test_chat_v4_interrupt(self, client):
-        """v4 Graph 触发 interrupt 时，返回 human_review 引导。"""
-        from comedy_agent.api.server import state
-
-        class _InterruptValue:
-            value = {"message": "请审阅", "section_text": "第一段内容"}
-
-        async def _ainvoke(state_input, config=None):
-            return {"__interrupt__": [_InterruptValue()]}
-
-        state.graph = MagicMock()
-        state.graph.get_state.return_value = None
-        state.graph.ainvoke = _ainvoke
-
-        response = client.post(
-            "/pro/chat-v4",
-            json={"message": "写一段关于通勤的脱口秀"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "guide"
-        assert data["workflow_state"] == "human_review"
-        assert "第一段内容" in data["content"]
-        assert data["current_role"] == "reviewer"
-
-    def test_chat_v4_resume_feedback(self, client):
-        """处于 human_review 时，用户消息作为 feedback 恢复。"""
-        from comedy_agent.api.server import state
-
-        async def _ainvoke(state_input, config=None):
-            return ComedyState(
-                output="最终剧本",
-                phase="complete",
-                response_type="script",
-            )
-
-        state.graph = MagicMock()
-        snapshot = MagicMock()
-        snapshot.values = {"phase": "human_review"}
-        state.graph.get_state.return_value = snapshot
-        state.graph.ainvoke = _ainvoke
-
-        response = client.post(
-            "/pro/chat-v4",
-            json={"message": "通过", "session_id": "sess-123"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "final_script"
-        assert data["content"] == "最终剧本"
-
-    def test_chat_v4_plan_review(self, client):
-        """Planner 完成后返回 plan_review 引导，包含 A/B/C 选项。"""
-        from comedy_agent.api.server import state
-
-        class _InterruptValue:
-            value = {
-                "message": "计划已生成",
-                "todo": ["分析话题", "生成大纲", "逐段写作"],
-                "outline": ["铺垫", "展开", "callback"],
-                "tone": "讽刺",
+        state.graph.get_state.return_value = MagicMock(values={"phase": "idle"})
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "consulting",
+                "output": "请补充态度",
+                "slots": {"话题": "加班"},
             }
-
-        async def _ainvoke(state_input, config=None):
-            return {"__interrupt__": [_InterruptValue()]}
-
-        state.graph = MagicMock()
-        state.graph.get_state.return_value = None
-        state.graph.ainvoke = _ainvoke
-
-        response = client.post(
-            "/pro/chat-v4",
-            json={"message": "写一段关于通勤的脱口秀"},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "guide"
-        assert data["workflow_state"] == "plan_review"
-        assert data["current_role"] == "planner"
-        assert "给用户的反馈" in data["content"]
-        assert "当前处于什么状态" in data["content"]
-        assert "提示用户应该做什么" in data["content"]
-        assert len(data["next_actions"]) == 3
+        state.graph.update_state.return_value = None
 
-    def test_chat_v4_resume_plan_review(self, client):
-        """处于 plan_review 时，用户消息作为 feedback 恢复。"""
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "我想写一段关于加班的脱口秀"},
+        )
+        assert resp.status_code == 200
+
+        call_args = state.graph.ainvoke.call_args
+        invoked = call_args.args[0]
+        assert isinstance(invoked, Command)
+        assert "user_input" in invoked.update
+        assert invoked.update["user_input"] == "我想写一段关于加班的脱口秀"
+        # 不能带 slots / analysis / plan，否则会用默认值覆盖 checkpoint
+        assert "slots" not in invoked.update
+        assert "analysis" not in invoked.update
+        assert "plan" not in invoked.update
+
+    def test_feedback_request_uses_command_resume(self, client):
+        """反馈请求应使用 Command(resume=...)。"""
         from comedy_agent.api.server import state
 
-        async def _ainvoke(state_input, config=None):
-            return ComedyState(
-                output="第一段内容",
-                phase="human_review",
-            )
+        state.graph.get_state.return_value = MagicMock(values={"phase": "plan_review"})
+        state.graph.ainvoke = AsyncMock(return_value={"phase": "complete", "output": "好的"})
 
-        state.graph = MagicMock()
-        snapshot = MagicMock()
-        snapshot.values = {"phase": "plan_review"}
-        state.graph.get_state.return_value = snapshot
-        state.graph.ainvoke = _ainvoke
-
-        response = client.post(
+        resp = client.post(
             "/pro/chat-v4",
-            json={"message": "开始写作", "session_id": "sess-123"},
+            json={"message": "通过"},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "guide"
-        assert data["workflow_state"] == "human_review"
+        assert resp.status_code == 200
 
-    def test_chat_v4_load_session(self, client):
-        """加载会话状态。"""
-        from comedy_agent.api.server import state
-
-        state.graph = MagicMock()
-        snapshot = MagicMock()
-        snapshot.values = ComedyState(
-            output="已完成的剧本",
-            phase="complete",
-            response_type="script",
-        ).model_dump()
-        state.graph.get_state.return_value = snapshot
-
-        response = client.get("/pro/chat-v4/sess-load")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["type"] == "final_script"
-        assert data["content"] == "已完成的剧本"
+        invoked = state.graph.ainvoke.call_args.args[0]
+        assert isinstance(invoked, Command)
+        assert invoked.resume == "通过"

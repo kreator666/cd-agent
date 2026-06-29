@@ -130,10 +130,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .slot-name{font-size:16px;font-weight:780;letter-spacing:.02em;}
 .slot-meta{font-size:12px;font-weight:650;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
-/* Persona badge */
-.persona-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#f0f1f4;border-radius:10px;font-size:13px;font-weight:700;color:#333;margin-left:auto;}
-.persona-badge .dot{width:8px;height:8px;border-radius:50%;background:#18a058;}
-
 /* Animations */
 .ripple{position:absolute;border-radius:50%;transform:scale(0);background:rgba(255,118,74,.18);animation:ripple .55s ease-out;pointer-events:none}
 @keyframes ripple{to{transform:scale(12);opacity:0}}@keyframes ring{0%,100%{box-shadow:0 0 0 0 rgba(126,130,136,.16)}50%{box-shadow:0 0 0 8px rgba(126,130,136,0)}}@keyframes appear{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}@keyframes blink{50%{opacity:0}}@keyframes pulse{50%{opacity:.35}}
@@ -207,19 +203,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .btn-cancel:hover{background:#e5e7eb;}
 .btn-save{padding:8px 16px;border:none;border-radius:10px;background:#15171a;color:#fff;font-size:14px;font-weight:700;cursor:pointer;}
 .btn-save:hover{background:#333;}
-
-/* File upload in persona modal */
-.upload-area{margin-top:4px;}
-.upload-drop{border:2px dashed var(--line-dark);border-radius:14px;padding:18px;text-align:center;cursor:pointer;transition:.2s;background:#fafbfc;}
-.upload-drop:hover{border-color:var(--orange);background:#fff8f5;}
-.upload-drop svg{display:block;margin:0 auto;}
-.file-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
-.file-tag{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:#f5f6f8;border-radius:10px;font-size:13px;font-weight:600;color:#444;}
-.file-tag .file-remove{color:#999;cursor:pointer;font-size:16px;padding:0 4px;border-radius:4px;}
-.file-tag .file-remove:hover{color:#e94560;background:#ffeaea;}
-.file-tag .file-status{font-size:11px;color:#18a058;font-weight:700;}
-.file-tag .file-status.pending{color:#ff764a;}
-.file-tag .file-status.error{color:#e94560;}
 
 /* ========== Traditional Chat Interface (Left Panel) ========== */
 .chat-config-bar{display:flex;gap:10px;padding:0 0 10px;border-bottom:1px solid var(--line);margin-bottom:6px;flex-shrink:0;}
@@ -351,7 +334,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <!-- 顶部配置摘要 -->
       <div class="chat-config-bar">
         <div class="config-item" id="configOutline"><span class="config-label">📋</span><span id="outlinePreview">等待 喜剧龙虾 收集...</span></div>
-        <div class="config-item" id="configPersona" onclick="$('#teamBtn').click()"><span class="config-label">🎭</span><span id="personaPreview">未选择画像</span></div>
         <div class="config-item" id="configModel"><span class="config-label">🤖</span><select id="model-select" class="model-select"><option value="">使用默认配置</option></select></div>
       </div>
       <!-- 4 维度槽位状态 -->
@@ -374,7 +356,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <!-- 底部输入 -->
       <div class="chat-input-area">
         <div class="chat-toolbar">
-          <button class="toolbar-btn" onclick="event.stopPropagation(); $('#teamBtn').click();" title="@团队成员">@ 成员</button>
+          <button class="toolbar-btn" onclick="event.stopPropagation(); triggerMentionSuggestions();" title="@可提及对象">@ 成员</button>
           <button class="toolbar-btn" onclick="addMention('喜剧龙虾')" title="@喜剧龙虾">@喜剧龙虾</button>
           <span class="toolbar-info" id="chatBudgetHint"></span>
         </div>
@@ -407,20 +389,12 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
   <!-- Team dropdown -->
   <div class="dropdown team-menu" id="teamMenu">
     <div style="padding:0 4px 8px;border-bottom:1px solid var(--line);margin-bottom:6px;">
-      <div class="menu-item" id="menuUser"><span class="mini-avatar" style="background:linear-gradient(135deg,#f1d6a4,#1e1e1e)"></span><div><span id="userName">意辰</span><div class="menu-sub">创作主理人</div></div><span class="persona-badge" id="menuPersonaBadge" style="display:none;margin-left:auto;"><span class="dot"></span><span id="menuPersonaName">未选择</span></span></div>
+      <div class="menu-item" id="menuUser"><span class="mini-avatar" style="background:linear-gradient(135deg,#f1d6a4,#1e1e1e)"></span><div><span id="userName">意辰</span><div class="menu-sub">创作主理人</div></div></div>
       <div class="menu-item" onclick="mentionSkill('喜剧龙虾')"><span class="mini-avatar" style="background:linear-gradient(135deg,#ddd,#9b7)"></span><div>喜剧龙虾<div class="menu-sub">资料与结构助手 · 点击@他</div></div></div>
     </div>
     <div style="padding:4px;">
       <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;">核心创作维度</div>
       <div id="teamSkills"></div>
-    </div>
-    <div style="padding:4px;">
-      <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;">已有人物画像</div>
-      <div id="teamPersonas"></div>
-    </div>
-    <div style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px;">
-      <div class="menu-item" onclick="openPersonaModal()"><span class="mini-avatar" style="background:linear-gradient(135deg,#eee,#ccc);display:grid;place-items:center;font-size:16px;">+</span><div>新建人物画像</div></div>
-      <div class="menu-item" onclick="openModelModal()" style="display:none;" id="menuModelItem"><span class="mini-avatar" style="background:linear-gradient(135deg,#dbeafe,#3b82f6);display:grid;place-items:center;font-size:12px;">AI</span><div>切换模型</div></div>
     </div>
   </div>
 
@@ -449,31 +423,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <button class="copy-btn" id="copyShare">复制链接</button>
   </div>
 
-  <!-- Create persona modal -->
-  <div class="modal-overlay" id="persona-modal">
-    <div class="modal-box">
-      <h3>新建人物画像 <span style="font-size:12px;color:#999;font-weight:600;">（仅自己可用）</span></h3>
-      <input type="text" id="p-name" placeholder="画像名称，如：毒舌职场侠">
-      <textarea id="p-description" placeholder="画像描述：描述这个画像的特点、风格或用途…" style="min-height:80px;"></textarea>
-
-      <!-- 参考文件上传 -->
-      <div class="upload-area" id="uploadArea">
-        <input type="file" id="p-files" multiple style="display:none;" onchange="handleFileSelect(this)">
-        <div class="upload-drop" onclick="$('#p-files').click()" ondragover="event.preventDefault();" ondrop="handleFileDrop(event)">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <div style="font-size:13px;color:#888;font-weight:600;margin-top:6px;">点击或拖拽上传参考文件</div>
-          <div style="font-size:11px;color:#aaa;margin-top:2px;">支持 PDF、Word、TXT、Markdown</div>
-        </div>
-      </div>
-      <div class="file-list" id="fileList"></div>
-
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick="closePersonaModal()">取消</button>
-        <button class="btn-save" onclick="createPersona()">保存</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 </div>
@@ -482,10 +431,9 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 <script>
 
 /* ========== State ========== */
-let personas = [];
+
 let allSkills = [];
 let selectedSkills = new Set();
-let selectedPersonaId = '';
 let selectedSkillId = '';
 let selectedStyle = '';
 let currentMention = null; // { type: 'slot'|'skill', id, label, value }
@@ -783,6 +731,29 @@ function addMention(name) {
   input.style.height = input.scrollHeight + 'px';
 }
 
+function triggerMentionSuggestions() {
+  const input = $('#chatInput');
+  if (!input) return;
+  const wasFocused = document.activeElement === input;
+  if (!wasFocused) {
+    input.value = input.value + (input.value && !input.value.endsWith(' ') ? ' ' : '') + '@';
+    input.focus();
+  } else {
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    const before = input.value.slice(0, start);
+    const after = input.value.slice(end);
+    const prefix = before.length && !/\s$/.test(before) ? ' ' : '';
+    input.value = before + prefix + '@' + after;
+    const newPos = start + prefix.length + 1;
+    input.setSelectionRange(newPos, newPos);
+  }
+  input.dispatchEvent(new Event('input'));
+  // Auto resize
+  input.style.height = 'auto';
+  input.style.height = input.scrollHeight + 'px';
+}
+
 /* ========== @ Mention auto-complete ========== */
 let mentionSelectedIndex = -1;
 
@@ -949,78 +920,9 @@ async function loadModels() {
   }
 }
 
-async function loadPersonas() {
-  try {
-    const res = await apiFetch('/pro/personas');
-    personas = await res.json();
-    updatePersonaUI();
-  } catch (err) {
-    console.error('加载画像失败', err);
-  }
-}
-
 function updateTeamCount() {
-  // 核心维度：话题、态度、偏见、情绪 + 喜剧龙虾
-  const totalMembers = 1 + 4 + personas.length; // 1=喜剧龙虾, 4=核心维度
+  const totalMembers = 1 + CORE_SLOTS.length; // 1=喜剧龙虾 + 核心维度
   $('#teamCount').textContent = `（${totalMembers}）`;
-}
-
-function updatePersonaUI() {
-  const sel = $('#persona-select');
-  if (sel) {
-    if (personas.length === 0) {
-      sel.innerHTML = '<option value="">暂无画像，请先创建</option>';
-    } else {
-      sel.innerHTML = personas.map(p => `<option value="${p.persona_id}">${escapeHtml(p.name)}</option>`).join('');
-    }
-  }
-  // Update badge & preview
-  const p = personas.find(x => x.persona_id === selectedPersonaId);
-  const menuBadge = $('#menuPersonaBadge');
-  const menuName = $('#menuPersonaName');
-  const personaPreview = $('#personaPreview');
-  const configPersona = $('#configPersona');
-  if (p) {
-    menuBadge.style.display = 'inline-flex';
-    menuName.textContent = p.name;
-    personaPreview.textContent = p.name;
-    configPersona.classList.add('active');
-  } else if (personas.length > 0) {
-    selectedPersonaId = personas[0].persona_id;
-    menuBadge.style.display = 'inline-flex';
-    menuName.textContent = personas[0].name;
-    personaPreview.textContent = personas[0].name;
-    configPersona.classList.add('active');
-  } else {
-    menuBadge.style.display = 'none';
-    personaPreview.textContent = '未选择画像';
-    configPersona.classList.remove('active');
-  }
-  updateTeamCount();
-  // Render persona list in team menu
-  const teamPersonas = $('#teamPersonas');
-  if (teamPersonas) {
-    if (personas.length === 0) {
-      teamPersonas.innerHTML = '<div style="padding:8px;color:#999;font-size:13px;">暂无画像，点击"新建人物画像"创建</div>';
-    } else {
-      teamPersonas.innerHTML = personas.map(p => {
-        const active = p.persona_id === selectedPersonaId;
-        return `<div class="menu-item" onclick="selectPersona('${p.persona_id}')" style="${active ? 'background:#fff2ed;' : ''}">
-          <span class="mini-avatar" style="background:linear-gradient(135deg,#f1d6a4,#1e1e1e)"></span>
-          <div>${escapeHtml(p.name)}<div class="menu-sub">${escapeHtml(p.description || '暂无描述')}</div></div>
-          ${active ? '<span style="font-size:12px;color:#ff764a;font-weight:700;margin-left:auto;">✓ 当前</span>' : ''}
-        </div>`;
-      }).join('');
-    }
-  }
-}
-
-function selectPersona(personaId) {
-  selectedPersonaId = personaId;
-  updatePersonaUI();
-  const p = personas.find(x => x.persona_id === personaId);
-  toast('已切换画像：' + (p?.name || ''));
-  closeAll();
 }
 
 async function loadSkills() {
@@ -1255,7 +1157,6 @@ function newConversation() {
 
   // Reset workflow state to start a fresh server session
   workflowSessionId = null;
-  selectedPersonaId = '';
   selectedSkills = new Set();
   selectedSkillId = '';
   selectedStyle = '';
@@ -1284,7 +1185,6 @@ function newConversation() {
   currentRole = '主持人';
 
   // Refresh UI state
-  updatePersonaUI();
   renderTeamSkills();
   updateEstimate();
 
@@ -1310,7 +1210,6 @@ function saveCurrentConversation() {
     artifactsData,
     chatHtml,
     outline: '',
-    personaId: selectedPersonaId,
     skillIds: Array.from(selectedSkills),
     sessionId: workflowSessionId,
     currentRole,
@@ -1356,7 +1255,6 @@ async function loadConversation(id) {
   currentConversationId = c.id;
   $('#pageTitle').textContent = c.title;
   // 大纲由 喜剧龙虾 在对话中收集，不通过独立输入框保存
-  selectedPersonaId = c.personaId || '';
   selectedSkills = new Set(c.skillIds || []);
   // 恢复服务端会话 ID，保证刷新后继续同一工作流
   workflowSessionId = c.sessionId || null;
@@ -1435,7 +1333,6 @@ async function loadConversation(id) {
       </div>
     `;
   }
-  updatePersonaUI();
   renderTeamSkills();
   updateEstimate();
   closeAll();
@@ -1465,7 +1362,6 @@ async function runAgentTurn(text, silent = false) {
       body: JSON.stringify({
         session_id: workflowSessionId,
         message: text,
-        persona_id: selectedPersonaId || undefined,
         skill_id: selectedSkillId || undefined,
         style: selectedStyle || undefined,
         model
@@ -1992,99 +1888,6 @@ function clearSectionArtifacts() {
   });
 }
 
-/* ========== Persona Modal ========== */
-let pendingFiles = [];
-
-function openPersonaModal() {
-  $('#persona-modal').classList.add('active');
-  closeAll();
-}
-function closePersonaModal() {
-  $('#persona-modal').classList.remove('active');
-  // Reset form
-  $('#p-name').value = '';
-  $('#p-description').value = '';
-  pendingFiles = [];
-  renderFileList();
-}
-
-function handleFileSelect(input) {
-  if (!input.files) return;
-  Array.from(input.files).forEach(file => addPendingFile(file));
-  input.value = '';
-}
-
-function handleFileDrop(e) {
-  e.preventDefault();
-  if (!e.dataTransfer) return;
-  Array.from(e.dataTransfer.files).forEach(file => addPendingFile(file));
-}
-
-function addPendingFile(file) {
-  const item = { file, status: 'pending', result: null };
-  pendingFiles.push(item);
-  renderFileList();
-  uploadFile(item);
-}
-
-async function uploadFile(item) {
-  const formData = new FormData();
-  formData.append('file', item.file);
-  try {
-    const res = await apiFetch('/pro/upload', {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
-    item.status = 'done';
-    item.result = data;
-    renderFileList();
-    toast('文件上传成功：' + data.filename);
-  } catch (err) {
-    item.status = 'error';
-    renderFileList();
-    toast('文件上传失败：' + err.message);
-  }
-}
-
-function removeFile(index) {
-  pendingFiles.splice(index, 1);
-  renderFileList();
-}
-
-function renderFileList() {
-  const container = $('#fileList');
-  if (!pendingFiles.length) {
-    container.innerHTML = '';
-    return;
-  }
-  container.innerHTML = pendingFiles.map((f, i) => {
-    const statusClass = f.status;
-    const statusText = f.status === 'done' ? '已上传' : (f.status === 'error' ? '失败' : '上传中…');
-    return `<div class="file-tag"><span>${escapeHtml(f.file.name)}</span><span class="file-status ${statusClass}">${statusText}</span><span class="file-remove" onclick="removeFile(${i})">×</span></div>`;
-  }).join('');
-}
-
-async function createPersona() {
-  const name = $('#p-name').value.trim();
-  if (!name) { toast('请输入画像名称'); return; }
-  const description = $('#p-description').value.trim();
-  const reference_files = pendingFiles
-    .filter(f => f.status === 'done' && f.result)
-    .map(f => ({ filename: f.result.filename, path: f.result.path, size: f.result.size }));
-  try {
-    await apiFetch('/pro/personas', {
-      method: 'POST',
-      body: JSON.stringify({ name, description, reference_files })
-    });
-    closePersonaModal();
-    loadPersonas();
-    toast('画像创建成功');
-  } catch (err) {
-    toast('创建失败：' + err.message);
-  }
-}
-
 /* ========== @ Skill ========== */
 function replaceMention(newName) {
   const input = $('#chatInput');
@@ -2242,7 +2045,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load data
   loadModels();
-  loadPersonas();
   loadSkills();
 
   // Init conversation: auto-load most recent if exists

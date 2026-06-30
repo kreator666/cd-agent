@@ -87,29 +87,40 @@ class WriterAgent:
         response = llm.invoke(
             [("system", system_prompt), ("human", user_prompt)]
         )
-        section_text = str(getattr(response, "content", response)).strip()
+        output_text = str(getattr(response, "content", response)).strip()
 
-        sections = state.sections.copy()
-        if section_index < len(sections):
-            sections[section_index] = section_text
-        else:
-            sections.append(section_text)
-
-        logger.debug("writer: section %d completed", section_index)
+        is_coach = skill_config.metadata.get("mode") == "coach"
         knowledge_references = [
             {"id": item.id, "title": item.title, "category": item.category, "source": item.source}
             for item in retrieved_knowledge
         ]
+        skill_meta = {
+            "skill_id": skill_config.id,
+            "skill_name": skill_config.name,
+            "style": state.selected_style,
+            "retrieved_examples_count": len(retrieved_examples),
+            "knowledge_references": knowledge_references,
+        }
+
+        if is_coach:
+            logger.debug("writer: section %d coaching hints generated", section_index)
+            return {
+                "coaching_hints": output_text,
+                "phase": "drafting",
+                "skill_meta": skill_meta,
+            }
+
+        sections = state.sections.copy()
+        if section_index < len(sections):
+            sections[section_index] = output_text
+        else:
+            sections.append(output_text)
+
+        logger.debug("writer: section %d completed", section_index)
         return {
             "sections": sections,
             "phase": "reviewing",
-            "skill_meta": {
-                "skill_id": skill_config.id,
-                "skill_name": skill_config.name,
-                "style": state.selected_style,
-                "retrieved_examples_count": len(retrieved_examples),
-                "knowledge_references": knowledge_references,
-            },
+            "skill_meta": skill_meta,
         }
 
     @staticmethod

@@ -34,6 +34,7 @@ class ComedyState(BaseModel):
         "plan_review",
         "routing_plan_feedback",
         "writing",
+        "drafting",
         "reviewing",
         "human_review",
         "routing_feedback",
@@ -107,6 +108,10 @@ class ComedyState(BaseModel):
     feedback: str = Field(
         default="",
         description="人类审阅反馈",
+    )
+    coaching_hints: str | None = Field(
+        default=None,
+        description="当前段落的教练提示（coach 模式使用）",
     )
 
     # ------------------------------------------------------------------ #

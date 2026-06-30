@@ -22,6 +22,7 @@ MEMBERS = [
     "context_analyzer",
     "planner",
     "writer",
+    "draft_node",
     "reviewer",
     "search",
     "chat",
@@ -38,6 +39,7 @@ NextNode = Literal[
     "plan_review",
     "process_plan_feedback",
     "writer",
+    "draft_node",
     "reviewer",
     "search",
     "chat",
@@ -90,6 +92,9 @@ class SupervisorAgent:
 
         if phase == "writing":
             return "writer"
+
+        if phase == "drafting":
+            return "draft_node"
 
         if phase == "reviewing":
             return "reviewer"

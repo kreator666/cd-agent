@@ -22,6 +22,7 @@ def supervisor():
         ("analyzing", "context_analyzer"),
         ("planning", "planner"),
         ("writing", "writer"),
+        ("drafting", "draft_node"),
         ("reviewing", "reviewer"),
         ("human_review", "human"),
         ("routing_feedback", "process_feedback"),

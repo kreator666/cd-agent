@@ -108,6 +108,16 @@ def _extract_interrupt_info(raw: dict) -> dict[str, Any]:
             "tone": value.get("tone", ""),
         }
 
+    # 教练模式草稿收集：payload 里包含 coaching_hints
+    if "coaching_hints" in value:
+        return {
+            "review_type": "drafting",
+            "section_index": value.get("section_index", 0),
+            "section_goal": value.get("section_goal", ""),
+            "coaching_hints": value.get("coaching_hints", ""),
+            "message": value.get("message", "请根据教练提示撰写当前段落"),
+        }
+
     return {
         "review_type": "section",
         "section_index": value.get("section_index", 0),
@@ -241,6 +251,36 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                 if info.get("outline")
                 else None,
                 skill_meta=plan_skill_meta,
+            )
+
+        if info.get("review_type") == "drafting":
+            section_index = info.get("section_index", 0)
+            section_label = f"第 {section_index + 1} 段"
+            coaching_hints = info.get("coaching_hints", "")
+            message = info.get("message", "请根据教练提示撰写当前段落")
+            content = f"{message}\n\n{coaching_hints}".strip()
+            return _build_guide_response(
+                session_id=session_id,
+                content=content,
+                workflow_state="drafting",
+                current_role="写稿教练",
+                next_role="用户",
+                next_actions=[
+                    {"label": "📝 提交草稿", "action": "submit_draft", "value": "提交草稿"},
+                ],
+                steps=[
+                    {
+                        "type": "guide",
+                        "content": content,
+                        "current_role": "写稿教练",
+                        "todo_board": [],
+                        "next_actions": [
+                            {"label": "提交草稿", "action": "submit_draft", "value": "提交草稿"},
+                        ],
+                    }
+                ],
+                artifacts=None,
+                skill_meta=raw.get("skill_meta") if isinstance(raw, dict) else None,
             )
 
         section_text = info["section_text"]
@@ -401,8 +441,8 @@ async def pro_chat_v4(
         current = state.graph.get_state(config)
         phase = current.values.get("phase") if current and current.values else "idle"
 
-        if phase in ("plan_review", "human_review"):
-            # 计划审阅/段落审阅阶段：任何用户输入都视为反馈（支持 [manual] 人工编辑）
+        if phase in ("plan_review", "human_review", "drafting"):
+            # 计划审阅/段落审阅/教练草稿阶段：任何用户输入都视为反馈/草稿（支持 [manual] 人工编辑）
             is_feedback = True
         elif phase == "routing_feedback":
             is_feedback = _is_feedback_message(request.message)

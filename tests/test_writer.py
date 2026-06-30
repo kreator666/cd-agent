@@ -106,3 +106,21 @@ class TestWriterAgent:
         system_prompt = call_args[0][1]
         assert "动态铺垫" in system_prompt
         assert "动态笑点" in system_prompt
+
+    def test_coach_mode_returns_drafting_with_hints(self, mock_llm):
+        """standup_v2 教练模式不写入 sections，返回 coaching_hints。"""
+        state = ComedyState(
+            user_input="写一段加班",
+            plan={"outline": ["开头", "冲突"]},
+            current_section=0,
+            sections=[],
+            selected_skill="standup_v2",
+        )
+        agent = WriterAgent()
+        result = agent.run(state, llm=mock_llm)
+
+        assert result["phase"] == "drafting"
+        assert "coaching_hints" in result
+        assert result["coaching_hints"] == "这是生成的段落。"
+        assert "sections" not in result
+        assert result["skill_meta"]["skill_id"] == "standup_v2"

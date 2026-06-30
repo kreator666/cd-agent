@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from comedy_agent.nodes.analyze_node import analyze_node
 from comedy_agent.nodes.chat_node import chat_node
+from comedy_agent.nodes.draft_node import draft_node
 from comedy_agent.nodes.entry_node import entry_node
 from comedy_agent.nodes.finalize_node import finalize_node
 from comedy_agent.nodes.guide_node import guide_node
@@ -25,6 +26,7 @@ from comedy_agent.nodes.write_node import write_node
 __all__ = [
     "analyze_node",
     "chat_node",
+    "draft_node",
     "entry_node",
     "finalize_node",
     "guide_node",

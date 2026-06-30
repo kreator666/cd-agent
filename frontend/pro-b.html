@@ -1210,6 +1210,7 @@ function newConversation() {
   // Refresh UI state
   renderTeamSkills();
   updateEstimate();
+  setInputPlaceholder('idle');
 
   setTimeout(() => {
     $('#pageTitle').classList.remove('editing');
@@ -1400,6 +1401,9 @@ async function runAgentTurn(text, silent = false) {
     // 记录当前角色
     if (data.current_role) currentRole = data.current_role;
 
+    // 根据工作流状态调整输入框提示
+    setInputPlaceholder(data.workflow_state);
+
     // 最终剧本场景：清空右侧工作区，只显示最终剧本一张卡片
     if (data.type === 'final_script') {
       clearArtifacts();
@@ -1512,7 +1516,30 @@ function renderGuideContentHtml(content, workflowState) {
       : '';
     return messageHtml + sectionHtml;
   }
+  if (workflowState === 'drafting') {
+    const { message, sectionText } = splitHumanReviewContent(content);
+    const messageHtml = message ? `<p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>` : '';
+    const hintsHtml = sectionText
+      ? `<div style="background:#f8f9fb;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:12px 0;line-height:1.8;font-size:15px;color:#3f3f3f;">${escapeHtml(sectionText).replace(/\n/g, '<br>')}</div>
+         <p style="color:#ff764a;font-weight:700;">👇 请在下方输入框根据提示撰写当前段落，写完后按 Enter 发送</p>`
+      : '';
+    return messageHtml + hintsHtml;
+  }
   return content.startsWith('<') ? content : `<p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>`;
+}
+
+function setInputPlaceholder(workflowState) {
+  const input = $('#chatInput');
+  if (!input) return;
+  if (workflowState === 'drafting') {
+    input.placeholder = '请根据上方教练提示撰写当前段落，写完后按 Enter 发送…';
+  } else if (workflowState === 'human_review') {
+    input.placeholder = '输入通过/修改意见，或点击按钮快速反馈…';
+  } else if (workflowState === 'plan_review') {
+    input.placeholder = '输入开始写作/重新规划/修改计划…';
+  } else {
+    input.placeholder = '输入你的创作需求，按 Enter 发送，Shift+Enter 换行…';
+  }
 }
 
 function getSectionArtifactId(artifacts) {
@@ -1543,6 +1570,11 @@ function bindGuideActions(msgDiv, options = {}) {
       if (action === 'confirm_edit') {
         const sectionEl = msgDiv.querySelector('.review-section');
         if (sectionEl) finishSectionEdit(sectionEl, true, sectionArtifactId);
+        return;
+      }
+
+      if (action === 'submit_draft') {
+        $('#chatInput').focus();
         return;
       }
 

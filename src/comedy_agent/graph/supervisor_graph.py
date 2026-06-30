@@ -23,6 +23,7 @@ from comedy_agent.checkpoints.memory import get_memory_saver
 from comedy_agent.nodes import (
     analyze_node,
     chat_node,
+    draft_node,
     entry_node,
     finalize_node,
     guide_node,
@@ -50,6 +51,7 @@ WORKER_NODES = {
     "plan_review": plan_review_node,
     "process_plan_feedback": process_plan_feedback_node,
     "writer": write_node,
+    "draft_node": draft_node,
     "reviewer": review_node,
     "search": search_node,
     "chat": chat_node,
@@ -94,6 +96,7 @@ def build_supervisor_graph() -> CompiledStateGraph:
             "plan_review": "plan_review",
             "process_plan_feedback": "process_plan_feedback",
             "writer": "writer",
+            "draft_node": "draft_node",
             "reviewer": "reviewer",
             "search": "search",
             "chat": "chat",

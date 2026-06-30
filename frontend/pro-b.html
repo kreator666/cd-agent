@@ -770,8 +770,8 @@ function normalizeMultipleMentions() {
 let mentionSelectedIndex = -1;
 
 function getMentionCandidates() {
-  // 核心创作团队（6 个维度）
-  const candidates = [
+  // 核心创作维度（6 个），不包含写作风格 Skill
+  return [
     { name: '话题', desc: '确定创作主题与背景' },
     { name: '态度', desc: '明确核心态度与立场' },
     { name: '偏见', desc: '挖掘独特视角与偏见' },
@@ -779,12 +779,6 @@ function getMentionCandidates() {
     { name: '素材', desc: '搜索网络创作资料' },
     { name: '排版', desc: '转换为平台文章格式' },
   ];
-  // 加上写作风格 Skill（支持 @zhou_qimo / @周奇墨风格）
-  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing');
-  writingSkills.forEach(skill => {
-    candidates.push({ name: skill.id, desc: skill.name + ' · ' + (skill.description || '写作风格') });
-  });
-  return candidates;
 }
 
 function getMentionSearchTerm() {

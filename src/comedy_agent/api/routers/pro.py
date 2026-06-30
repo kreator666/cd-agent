@@ -218,7 +218,6 @@ async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
 
     for cfg in load_skill_configs(settings.skills_dir):
         if cfg.metadata.get("kind") != "standup" and cfg.id not in {
-            "my_skill",
             "open_source_skill",
             "zhou_qimo",
             "xu_zhisheng",

@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # 常见 Skill 名称/别名到 Skill ID 的映射
 _SKILL_ALIASES: dict[str, str] = {
-    "默认": "my_skill",
-    "我的默认风格": "my_skill",
+    "默认": "standup_coach",
+    "脱口秀教练": "standup_coach",
     "开源": "open_source_skill",
     "开源通用技巧": "open_source_skill",
     "周奇墨": "zhou_qimo",
@@ -60,7 +60,7 @@ def resolve_skill(
     1. 前端显式传入的 skill_id / style。
     2. 用户输入中的 @ 提及（如 @周奇墨）。
     3. State 中已保存的 selected_skill / selected_style（跨轮保留）。
-    4. 兜底：my_skill。
+    4. 兜底：standup_coach。
 
     Args:
         state: 当前 LangGraph 状态。
@@ -94,12 +94,13 @@ def resolve_skill(
         style = state.selected_style
 
     # 4. 兜底
+    default_id = "standup_coach"
     if not skill_id:
-        skill_id = "my_skill"
+        skill_id = default_id
 
-    # 如果解析出的 Skill 不是写作类，回退到 my_skill
-    if skill_id not in writing_ids and skill_id != "my_skill":
-        logger.warning("Skill %s 不是写作类 Skill，回退到 my_skill", skill_id)
-        skill_id = "my_skill"
+    # 如果解析出的 Skill 不是写作类，回退到默认写作 Skill
+    if skill_id not in writing_ids:
+        logger.warning("Skill %s 不是写作类 Skill，回退到 %s", skill_id, default_id)
+        skill_id = default_id
 
     return {"selected_skill": skill_id, "selected_style": style}

@@ -25,7 +25,7 @@ def sample_state() -> ComedyState:
         plan={"outline": ["铺垫", "冲突", "callback 收尾"]},
         current_section=0,
         sections=[],
-        selected_skill="my_skill",
+        selected_skill="standup_coach",
         selected_style="自嘲",
         user_id="test-user",
     )

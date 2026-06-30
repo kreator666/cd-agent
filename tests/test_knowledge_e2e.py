@@ -104,7 +104,7 @@ class TestKnowledgeE2E:
             },
             current_section=0,
             sections=[],
-            selected_skill="my_skill",
+            selected_skill="standup_coach",
         )
         result = WriterAgent().run(state, llm=FakeLLM("这一段讲的是加班铺垫。"))
 
@@ -130,7 +130,7 @@ class TestKnowledgeE2E:
             plan={"outline": ["铺垫", "升级", "反转"]},
             current_section=0,
             sections=[],
-            selected_skill="my_skill",
+            selected_skill="standup_coach",
         )
         writer_result = WriterAgent().run(state, llm=FakeLLM("生成段落"))
 

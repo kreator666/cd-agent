@@ -7,10 +7,10 @@ from comedy_agent.state.schema import ComedyState
 
 
 class TestResolveSkill:
-    def test_defaults_to_my_skill(self):
+    def test_defaults_to_standup_coach(self):
         state = ComedyState(user_input="hello")
         result = resolve_skill(state)
-        assert result["selected_skill"] == "my_skill"
+        assert result["selected_skill"] == "standup_coach"
         assert result["selected_style"] is None
 
     def test_explicit_skill_id(self):
@@ -49,9 +49,9 @@ class TestResolveSkill:
     def test_unknown_skill_fallback(self):
         state = ComedyState(user_input="hello")
         result = resolve_skill(state, explicit_skill_id="not_a_skill")
-        assert result["selected_skill"] == "my_skill"
+        assert result["selected_skill"] == "standup_coach"
 
     def test_slot_mention_ignored(self):
         state = ComedyState(user_input="@话题 人工智能")
         result = resolve_skill(state)
-        assert result["selected_skill"] == "my_skill"
+        assert result["selected_skill"] == "standup_coach"

@@ -122,10 +122,9 @@ class WriterAgent:
                 return cfg
             logger.warning("指定的 Skill %s 不存在，回退到默认 Skill", skill_id)
 
-        # 默认优先使用 standup_coach，回退到 my_skill / 内置默认
-        for default_id in ("standup_coach", "my_skill"):
-            cfg = load_skill_config(settings.skills_dir / default_id)
-            if cfg is not None:
-                return cfg
+        # 默认优先使用 standup_coach，不存在时使用内置默认
+        cfg = load_skill_config(settings.skills_dir / "standup_coach")
+        if cfg is not None:
+            return cfg
 
         return get_default_skill_config(settings.skills_dir)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.types import interrupt
@@ -153,7 +154,7 @@ def example_review_node(state: ComedyState) -> dict:
 
     logger.debug("example_review_node interrupt, waiting for user draft")
     user_draft = interrupt(interrupt_payload)
-    draft_text = str(user_draft).strip()
+    draft_text = re.sub(r"^@\S+\s*", "", str(user_draft)).strip()
 
     sections = state.sections.copy()
     if section_index < len(sections):

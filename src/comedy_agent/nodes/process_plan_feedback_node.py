@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from comedy_agent.state.schema import ComedyState
 
@@ -25,7 +26,7 @@ def process_plan_feedback_node(state: ComedyState) -> dict:
     Returns:
         dict: 包含 phase 等更新字段。
     """
-    feedback = (state.feedback or "").strip().lower()
+    feedback = re.sub(r"^@\S+\s*", "", (state.feedback or "")).strip().lower()
 
     if any(kw in feedback for kw in APPROVE_KEYWORDS):
         logger.debug("process_plan_feedback: approve, start writing")

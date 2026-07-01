@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from comedy_agent.state.schema import ComedyState
 
@@ -27,13 +28,13 @@ def process_feedback_node(state: ComedyState) -> dict:
     Returns:
         dict: 包含 current_section、feedback、phase 更新。
     """
-    raw_feedback = (state.feedback or "").strip()
+    raw_feedback = re.sub(r"^@\S+\s*", "", (state.feedback or "")).strip()
     feedback = raw_feedback.lower()
     outline = (state.plan or {}).get("outline", [])
     total_sections = len(outline)
 
     # 人工编辑：直接采用编辑后的文本，回到 human_review 让用户确认或继续修改
-    if feedback.startswith(MANUAL_EDIT_PREFIX):
+    if raw_feedback.startswith(MANUAL_EDIT_PREFIX):
         edited_text = raw_feedback[len(MANUAL_EDIT_PREFIX):].strip()
         sections = list(state.sections)
         if state.current_section < len(sections):
@@ -101,7 +102,7 @@ def process_feedback_node(state: ComedyState) -> dict:
     logger.debug("process_feedback: modify current section")
     return {
         "current_section": state.current_section,
-        "feedback": state.feedback,
+        "feedback": raw_feedback,
         "suggestions": None,
         "phase": "generating_examples" if state.manual_section_mode else "writing",
     }

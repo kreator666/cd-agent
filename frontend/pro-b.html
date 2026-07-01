@@ -443,6 +443,7 @@ let isGenerating = false;
 let workflowSessionId = null;
 let artifactsState = {}; // { id -> artifact object }
 let currentRole = '主持人';
+let currentWorkflowState = 'idle';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -968,6 +969,11 @@ function ensureDefaultSkillSelected() {
       updateMentionBadge();
     }
   }
+  // 初始状态下在空输入框中展示默认 @ 前缀
+  const input = $('#chatInput');
+  if (currentMention && input && !input.value.trim() && currentWorkflowState === 'idle') {
+    input.value = '@' + currentMention.value + ' ';
+  }
 }
 
 function renderTeamSkills() {
@@ -1080,7 +1086,9 @@ function parseInputMention() {
   const text = input.value;
   const match = text.match(/^@(\S+)\s/);
   if (!match) {
-    if (currentMention && !text.startsWith('@')) {
+    // 在需要用户输入段落/反馈的交互状态中，输入框为空不代表要取消已选 Skill/维度
+    const keepMentionStates = ['example_review', 'drafting', 'human_review', 'plan_review'];
+    if (currentMention && !text.startsWith('@') && !keepMentionStates.includes(currentWorkflowState)) {
       currentMention = null;
       selectedSkillId = '';
       selectedStyle = '';
@@ -1214,6 +1222,7 @@ function newConversation() {
   selectedSkillId = 'standup_coach';
   selectedStyle = '';
   currentMention = null;
+  currentWorkflowState = 'idle';
   updateMentionBadge();
   ensureDefaultSkillSelected();
 
@@ -1432,8 +1441,19 @@ async function runAgentTurn(text, silent = false) {
     // 记录当前角色
     if (data.current_role) currentRole = data.current_role;
 
-    // 根据工作流状态调整输入框提示
-    setInputPlaceholder(data.workflow_state);
+    // 根据工作流状态调整输入框提示与内容
+    currentWorkflowState = data.workflow_state || 'idle';
+    setInputPlaceholder(currentWorkflowState);
+    const chatInput = $('#chatInput');
+    if (['example_review', 'drafting', 'human_review', 'plan_review'].includes(currentWorkflowState)) {
+      // 这些状态下用户需要输入段落或反馈，不应保留 @ 前缀
+      chatInput.value = '';
+    } else if (currentMention) {
+      chatInput.value = '@' + currentMention.value + ' ';
+    } else {
+      chatInput.value = '';
+    }
+    chatInput.style.height = 'auto';
 
     // 最终剧本场景：清空右侧工作区，只显示最终剧本一张卡片
     if (data.type === 'final_script') {
@@ -1489,8 +1509,8 @@ async function sendPrompt() {
 
   // Add user message
   addChatMessage('user', '我', '创作主理人', text);
-  // 发送后保留 @ 前缀，方便继续同一对象对话
-  input.value = currentMention ? '@' + currentMention.value + ' ' : '';
+  // 先清空输入框；等后端返回工作流状态后再决定是否恢复 @ 前缀
+  input.value = '';
   input.style.height = 'auto';
 
   await runAgentTurn(text, false);

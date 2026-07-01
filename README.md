@@ -208,8 +208,6 @@ python -m pytest tests/ -v
 | `sitcom_generator` | 创作 | creative | 情景喜剧创作：情景、集主题、角色、场景数 |
 | `manzai_generator` | 创作 | creative | 漫才创作：话题、时长、段落数、荒谬等级 |
 | `japanese_sketch_generator` | 创作 | creative | 日式短剧创作：主题、角色数、极端性格、笑点密度 |
-| `joke_analyzer` | 分析 | analytical | 笑点分析：拆解笑点结构与节奏 |
-| `script_evaluator` | 分析 | analytical | 剧本评估：多维度评分与改进建议 |
 
 所有创作类 Skill 均支持 **RAG 知识库注入**：根据 topic/theme 自动检索默认知识库 + 用户个人知识库，将相关知识拼接到 System Prompt 中指导创作。
 

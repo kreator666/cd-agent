@@ -5,12 +5,9 @@ from comedy_agent.skills.standup import StandupSkill
 from comedy_agent.skills.crosstalk import CrosstalkSkill
 from comedy_agent.skills.sketch import SketchSkill
 from comedy_agent.skills.sitcom import SitcomSkill
-from comedy_agent.skills.joke_analyzer import JokeAnalyzerSkill
-from comedy_agent.skills.script_evaluator import ScriptEvaluatorSkill
 from comedy_agent.skills.manzai import ManzaiSkill
 from comedy_agent.skills.japanese_sketch import JapaneseSketchSkill
 from comedy_agent.skills.add_salt import AddSaltSkill
-from comedy_agent.skills.style_mimic import StyleMimicSkill
 from comedy_agent.skills.topic import TopicSkill
 from comedy_agent.skills.attitude import AttitudeSkill
 from comedy_agent.skills.emotion import EmotionSkill
@@ -24,12 +21,9 @@ __all__ = [
     "CrosstalkSkill",
     "SketchSkill",
     "SitcomSkill",
-    "JokeAnalyzerSkill",
-    "ScriptEvaluatorSkill",
     "ManzaiSkill",
     "JapaneseSketchSkill",
     "AddSaltSkill",
-    "StyleMimicSkill",
     "TopicSkill",
     "AttitudeSkill",
     "EmotionSkill",

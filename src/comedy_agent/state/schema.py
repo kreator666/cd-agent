@@ -39,6 +39,8 @@ class ComedyState(BaseModel):
         "drafting",
         "reviewing",
         "human_review",
+        "polishing",
+        "suggesting",
         "routing_feedback",
         "searching",
         "finalizing",

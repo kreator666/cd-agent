@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
 
 from comedy_agent.agent.orchestrator import AgentOrchestrator
-from comedy_agent.skills.layout import LayoutSkill
+from comedy_agent.skills.add_salt import AddSaltSkill
 
 
 class TestAgentOrchestrator:
@@ -267,32 +267,32 @@ class TestAgentOrchestrator:
     def test_extract_skill_args_filters_contaminated_values(self, mock_llm):
         """LLM 返回提示文字污染时应被过滤，并兜底为清洗后的用户输入。"""
         mock_llm.invoke.return_value = AIMessage(
-            content='{"text": "请只输出合法的 JSON 对象", "platform": "wechat"}'
+            content='{"text": "请只输出合法的 JSON 对象", "salt_level": "high"}'
         )
         with patch(
             "comedy_agent.agent.orchestrator.ModelFactory.get_model",
             return_value=mock_llm,
         ):
             orch = AgentOrchestrator()
-            skill = LayoutSkill()
-            args = orch._extract_skill_args(skill, "使用 layout 技能。\n文本：家庭教育")
+            skill = AddSaltSkill()
+            args = orch._extract_skill_args(skill, "使用 add_salt 技能。\n文本：家庭教育")
             assert args["text"] == "家庭教育"
-            assert args.get("platform") == "wechat"
+            assert args.get("salt_level") == "high"
 
     def test_extract_skill_args_handles_empty_request(self, mock_llm):
         """空请求下 LLM 若返回提示文字，应兜底为空字符串，不抛出验证错误。"""
         mock_llm.invoke.return_value = AIMessage(
-            content='{"text": "请只输出合法的 JSON 对象", "platform": "wechat"}'
+            content='{"text": "请只输出合法的 JSON 对象", "salt_level": "high"}'
         )
         with patch(
             "comedy_agent.agent.orchestrator.ModelFactory.get_model",
             return_value=mock_llm,
         ):
             orch = AgentOrchestrator()
-            skill = LayoutSkill()
-            args = orch._extract_skill_args(skill, "使用 layout 技能。\n文本：")
+            skill = AddSaltSkill()
+            args = orch._extract_skill_args(skill, "使用 add_salt 技能。\n文本：")
             assert args["text"] == ""
-            assert args.get("platform") == "wechat"
+            assert args.get("salt_level") == "high"
 
     # ------------------------------------------------------------------ #
     # 异步

@@ -172,7 +172,7 @@ async def delete_persona(
 async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
     """列出专业版可用 Skill，支持按类型过滤。
 
-    可选类型：topic / attitude / emotion / genre / rule_persona / script_composer / writing
+    可选类型：writing / other
     """
     result: list[dict] = []
 
@@ -188,23 +188,7 @@ async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
             }
             # 尝试从 Skill 类名推断类型
             name = info["name"]
-            if "topic" in name:
-                info["skill_type"] = "topic"
-            elif "attitude" in name:
-                info["skill_type"] = "attitude"
-            elif "emotion" in name:
-                info["skill_type"] = "emotion"
-            elif "genre" in name:
-                info["skill_type"] = "genre"
-            elif "rule_persona" in name:
-                info["skill_type"] = "rule_persona"
-            elif "script_composer" in name:
-                info["skill_type"] = "script_composer"
-            elif "material" in name:
-                info["skill_type"] = "material"
-            elif "layout" in name:
-                info["skill_type"] = "layout"
-            elif "standup" in name or name in ("standup_generator", "generator"):
+            if "standup" in name or name in ("standup_generator", "generator"):
                 info["skill_type"] = "writing"
             else:
                 info["skill_type"] = "other"

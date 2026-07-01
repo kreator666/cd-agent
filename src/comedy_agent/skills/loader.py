@@ -632,14 +632,6 @@ _BUILTIN_SKILL_NAMES = {
     "manzai_generator",
     "japanese_sketch_generator",
     "add_salt",
-    "topic",
-    "attitude",
-    "emotion",
-    "genre",
-    "rule_persona",
-    "script_composer",
-    "material",
-    "layout",
 }
 
 

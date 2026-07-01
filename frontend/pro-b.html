@@ -966,7 +966,27 @@ function renderTeamSkills() {
   const container = $('#teamSkills');
   if (!container) return;
 
-  let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">点击 @维度 填槽；点击 🎭 风格切换写作 Skill</div>';
+  let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">点击选择你的写作搭档与风格</div>';
+
+  // 写作搭档：固定展示 writer_agent（写手阿文）
+  const partner = (allSkills || []).find(s => s.id === 'writer_agent') || WRITER_AGENT;
+  html += '<div style="margin-bottom:12px;">';
+  html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">✍️ 写作搭档</div>';
+  html += '<div class="slot-list">';
+  const partnerActive = currentMention && currentMention.type === 'skill' && currentMention.id === partner.id;
+  const partnerActiveStyle = partnerActive ? 'border:2px solid #333;box-sizing:border-box;' : '';
+  const partnerCheck = partnerActive ? '✓ ' : '';
+  html += `<div class="slot-row" onclick="selectSkill('${partner.id}')" title="${escapeHtml(partner.description || partner.desc || '')}" style="background:linear-gradient(135deg,#e5e7eb,#111827);${partnerActiveStyle}">
+    <div class="slot-avatar" style="display:flex;align-items:center;justify-content:center;font-size:18px;">🧑‍💻</div>
+    <div class="slot-info">
+      <div class="slot-name">${partnerCheck}${escapeHtml(partner.name || partner.name)}</div>
+      <div class="slot-meta">@${escapeHtml(partner.id)} · ${escapeHtml(partner.description || partner.desc || '逐段写作搭档')}</div>
+    </div>
+  </div>`;
+  html += '</div></div>';
+
+  // 核心创作维度
+  html += '<div style="font-size:13px;color:#888;font-weight:700;margin:12px 0 8px;">🎯 核心创作维度</div>';
   html += '<div class="slot-list">';
   CORE_SLOTS.forEach(slot => {
     const isActive = currentMention && currentMention.type === 'slot' && currentMention.id === slot.id;
@@ -982,8 +1002,8 @@ function renderTeamSkills() {
   });
   html += '</div>';
 
-  // Phase 3：写作风格 Skill 选择
-  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing');
+  // 写作风格 Skill 选择（排除 writer_agent，已单独展示）
+  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing' && s.id !== 'writer_agent');
   if (writingSkills.length > 0) {
     html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">';
     html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">🎭 写作风格</div>';

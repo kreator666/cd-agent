@@ -772,8 +772,8 @@ function normalizeMultipleMentions() {
 let mentionSelectedIndex = -1;
 
 function getMentionCandidates() {
-  // 核心创作维度（6 个），不包含写作风格 Skill
-  return [
+  // 核心创作维度 + 写作搭档
+  const candidates = [
     { name: '话题', desc: '确定创作主题与背景' },
     { name: '态度', desc: '明确核心态度与立场' },
     { name: '偏见', desc: '挖掘独特视角与偏见' },
@@ -781,6 +781,11 @@ function getMentionCandidates() {
     { name: '素材', desc: '搜索网络创作资料' },
     { name: '排版', desc: '转换为平台文章格式' },
   ];
+  const writer = (allSkills || []).find(s => s.id === 'writer_agent');
+  if (writer) {
+    candidates.unshift({ name: writer.name, desc: writer.description || '逐段写作搭档' });
+  }
+  return candidates;
 }
 
 function getMentionSearchTerm() {
@@ -863,7 +868,10 @@ function insertMention(name) {
   input.style.height = 'auto';
   input.style.height = input.scrollHeight + 'px';
   // 同步 currentMention 状态
-  const skill = (allSkills || []).find(s => s.id === name && s.skill_type === 'writing');
+  let skill = (allSkills || []).find(s => s.id === name && s.skill_type === 'writing');
+  if (!skill) {
+    skill = (allSkills || []).find(s => s.name === name && s.skill_type === 'writing');
+  }
   if (skill) {
     setMention('skill', skill.id, skill.name, skill.id);
   } else if (['话题','态度','偏见','情绪','素材','排版'].includes(name)) {

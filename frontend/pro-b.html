@@ -1516,6 +1516,40 @@ function renderGuideContentHtml(content, workflowState) {
       : '';
     return messageHtml + sectionHtml;
   }
+  if (workflowState === 'example_review') {
+    // 后端 content 格式：message + 段落目标 + 3 个样例
+    const lines = content.split('\n');
+    const exampleCards = [];
+    let currentExample = null;
+    for (const line of lines) {
+      const exMatch = line.match(/^样例 (\d+)：(.*)$/);
+      if (exMatch) {
+        if (currentExample) exampleCards.push(currentExample);
+        currentExample = { idx: parseInt(exMatch[1], 10), lines: [exMatch[2] || ''] };
+      } else if (currentExample) {
+        currentExample.lines.push(line);
+      }
+    }
+    if (currentExample) exampleCards.push(currentExample);
+
+    const headerLines = [];
+    let inExamples = false;
+    for (const line of lines) {
+      if (line.startsWith('样例 ')) inExamples = true;
+      if (!inExamples) headerLines.push(line);
+    }
+    const header = headerLines.join('\n').trim();
+    const headerHtml = header ? `<p>${escapeHtml(header).replace(/\n/g, '<br>')}</p>` : '';
+
+    const cardsHtml = exampleCards.map(ex => `
+      <div style="background:#f8f9fb;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:12px 0;line-height:1.7;font-size:15px;color:#3f3f3f;">
+        <div style="font-weight:700;color:#ff764a;margin-bottom:6px;">样例 ${ex.idx}</div>
+        <div>${escapeHtml(ex.lines.join('\n')).replace(/\n/g, '<br>')}</div>
+      </div>
+    `).join('');
+
+    return headerHtml + cardsHtml + `<p style="color:#ff764a;font-weight:700;">👇 参考上方样例，在下方输入框写出你自己的段落，写完后按 Enter 发送</p>`;
+  }
   if (workflowState === 'drafting') {
     const { message, sectionText } = splitHumanReviewContent(content);
     const messageHtml = message ? `<p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>` : '';
@@ -1531,7 +1565,9 @@ function renderGuideContentHtml(content, workflowState) {
 function setInputPlaceholder(workflowState) {
   const input = $('#chatInput');
   if (!input) return;
-  if (workflowState === 'drafting') {
+  if (workflowState === 'example_review') {
+    input.placeholder = '参考上方样例写出你自己的段落，写完后按 Enter 发送…';
+  } else if (workflowState === 'drafting') {
     input.placeholder = '请根据上方教练提示撰写当前段落，写完后按 Enter 发送…';
   } else if (workflowState === 'human_review') {
     input.placeholder = '输入通过/修改意见，或点击按钮快速反馈…';

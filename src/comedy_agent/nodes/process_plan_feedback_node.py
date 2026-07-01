@@ -33,7 +33,7 @@ def process_plan_feedback_node(state: ComedyState) -> dict:
             "current_section": 0,
             "sections": [],
             "feedback": "",
-            "phase": "writing",
+            "phase": "generating_examples",
         }
 
     if any(kw in feedback for kw in REPLAN_KEYWORDS):

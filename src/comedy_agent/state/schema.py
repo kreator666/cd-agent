@@ -34,6 +34,8 @@ class ComedyState(BaseModel):
         "plan_review",
         "routing_plan_feedback",
         "writing",
+        "generating_examples",
+        "example_review",
         "drafting",
         "reviewing",
         "human_review",
@@ -112,6 +114,18 @@ class ComedyState(BaseModel):
     coaching_hints: str | None = Field(
         default=None,
         description="当前段落的教练提示（coach 模式使用）",
+    )
+    section_examples: list[str] | None = Field(
+        default=None,
+        description="当前段落的 3 个候选样例（用户输入模式使用）",
+    )
+    user_draft: str | None = Field(
+        default=None,
+        description="用户输入的段落草稿",
+    )
+    manual_section_mode: bool = Field(
+        default=True,
+        description="是否使用样例引导+用户输入的逐段写作模式",
     )
 
     # ------------------------------------------------------------------ #

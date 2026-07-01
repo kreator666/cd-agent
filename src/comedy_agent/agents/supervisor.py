@@ -22,6 +22,8 @@ MEMBERS = [
     "context_analyzer",
     "planner",
     "writer",
+    "example_generator",
+    "example_review",
     "draft_node",
     "reviewer",
     "search",
@@ -39,6 +41,8 @@ NextNode = Literal[
     "plan_review",
     "process_plan_feedback",
     "writer",
+    "example_generator",
+    "example_review",
     "draft_node",
     "reviewer",
     "search",
@@ -91,7 +95,13 @@ class SupervisorAgent:
             return "process_plan_feedback"
 
         if phase == "writing":
-            return "writer"
+            return "example_generator" if state.manual_section_mode else "writer"
+
+        if phase == "generating_examples":
+            return "example_generator"
+
+        if phase == "example_review":
+            return "example_review"
 
         if phase == "drafting":
             return "draft_node"

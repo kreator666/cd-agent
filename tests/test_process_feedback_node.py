@@ -15,7 +15,7 @@ def test_approve_moves_to_next_section():
         plan={"outline": ["a", "b", "c"]},
     )
     result = process_feedback_node(state)
-    assert result["phase"] == "writing"
+    assert result["phase"] == "generating_examples"
     assert result["current_section"] == 1
 
 
@@ -37,7 +37,7 @@ def test_modify_rewrites_current_section():
         plan={"outline": ["a", "b", "c"]},
     )
     result = process_feedback_node(state)
-    assert result["phase"] == "writing"
+    assert result["phase"] == "generating_examples"
     assert result["current_section"] == 1
     assert result["feedback"] == "这里再讽刺一点"
 

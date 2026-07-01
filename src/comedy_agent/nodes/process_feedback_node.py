@@ -63,7 +63,7 @@ def process_feedback_node(state: ComedyState) -> dict:
         return {
             "current_section": next_section,
             "feedback": "",
-            "phase": "writing",
+            "phase": "generating_examples",
         }
 
     # 重写/重新规划类反馈
@@ -81,5 +81,5 @@ def process_feedback_node(state: ComedyState) -> dict:
     return {
         "current_section": state.current_section,
         "feedback": state.feedback,
-        "phase": "writing",
+        "phase": "generating_examples",
     }

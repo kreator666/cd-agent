@@ -15,6 +15,8 @@ from comedy_agent.nodes.finalize_node import finalize_node
 from comedy_agent.nodes.guide_node import guide_node
 from comedy_agent.nodes.human_node import human_node
 from comedy_agent.nodes.plan_node import plan_node
+from comedy_agent.nodes.polish_node import polish_node
+from comedy_agent.nodes.suggest_node import suggest_node
 from comedy_agent.nodes.plan_review_node import plan_review_node
 from comedy_agent.nodes.process_feedback_node import process_feedback_node
 from comedy_agent.nodes.process_plan_feedback_node import process_plan_feedback_node
@@ -36,6 +38,8 @@ __all__ = [
     "human_node",
     "plan_node",
     "plan_review_node",
+    "polish_node",
+    "suggest_node",
     "process_feedback_node",
     "process_plan_feedback_node",
     "review_node",

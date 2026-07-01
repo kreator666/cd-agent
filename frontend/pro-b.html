@@ -434,7 +434,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 
 let allSkills = [];
 let selectedSkills = new Set();
-let selectedSkillId = 'standup_coach';
+let selectedSkillId = 'writer_agent';
 let selectedStyle = '';
 let currentMention = null; // { type: 'slot'|'skill', id, label, value }
 let currentConversationId = null;
@@ -456,6 +456,8 @@ const CORE_SLOTS = [
   { id: '素材', label: '素材', name: '素材搜集员', icon: '/static/images/slots/material.png', desc: '搜索网络创作资料', gradient: 'linear-gradient(135deg,#fef9c3,#eab308)' },
   { id: '排版', label: '排版', name: '排版设计师', icon: '/static/images/slots/layout.png', desc: '转换为平台文章格式', gradient: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)' },
 ];
+
+const WRITER_AGENT = { id: 'writer_agent', name: '写手阿文', label: 'writer_agent', desc: '你的逐段写作搭档，负责生成参考样例并等你亲笔写稿', gradient: 'linear-gradient(135deg,#e5e7eb,#111827)' };
 
 /* ========== Helpers ========== */
 function toast(msg) {
@@ -927,7 +929,7 @@ async function loadModels() {
 }
 
 function updateTeamCount() {
-  const totalMembers = 1 + CORE_SLOTS.length; // 1=喜剧龙虾 + 核心维度
+  const totalMembers = 1 + CORE_SLOTS.length + 1; // 1=喜剧龙虾 + 核心维度 + 写手阿文
   $('#teamCount').textContent = `（${totalMembers}）`;
 }
 
@@ -945,12 +947,13 @@ async function loadSkills() {
 }
 
 function ensureDefaultSkillSelected() {
-  /* 如果没有显式选择，默认选中 standup_coach */
+  /* 如果没有显式选择，默认选中写手阿文（writer_agent） */
   if (!selectedSkillId) {
-    selectedSkillId = 'standup_coach';
+    selectedSkillId = 'writer_agent';
   }
   if (!currentMention) {
-    const defaultSkill = (allSkills || []).find(s => s.id === 'standup_coach');
+    const defaultSkill = (allSkills || []).find(s => s.id === 'writer_agent')
+      || (allSkills || []).find(s => s.id === 'standup_coach');
     if (defaultSkill) {
       currentMention = { type: 'skill', id: defaultSkill.id, label: defaultSkill.name, value: defaultSkill.id };
       renderTeamSkills();
@@ -1496,16 +1499,22 @@ function renderChecklist(checklist) {
 
 function splitHumanReviewContent(content) {
   const idx = content.indexOf('\n\n');
-  if (idx === -1) return { message: content, sectionText: '' };
+  if (idx === -1) return { message: content, sectionText: '', suggestions: '' };
+  const message = content.slice(0, idx);
+  const rest = content.slice(idx + 2);
+  const sugMarker = '\n\n💡 改进建议：\n';
+  const sugIdx = rest.indexOf(sugMarker);
+  if (sugIdx === -1) return { message, sectionText: rest, suggestions: '' };
   return {
-    message: content.slice(0, idx),
-    sectionText: content.slice(idx + 2)
+    message,
+    sectionText: rest.slice(0, sugIdx),
+    suggestions: rest.slice(sugIdx + sugMarker.length)
   };
 }
 
 function renderGuideContentHtml(content, workflowState) {
   if (workflowState === 'human_review') {
-    const { message, sectionText } = splitHumanReviewContent(content);
+    const { message, sectionText, suggestions } = splitHumanReviewContent(content);
     const messageHtml = `<p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`;
     const sectionHtml = sectionText
       ? `<div class="review-section" contenteditable="false">${escapeHtml(sectionText)}</div>
@@ -1514,7 +1523,13 @@ function renderGuideContentHtml(content, workflowState) {
            <button class="wf-action-btn" data-action="cancel_edit">取消</button>
          </div>`
       : '';
-    return messageHtml + sectionHtml;
+    const suggestionsHtml = suggestions
+      ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:14px 16px;margin:12px 0;line-height:1.7;font-size:15px;color:#166534;">
+           <div style="font-weight:700;margin-bottom:6px;">💡 改进建议</div>
+           <div>${escapeHtml(suggestions).replace(/\n/g, '<br>')}</div>
+         </div>`
+      : '';
+    return messageHtml + sectionHtml + suggestionsHtml;
   }
   if (workflowState === 'example_review') {
     // 后端 content 格式：message + 段落目标 + 3 个样例

@@ -123,6 +123,10 @@ class ComedyState(BaseModel):
         default=None,
         description="用户输入的段落草稿",
     )
+    suggestions: str | None = Field(
+        default=None,
+        description="AI 对用户段落的改进建议",
+    )
     manual_section_mode: bool = Field(
         default=True,
         description="是否使用样例引导+用户输入的逐段写作模式",

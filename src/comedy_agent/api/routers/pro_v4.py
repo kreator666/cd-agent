@@ -133,6 +133,7 @@ def _extract_interrupt_info(raw: dict) -> dict[str, Any]:
         "section_index": value.get("section_index", 0),
         "section_text": value.get("section_text", ""),
         "message": value.get("message", section_default["message"]),
+        "suggestions": value.get("suggestions", ""),
     }
 
 
@@ -307,7 +308,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                 session_id=session_id,
                 content=content,
                 workflow_state="example_review",
-                current_role="写作示例",
+                current_role="写手阿文",
                 next_role="用户",
                 next_actions=[
                     {"label": "📝 提交本段", "action": "submit_section", "value": "提交本段"},
@@ -316,7 +317,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                     {
                         "type": "guide",
                         "content": content,
-                        "current_role": "写作示例",
+                        "current_role": "写手阿文",
                         "todo_board": [],
                         "next_actions": [
                             {"label": "提交本段", "action": "submit_section", "value": "提交本段"},
@@ -330,32 +331,37 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
         section_text = info["section_text"]
         section_index = info.get("section_index", 0)
         section_label = f"第 {section_index + 1} 段"
+        suggestions = info.get("suggestions", "")
         content = (
             f"{info['message']}\n\n{section_text}"
             if section_text
             else info["message"]
         )
+        if suggestions:
+            content = f"{content}\n\n💡 改进建议：\n{suggestions}"
         return _build_guide_response(
             session_id=session_id,
             content=content,
             workflow_state="human_review",
-            current_role="reviewer",
+            current_role="写手阿文",
             next_role="用户",
             next_actions=[
                 {"label": "✅ 通过", "action": "approve", "value": "通过"},
                 {"label": "✏️ 修改", "action": "modify", "value": "修改"},
-                {"label": "🔄 重新生成", "action": "regenerate", "value": "重新生成"},
+                {"label": "✨ 润色", "action": "polish", "value": "润色"},
+                {"label": "💡 给出建议", "action": "suggest", "value": "给出建议"},
             ],
             steps=[
                 {
                     "type": "guide",
                     "content": content,
-                    "current_role": "reviewer",
+                    "current_role": "写手阿文",
                     "todo_board": [],
                     "next_actions": [
                         {"label": "通过", "action": "approve", "value": "通过"},
                         {"label": "修改", "action": "modify", "value": "修改"},
-                        {"label": "重新生成", "action": "regenerate", "value": "重新生成"},
+                        {"label": "润色", "action": "polish", "value": "润色"},
+                        {"label": "给出建议", "action": "suggest", "value": "给出建议"},
                     ],
                 }
             ],

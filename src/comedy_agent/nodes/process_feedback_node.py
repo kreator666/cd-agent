@@ -57,13 +57,34 @@ def process_feedback_node(state: ComedyState) -> dict:
             return {
                 "current_section": next_section,
                 "feedback": "",
+                "suggestions": None,
                 "phase": "finalizing",
             }
         logger.debug("process_feedback: approve, move to section %d", next_section)
         return {
             "current_section": next_section,
             "feedback": "",
-            "phase": "generating_examples",
+            "suggestions": None,
+            "phase": "generating_examples" if state.manual_section_mode else "writing",
+        }
+
+    # 润色
+    if feedback == "润色" or feedback.startswith("润色"):
+        logger.debug("process_feedback: polish current section")
+        return {
+            "current_section": state.current_section,
+            "feedback": feedback,
+            "suggestions": None,
+            "phase": "polishing",
+        }
+
+    # 给出建议
+    if feedback == "给出建议":
+        logger.debug("process_feedback: suggest for current section")
+        return {
+            "current_section": state.current_section,
+            "feedback": "",
+            "phase": "suggesting",
         }
 
     # 重写/重新规划类反馈
@@ -81,5 +102,6 @@ def process_feedback_node(state: ComedyState) -> dict:
     return {
         "current_section": state.current_section,
         "feedback": state.feedback,
-        "phase": "generating_examples",
+        "suggestions": None,
+        "phase": "generating_examples" if state.manual_section_mode else "writing",
     }

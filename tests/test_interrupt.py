@@ -86,7 +86,7 @@ def test_interrupt_pauses_at_human_node(graph):
         mock_review.get_model.return_value = analytical_llm
 
         result = graph.invoke(
-            ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}),
+            ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}, manual_section_mode=False),
             config={"configurable": {"thread_id": thread_id}},
         )
 
@@ -124,7 +124,7 @@ def test_resume_with_approve_feedback(graph):
         thread_id = "int-approve"
 
         result = graph.invoke(
-            ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}),
+            ComedyState(user_input="写一段关于通勤的脱口秀", slots={"话题": "通勤", "态度": "讽刺", "偏见": "无", "情绪": "无奈"}, manual_section_mode=False),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result
@@ -169,7 +169,7 @@ def test_resume_with_modify_feedback(graph):
         thread_id = "int-modify"
 
         result = graph.invoke(
-            ComedyState(user_input="写一段关于加班的脱口秀", slots={"话题": "加班", "态度": "自嘲", "偏见": "无", "情绪": "疲惫"}),
+            ComedyState(user_input="写一段关于加班的脱口秀", slots={"话题": "加班", "态度": "自嘲", "偏见": "无", "情绪": "疲惫"}, manual_section_mode=False),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert "__interrupt__" in result

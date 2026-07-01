@@ -36,6 +36,7 @@ def human_node(state: ComedyState) -> dict:
         "section_text": current_text,
         "review_decision": review.get("decision", "修改"),
         "review_comments": review.get("comments", ""),
+        "suggestions": state.suggestions or "",
     }
 
     logger.debug("human_node interrupt, waiting for feedback")

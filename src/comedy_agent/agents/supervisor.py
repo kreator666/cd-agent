@@ -26,6 +26,8 @@ MEMBERS = [
     "example_review",
     "draft_node",
     "reviewer",
+    "polish",
+    "suggest",
     "search",
     "chat",
 ]
@@ -45,6 +47,8 @@ NextNode = Literal[
     "example_review",
     "draft_node",
     "reviewer",
+    "polish",
+    "suggest",
     "search",
     "chat",
     "human",
@@ -111,6 +115,12 @@ class SupervisorAgent:
 
         if phase == "human_review":
             return "human"
+
+        if phase == "polishing":
+            return "polish"
+
+        if phase == "suggesting":
+            return "suggest"
 
         if phase == "routing_feedback":
             return "process_feedback"

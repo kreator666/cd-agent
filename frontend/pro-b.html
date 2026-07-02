@@ -1330,6 +1330,8 @@ function newConversation() {
 
 function saveCurrentConversation() {
   if (!currentConversationId) return;
+  // 尚未与后端建立会话（无 sessionId）时不保存，避免恢复时缺少服务端状态
+  if (!workflowSessionId) return;
   const title = $('#pageTitle').textContent;
   const artifactsHtml = $('#artifactsPanel').innerHTML;
   const artifactsData = JSON.stringify(artifactsState);
@@ -1432,8 +1434,8 @@ async function loadConversation(id) {
       console.error('[history] 恢复会话最终剧本失败', err);
     }
   } else if (needsRecovery && !c.sessionId) {
-    console.warn('[history] 需要恢复但缺少 sessionId，无法从服务端拉取');
-    c.artifactsHtml = '<div class="artifacts-empty">该历史记录缺少会话信息，无法从服务端恢复完整结果。<br>请继续对话或新建对话重新生成。</div>';
+    // 本地没有完整结果且缺少服务端 sessionId，静默展示空状态即可
+    c.artifactsHtml = '<div class="artifacts-empty">在左侧与写作团队对话，生成的内容将以卡片形式展示在这里。</div>';
   }
 
   // 恢复右侧 Artifacts 工作台

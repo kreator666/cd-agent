@@ -580,6 +580,17 @@ function getSkillGradient(type) {
   return map[type] || 'linear-gradient(135deg,#eee,#ba7a5a)';
 }
 
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 /* ========== UI Builders ========== */
 function addChatMessage(role, name, roleLabel, content, options = {}) {
   const area = $('#chatMessages');
@@ -592,7 +603,7 @@ function addChatMessage(role, name, roleLabel, content, options = {}) {
     : (options.gradient || 'background:linear-gradient(135deg,#eee,#ba7a5a)');
 
   const bubbleContent = content.startsWith('<') ? content : `<p>${escapeHtml(content)}</p>`;
-  const msgId = crypto.randomUUID();
+  const msgId = generateUUID();
   div.dataset.messageId = msgId;
 
   div.innerHTML = `

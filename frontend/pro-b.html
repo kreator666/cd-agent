@@ -254,6 +254,12 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .toolbar-btn:hover{background:#ffe8e0;color:var(--orange);}
 .toolbar-btn.active{background:linear-gradient(135deg,#ff8a38,#ff5e1f);color:#fff;font-weight:700;box-shadow:0 3px 10px rgba(255,118,74,.22);}
 .toolbar-btn.active:hover{background:linear-gradient(135deg,#ff7a28,#ff4e0f);color:#fff;}
+
+/* Writing mode switch */
+.mode-switch{display:flex;gap:4px;padding:0 8px;}
+.mode-btn{flex:1;font-size:12px;font-weight:650;padding:6px 4px;border-radius:8px;background:#f5f6f8;color:#555;border:none;cursor:pointer;transition:.2s;}
+.mode-btn:hover{background:#ffe8e0;color:#ff764a;}
+.mode-btn.active{background:#15171a;color:#fff;font-weight:700;}
 .toolbar-info{margin-left:auto;font-size:11px;color:var(--orange);font-weight:650;}
 .chat-input-box{display:flex;align-items:flex-end;gap:8px;border:1.5px solid var(--line-dark);border-radius:18px;padding:8px 12px;background:var(--light);transition:.2s;}
 .chat-input-box:focus-within{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,118,74,.08);}
@@ -392,6 +398,14 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <div class="menu-item" id="menuUser"><span class="mini-avatar" style="background:linear-gradient(135deg,#f1d6a4,#1e1e1e)"></span><div><span id="userName">意辰</span><div class="menu-sub">创作主理人</div></div></div>
       <div class="menu-item" onclick="mentionSkill('喜剧龙虾')"><span class="mini-avatar" style="background:linear-gradient(135deg,#ddd,#9b7)"></span><div>喜剧龙虾<div class="menu-sub">资料与结构助手 · 点击@他</div></div></div>
     </div>
+    <div style="padding:8px 4px;border-bottom:1px solid var(--line);margin-bottom:6px;">
+      <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;margin-bottom:6px;">写作模式</div>
+      <div class="mode-switch" id="modeSwitch">
+        <button class="mode-btn active" data-mode="sample_guide" onclick="setWritingMode('sample_guide')">样例引导</button>
+        <button class="mode-btn" data-mode="direct_writer" onclick="setWritingMode('direct_writer')">AI 一键</button>
+        <button class="mode-btn" data-mode="coach" onclick="setWritingMode('coach')">教练陪写</button>
+      </div>
+    </div>
     <div style="padding:4px;">
       <div style="font-size:12px;color:#888;font-weight:700;padding:4px 8px;">核心创作维度</div>
       <div id="teamSkills"></div>
@@ -437,6 +451,12 @@ let selectedSkills = new Set();
 let selectedSkillId = 'writer_agent';
 let selectedStyle = '';
 let currentMention = null; // { type: 'slot'|'skill', id, label, value }
+let writingMode = 'sample_guide'; // sample_guide / direct_writer / coach
+const WRITING_MODES = [
+  { id: 'sample_guide', label: '样例引导', skillId: 'writer_agent' },
+  { id: 'direct_writer', label: 'AI 一键写作', skillId: 'standup_coach' },
+  { id: 'coach', label: '教练陪写', skillId: 'standup_v2' },
+];
 let currentConversationId = null;
 let conversations = [];
 let isGenerating = false;
@@ -956,19 +976,21 @@ async function loadSkills() {
 }
 
 function ensureDefaultSkillSelected() {
-  /* 如果没有显式选择，默认选中写手阿文（writer_agent） */
+  /* 如果没有显式选择，按当前写作模式设置默认 Skill */
+  const cfg = WRITING_MODES.find(m => m.id === writingMode) || WRITING_MODES[0];
   if (!selectedSkillId) {
-    selectedSkillId = 'writer_agent';
+    selectedSkillId = cfg.skillId;
   }
   if (!currentMention) {
-    const defaultSkill = (allSkills || []).find(s => s.id === 'writer_agent')
-      || (allSkills || []).find(s => s.id === 'standup_coach');
+    const defaultSkill = (allSkills || []).find(s => s.id === cfg.skillId)
+      || (allSkills || []).find(s => s.id === 'writer_agent');
     if (defaultSkill) {
       currentMention = { type: 'skill', id: defaultSkill.id, label: defaultSkill.name, value: defaultSkill.id };
-      renderTeamSkills();
-      updateMentionBadge();
     }
   }
+  renderModeSwitch();
+  renderTeamSkills();
+  updateMentionBadge();
   // 初始状态下在空输入框中展示默认 @ 前缀
   const input = $('#chatInput');
   if (currentMention && input && !input.value.trim() && currentWorkflowState === 'idle') {
@@ -1041,11 +1063,46 @@ function renderTeamSkills() {
   updateTeamCount();
 }
 
+function renderModeSwitch() {
+  const container = $('#modeSwitch');
+  if (!container) return;
+  container.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === writingMode);
+  });
+}
+
+function setWritingMode(mode, explicitSkillId, silent = false, updateInput = true) {
+  const cfg = WRITING_MODES.find(m => m.id === mode);
+  if (!cfg) return;
+  writingMode = mode;
+  const targetSkillId = explicitSkillId || cfg.skillId;
+  const skill = (allSkills || []).find(s => s.id === targetSkillId) || { id: targetSkillId, name: cfg.label };
+  selectedSkillId = skill.id;
+  selectedStyle = '';
+  currentMention = { type: 'skill', id: skill.id, label: skill.name || cfg.label, value: skill.id };
+  const input = $('#chatInput');
+  if (updateInput && input && currentWorkflowState === 'idle') {
+    input.value = '@' + currentMention.value + ' ';
+    input.style.height = 'auto';
+  }
+  renderModeSwitch();
+  renderTeamSkills();
+  updateMentionBadge();
+  if (!silent) {
+    toast('已切换写作模式：' + cfg.label);
+  }
+}
+
 function selectSkill(skillId) {
   const skill = (allSkills || []).find(s => s.id === skillId);
   if (!skill) return;
-  setMention('skill', skill.id, skill.name, skill.id);
-  toast('已切换写作风格：' + skill.name);
+  if (skill.id === 'writer_agent') {
+    setWritingMode('sample_guide');
+  } else if (skill.id === 'standup_v2') {
+    setWritingMode('coach');
+  } else {
+    setWritingMode('direct_writer', skill.id);
+  }
   closeAll();
 }
 
@@ -1102,11 +1159,13 @@ function parseInputMention() {
   const skill = (allSkills || []).find(s => s.id === name || s.name === name);
   if (skill && skill.skill_type === 'writing') {
     if (!currentMention || currentMention.type !== 'skill' || currentMention.id !== skill.id) {
-      currentMention = { type: 'skill', id: skill.id, label: skill.name, value: skill.id };
-      selectedSkillId = skill.id;
-      selectedStyle = '';
-      updateMentionBadge();
-      renderTeamSkills();
+      if (skill.id === 'writer_agent') {
+        setWritingMode('sample_guide', null, true, false);
+      } else if (skill.id === 'standup_v2') {
+        setWritingMode('coach', null, true, false);
+      } else {
+        setWritingMode('direct_writer', skill.id, true, false);
+      }
     }
     return;
   }
@@ -1219,11 +1278,11 @@ function newConversation() {
   // Reset workflow state to start a fresh server session
   workflowSessionId = null;
   selectedSkills = new Set();
-  selectedSkillId = 'standup_coach';
+  writingMode = 'sample_guide';
+  selectedSkillId = '';
   selectedStyle = '';
   currentMention = null;
   currentWorkflowState = 'idle';
-  updateMentionBadge();
   ensureDefaultSkillSelected();
 
   // Reset chat messages
@@ -1428,6 +1487,7 @@ async function runAgentTurn(text, silent = false) {
         message: text,
         skill_id: selectedSkillId || undefined,
         style: selectedStyle || undefined,
+        writing_mode: writingMode,
         model
       })
     });

@@ -33,6 +33,7 @@ class ProChatV4Request(BaseModel):
     persona_id: str | None = Field(default=None, description="人物画像 ID（暂不启用）")
     skill_id: str | None = Field(default=None, description="选中的写作 Skill ID")
     style: str | None = Field(default=None, description="选中的风格子选项")
+    writing_mode: str | None = Field(default=None, description="写作模式：sample_guide / direct_writer / coach")
     model: str | None = Field(default=None, description="使用的模型名称")
 
 
@@ -504,6 +505,8 @@ async def pro_chat_v4(
             state_updates["selected_skill"] = request.skill_id
         if request.style:
             state_updates["selected_style"] = request.style
+        if request.writing_mode in ("sample_guide", "direct_writer", "coach"):
+            state_updates["manual_section_mode"] = request.writing_mode == "sample_guide"
 
         if is_feedback:
             raw_result = await state.graph.ainvoke(

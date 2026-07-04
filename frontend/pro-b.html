@@ -1002,9 +1002,9 @@ function ensureDefaultSkillSelected() {
   renderModeSwitch();
   renderTeamSkills();
   updateMentionBadge();
-  // 初始状态下在空输入框中展示默认 @ 前缀
+  // 初始状态下在空输入框中展示默认 @ 前缀（写手阿文除外）
   const input = $('#chatInput');
-  if (currentMention && input && !input.value.trim() && currentWorkflowState === 'idle') {
+  if (currentMention && currentMention.id !== 'writer_agent' && input && !input.value.trim() && currentWorkflowState === 'idle') {
     input.value = '@' + currentMention.value + ' ';
   }
 }
@@ -1154,7 +1154,8 @@ function parseInputMention() {
   const text = input.value;
   const match = text.match(/^@(\S+)\s/);
   if (!match) {
-    // 在需要用户输入段落/反馈的交互状态中，输入框为空不代表要取消已选 Skill/维度
+    // 输入框为空时不取消已选 Skill/维度；交互状态或用户输入非 @ 内容时才处理
+    if (text.trim() === '') return;
     const keepMentionStates = ['example_review', 'drafting', 'human_review', 'plan_review'];
     if (currentMention && !text.startsWith('@') && !keepMentionStates.includes(currentWorkflowState)) {
       currentMention = null;
@@ -1521,7 +1522,7 @@ async function runAgentTurn(text, silent = false) {
     if (['example_review', 'drafting', 'human_review', 'plan_review'].includes(currentWorkflowState)) {
       // 这些状态下用户需要输入段落或反馈，不应保留 @ 前缀
       chatInput.value = '';
-    } else if (currentMention) {
+    } else if (currentMention && currentMention.id !== 'writer_agent') {
       chatInput.value = '@' + currentMention.value + ' ';
     } else {
       chatInput.value = '';

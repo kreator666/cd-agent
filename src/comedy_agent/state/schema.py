@@ -81,6 +81,10 @@ class ComedyState(BaseModel):
         default=None,
         description="前端传入的历史消息 [(role, content), ...]",
     )
+    conversation_summary: str | None = Field(
+        default=None,
+        description="长对话摘要，用于保留早期关键信息",
+    )
 
     # ------------------------------------------------------------------ #
     # 意图与创作流程

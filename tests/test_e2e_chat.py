@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,8 +18,30 @@ from comedy_agent.state.schema import ComedyState
 
 @pytest.fixture
 def chat_graph():
-    """提供编译后的 Chat Graph。"""
-    return build_chat_graph()
+    """提供编译后的 Chat Graph，使用临时 SQLite checkpoint 数据库。"""
+    fd, tmp_path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(fd)
+    with patch("comedy_agent.checkpoints.memory.settings.memory_db_path", tmp_path):
+        from comedy_agent.checkpoints.memory import CheckpointSaverFactory
+
+        CheckpointSaverFactory._instance = None
+        graph = build_chat_graph()
+        yield graph
+        # 关闭数据库连接，确保临时文件可被删除
+        if CheckpointSaverFactory._instance is not None:
+            try:
+                CheckpointSaverFactory._instance._sync_conn.close()
+            except Exception:
+                pass
+            try:
+                if CheckpointSaverFactory._instance._async_saver is not None:
+                    CheckpointSaverFactory._instance._async_saver.conn.close()
+            except Exception:
+                pass
+    try:
+        os.unlink(tmp_path)
+    except (FileNotFoundError, PermissionError):
+        pass
 
 
 def test_chat_graph_compiles():

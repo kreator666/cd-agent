@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 
 PROMPT = """你是一位喜剧创作分析助手。请根据用户与创作助手的完整对话历史，提炼出四维度分析结果。
 
-## 对话历史
+## 历史摘要（如没有则忽略）
+{conversation_summary}
+
+## 最近对话历史
 {conversation_history}
 
 ## 已收集的槽位（可能为空）
@@ -41,10 +44,19 @@ PROMPT = """你是一位喜剧创作分析助手。请根据用户与创作助�
 只输出结构化结果，不要解释。"""
 
 
-def _format_history(messages: list[AnyMessage], max_turns: int = 8) -> str:
-    """把消息链格式化为对话历史文本。"""
+def _format_history(
+    messages: list[AnyMessage], max_turns: int = 8, summary: str | None = None
+) -> str:
+    """把消息链格式化为对话历史文本，可选注入长对话摘要。"""
+    parts: list[str] = []
+    if summary:
+        parts.append(f"【历史摘要】\n{summary}")
+
     if not messages:
-        return "（无）"
+        if not parts:
+            return "（无）"
+        return "\n\n".join(parts)
+
     # 取最近 N 轮，每轮可能包含 human + ai
     recent = messages[-max_turns * 2:]
     lines = []
@@ -59,7 +71,10 @@ def _format_history(messages: list[AnyMessage], max_turns: int = 8) -> str:
             lines.append(f"助手：{content}")
         else:
             lines.append(f"{role}：{content}")
-    return "\n".join(lines) if lines else "（无）"
+    if lines:
+        parts.append("【最近对话】\n" + "\n".join(lines))
+
+    return "\n\n".join(parts) if parts else "（无）"
 
 
 class ContextAnalyzerAgent:
@@ -100,6 +115,7 @@ class ContextAnalyzerAgent:
         slots = state.slots or {}
         previous = state.analysis or {}
         return PROMPT.format(
+            conversation_summary=state.conversation_summary or "（无）",
             conversation_history=_format_history(state.messages),
             slots="\n".join(f"- {k}：{v}" for k, v in slots.items()) or "（无）",
             previous_analysis="\n".join(f"- {k}：{v}" for k, v in previous.items()) or "（无）",

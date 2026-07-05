@@ -15,6 +15,8 @@ from comedy_agent.api.billing import charge_model_usage, start_usage_tracking
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.state.schema import ComedyState
+from comedy_agent.utils.messages import dicts_to_messages, messages_to_dicts
+from comedy_agent.utils.summarizer import summarize_messages
 
 logger = logging.getLogger(__name__)
 
@@ -521,6 +523,35 @@ async def pro_chat_v4(
             current = state.graph.get_state(config)
             prev_values = (current.values or {}) if current else {}
 
+            # checkpoint 为空时，尝试从持久化 memory 加载历史消息
+            history_messages: list[Any] = []
+            if not prev_values and state.memory is not None:
+                try:
+                    conv = state.memory.load_conversation(user_id, session_id)
+                    if conv and conv.messages:
+                        history_messages = dicts_to_messages(conv.messages)
+                        if conv.summary:
+                            prev_values["conversation_summary"] = conv.summary
+                except Exception:
+                    logger.debug("从 memory 加载会话历史失败", exc_info=True)
+
+            # 构造本轮传入图的消息链：checkpoint 历史由 LangGraph 自动合并，
+            # 仅当 checkpoint 为空且从 memory 回填时才把历史一并传入，避免重复
+            messages_for_graph = history_messages + [HumanMessage(content=request.message)]
+
+            # 计算完整历史长度（checkpoint 历史 + 当前输入），用于判断是否触发摘要
+            checkpoint_messages = prev_values.get("messages") or []
+            total_history = list(checkpoint_messages) + [HumanMessage(content=request.message)]
+
+            # 若历史消息过长且尚无摘要，生成对话摘要以保留早期关键信息
+            if len(total_history) > 20 and not prev_values.get("conversation_summary"):
+                try:
+                    summary = await summarize_messages(total_history, model=request.model)
+                    if summary:
+                        prev_values["conversation_summary"] = summary
+                except Exception:
+                    logger.debug("生成对话摘要失败", exc_info=True)
+
             # 新一轮创作请求开始时，清理上一轮已完成的 analysis / plan，避免旧计划被复用
             is_new_creation = prev_values.get("phase") == "complete" or any(
                 kw in request.message for kw in ("开始创作", "出大纲", "生成计划", "写大纲")
@@ -545,7 +576,7 @@ async def pro_chat_v4(
                 "phase": "idle",
                 "user_input": request.message,
                 "model": request.model,
-                "messages": [HumanMessage(content=request.message)],
+                "messages": messages_for_graph,
                 "session_id": session_id,
                 "user_id": user_id,
                 "available_skills": available_skills,
@@ -566,6 +597,21 @@ async def pro_chat_v4(
             )
         except Exception:
             logger.debug("追加 AI 消息到 checkpoint 失败，继续返回响应", exc_info=True)
+
+        # 把完整对话保存到持久化 memory，供 checkpoint 丢失或服务重启后恢复
+        try:
+            final_state = state.graph.get_state(config)
+            if final_state and final_state.values and state.memory is not None:
+                msgs = final_state.values.get("messages") or []
+                state.memory.save_conversation(
+                    user_id=user_id,
+                    session_id=session_id,
+                    messages=messages_to_dicts(msgs),
+                    summary=response.content[:80] if response.content else None,
+                    source="pro_v4",
+                )
+        except Exception:
+            logger.debug("保存会话到 memory 失败", exc_info=True)
 
         charge_model_usage(
             user_id=user_id,

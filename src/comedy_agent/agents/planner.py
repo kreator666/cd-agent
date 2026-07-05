@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 
 PROMPT = """你是一位脱口秀结构规划师。请根据完整对话历史、分析结果和相关喜剧理论知识，生成一个创作计划。
 
-## 对话历史
+## 历史摘要（如没有则忽略）
+{conversation_summary}
+
+## 最近对话历史
 {conversation_history}
 
 ## 上一轮计划（如没有则忽略）
@@ -58,10 +61,19 @@ tone: 整体语气建议，如“讽刺、自嘲、温暖”
 只输出上述格式，不要解释、不要 markdown 代码块。"""
 
 
-def _format_history(messages: list[AnyMessage], max_turns: int = 8) -> str:
-    """把消息链格式化为对话历史文本。"""
+def _format_history(
+    messages: list[AnyMessage], max_turns: int = 8, summary: str | None = None
+) -> str:
+    """把消息链格式化为对话历史文本，可选注入长对话摘要。"""
+    parts: list[str] = []
+    if summary:
+        parts.append(f"【历史摘要】\n{summary}")
+
     if not messages:
-        return "（无）"
+        if not parts:
+            return "（无）"
+        return "\n\n".join(parts)
+
     recent = messages[-max_turns * 2:]
     lines = []
     for m in recent:
@@ -75,7 +87,10 @@ def _format_history(messages: list[AnyMessage], max_turns: int = 8) -> str:
             lines.append(f"助手：{content}")
         else:
             lines.append(f"{role}：{content}")
-    return "\n".join(lines) if lines else "（无）"
+    if lines:
+        parts.append("【最近对话】\n" + "\n".join(lines))
+
+    return "\n\n".join(parts) if parts else "（无）"
 
 
 def _format_previous_plan(plan: dict[str, Any] | None) -> str:
@@ -129,6 +144,7 @@ class PlannerAgent:
         analysis = state.analysis or {}
         knowledge_context, knowledge_references = self._retrieve_knowledge(analysis, state.user_input)
         prompt = PROMPT.format(
+            conversation_summary=state.conversation_summary or "（无）",
             conversation_history=_format_history(state.messages),
             previous_plan=_format_previous_plan(state.plan),
             topic=analysis.get("topic", ""),

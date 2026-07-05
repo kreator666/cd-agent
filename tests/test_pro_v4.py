@@ -185,3 +185,42 @@ class TestProV4State:
         invoked = state.graph.ainvoke.call_args.args[0]
         assert isinstance(invoked, Command)
         assert invoked.resume == "通过"
+
+    def test_memory_fallback_when_checkpoint_empty(self, client):
+        """checkpoint 为空时，应从 memory 加载历史并回填到 messages。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = None
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "complete",
+                "output": "继续的回复",
+            }
+        )
+        state.graph.update_state.return_value = None
+
+        mock_conv = MagicMock()
+        mock_conv.messages = [
+            {"role": "human", "content": "上一句"},
+            {"role": "ai", "content": "上一答"},
+        ]
+        mock_conv.summary = "测试摘要"
+        state.memory.load_conversation = MagicMock(return_value=mock_conv)
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "继续", "session_id": "fallback-session"},
+        )
+        assert resp.status_code == 200
+
+        invoked = state.graph.ainvoke.call_args.args[0]
+        assert isinstance(invoked, ComedyState)
+        # messages 应包含从 memory 回填的历史 + 当前输入
+        assert len(invoked.messages) == 3
+        assert invoked.messages[0].content == "上一句"
+        assert invoked.messages[1].content == "上一答"
+        assert invoked.messages[2].content == "继续"
+        # 摘要也应被回填
+        assert invoked.conversation_summary == "测试摘要"
+        # 验证调用了 memory 加载
+        state.memory.load_conversation.assert_called_once_with("prouser", "fallback-session")

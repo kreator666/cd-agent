@@ -34,6 +34,9 @@ C. <第三个可点击选项的具体文案>
 当前计划: {plan}
 已生成段落: {sections}
 
+历史摘要（如没有则忽略）：
+{conversation_summary}
+
 最近对话记录（请结合上下文保持回复连贯）：
 {history}
 
@@ -81,6 +84,7 @@ class GuideAgent:
             slots=_format_slots(state.slots),
             plan=_format_plan(state.plan),
             sections=_format_sections(state.sections),
+            conversation_summary=state.conversation_summary or "无",
             history=_format_history(getattr(state, "messages", None)),
             user_input=state.user_input,
         )
@@ -216,12 +220,20 @@ def _format_skills(skills: list[str] | None) -> str:
     return "、".join(skills)
 
 
-def _format_history(messages: list[Any] | None) -> str:
+def _format_history(messages: list[Any] | None, summary: str | None = None) -> str:
+    parts: list[str] = []
+    if summary:
+        parts.append(f"【历史摘要】\n{summary}")
+
     if not messages:
-        return "无"
+        return "\n\n".join(parts) if parts else "无"
+
     lines = []
     for m in messages[-10:]:
         role = "用户" if getattr(m, "type", None) == "human" else "助手"
         content = str(getattr(m, "content", m))
         lines.append(f"{role}: {content[:200]}")
-    return "\n".join(lines)
+    if lines:
+        parts.append("【最近对话】\n" + "\n".join(lines))
+
+    return "\n\n".join(parts) if parts else "无"

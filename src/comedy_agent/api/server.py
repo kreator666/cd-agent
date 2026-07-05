@@ -380,6 +380,24 @@ async def lifespan(app: FastAPI):
         state.orch = None
         state.graph = None
     yield
+    # 关闭 checkpoint 数据库连接
+    try:
+        from comedy_agent.checkpoints.memory import CheckpointSaverFactory
+
+        if CheckpointSaverFactory._instance is not None:
+            try:
+                CheckpointSaverFactory._instance._sync_conn.close()
+            except Exception:
+                pass
+            try:
+                if CheckpointSaverFactory._instance._async_saver is not None:
+                    CheckpointSaverFactory._instance._async_saver.conn.close()
+            except Exception:
+                pass
+            CheckpointSaverFactory._instance = None
+    except Exception:
+        pass
+
     state.orch = None
     state.graph = None
     state.memory = None

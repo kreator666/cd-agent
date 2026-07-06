@@ -34,13 +34,11 @@ _DEBUG_NOTE = (
 class StandupArgs(BaseModel):
     """脱口秀创作参数 Schema。"""
 
-    topic: str = Field(description="脱口秀主题，如'职场加班'、'相亲经历'")
-    style: str = Field(default="日常观察", description="表演风格：日常观察/自嘲/社会讽刺/职场")
+    topic: str = Field(description="脱口秀主题")
+    attitude: str = Field(description="创作者对话题的态度，如讽刺/自嘲/观察/批判/温情")
+    bias: str = Field(description="可能存在的认知偏见或刻板印象，没有则写'无'")
+    emotion: str = Field(description="目标情绪基调，如愤怒/荒诞/尴尬/温暖/无奈")
     duration: int = Field(default=3, description="预计时长（分钟），决定篇幅")
-    audience: str = Field(default="通用", description="目标受众：通用/年轻人/中年人/特定行业")
-    density: str = Field(default="标准", description="笑点密度：密集/标准/稀疏")
-    perspective_count: int = Field(default=2, description="多视角版本数量（2-3）")
-    debug: bool = Field(default=False, description="Debug 模式：True 时输出分析过程，False 时只输出正文")
 
 
 class StandupSkill(ComedySkill):
@@ -62,47 +60,42 @@ class StandupSkill(ComedySkill):
     )
 
     def _build_user_prompt(
-        self, topic: str, style: str, duration: int, audience: str, density: str, perspective_count: int, debug: bool = False
+        self, topic: str, attitude: str, bias: str, emotion: str, duration: int
     ) -> str:
         template = (
             _meta.prompt_template
             if _meta and _meta.prompt_template
             else (
                 "请创作一段关于「{topic}」的脱口秀段子。\n\n"
-                "要求：\n"
-                "- 风格：{style}\n"
-                "- 时长：约{duration}分钟\n"
-                "- 受众：{audience}观众\n"
-                "- 笑点密度：{density}"
+                "四维度创作要求：\n"
+                "- 态度：{attitude}\n"
+                "- 偏见注意：{bias}\n"
+                "- 情绪基调：{emotion}\n"
+                "- 时长：约{duration}分钟\n\n"
+                "请严格围绕以上话题和四维度创作，不要偏离主题。"
             )
         )
         return template.format(
-            topic=topic, style=style, duration=duration, audience=audience, density=density
+            topic=topic, attitude=attitude, bias=bias, emotion=emotion, duration=duration
         )
 
     def _run(
         self,
         topic: str,
-        style: str = "日常观察",
+        attitude: str,
+        bias: str,
+        emotion: str,
         duration: int = 3,
-        audience: str = "通用",
-        density: str = "标准",
-        perspective_count: int = 2,
         user_id: str | None = None,
-        debug: bool = False,
     ) -> str:
         docs = self._retrieve_knowledge(topic, user_id, kind="standup", style=style)
         knowledge_text = self._format_knowledge(docs)
-        system_prompt = self.SYSTEM_PROMPT
-        if debug:
-            system_prompt += "\n\n" + _DEBUG_NOTE
-        else:
-            system_prompt += "\n\n" + _OUTPUT_CONSTRAINT
+        system_prompt = self.SYSTEM_PROMPT + "\n\n" + _OUTPUT_CONSTRAINT
         if knowledge_text:
             system_prompt += f"\n\n{knowledge_text}"
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("human", self._build_user_prompt(topic, style, duration, audience, density, perspective_count, debug=debug)),
+            ("human", self._build_user_prompt(topic, attitude, bias, emotion, duration)),
         ])
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
         chain = prompt | llm

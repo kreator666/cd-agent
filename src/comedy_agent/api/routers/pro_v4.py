@@ -36,6 +36,7 @@ class ProChatV4Request(BaseModel):
     skill_id: str | None = Field(default=None, description="选中的写作 Skill ID")
     style: str | None = Field(default=None, description="选中的风格子选项")
     writing_mode: str | None = Field(default=None, description="写作模式：sample_guide / direct_writer / coach")
+    duration: int | None = Field(default=None, description="预期创作时长（分钟）")
     model: str | None = Field(default=None, description="使用的模型名称")
 
 
@@ -509,6 +510,8 @@ async def pro_chat_v4(
             state_updates["selected_style"] = request.style
         if request.writing_mode in ("sample_guide", "direct_writer", "coach"):
             state_updates["manual_section_mode"] = request.writing_mode == "sample_guide"
+        if request.duration is not None and request.duration > 0:
+            state_updates["duration"] = request.duration
 
         if is_feedback:
             raw_result = await state.graph.ainvoke(

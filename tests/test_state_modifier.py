@@ -149,3 +149,28 @@ class TestBuildPrompts:
         _, user_prompt = build_prompts(sample_state, skill)
         assert "假如我有三千万" in user_prompt
         assert "{topic}" not in user_prompt
+
+    def test_attitude_bias_emotion_and_duration_replaced(self, sample_state):
+        """Skill 模板中的态度、偏见、情绪、时长占位符应被替换。"""
+        skill = SkillConfig(
+            id="with_all",
+            name="With All",
+            system_prompt="",
+            prompt_template=(
+                "话题：{topic}，态度：{attitude}，偏见：{bias}，情绪：{emotion}，时长：{duration}分钟"
+            ),
+            skill_dir=Path("."),
+        )
+        sample_state.analysis = {
+            "topic": "三千万",
+            "attitude": "自嘲",
+            "bias": "无",
+            "emotion": "荒诞",
+        }
+        sample_state.duration = 5
+        _, user_prompt = build_prompts(sample_state, skill)
+        assert "话题：三千万" in user_prompt
+        assert "态度：自嘲" in user_prompt
+        assert "偏见：无" in user_prompt
+        assert "情绪：荒诞" in user_prompt
+        assert "时长：5分钟" in user_prompt

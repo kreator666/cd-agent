@@ -1439,7 +1439,7 @@ async function loadConversation(id) {
 }
 
 /* ========== Generation ========== */
-async function runAgentTurn(text, silent = false) {
+async function runAgentTurn(text, silent = false, options = {}) {
   // Show agent typing indicator
   const agentMsg = addChatMessage('agent', '喜剧龙虾', '资料与结构助手', '收到，正在处理您的需求…', { gradient: 'background:linear-gradient(135deg,#ddd,#9b7)' });
   agentMsg.classList.add('typing');
@@ -1456,16 +1456,20 @@ async function runAgentTurn(text, silent = false) {
 
   try {
     const model = $('#model-select').value || undefined;
+    const body = {
+      session_id: workflowSessionId,
+      message: text,
+      skill_id: selectedSkillId || undefined,
+      style: selectedStyle || undefined,
+      writing_mode: writingMode,
+      model
+    };
+    if (options.duration && Number(options.duration) > 0) {
+      body.duration = Number(options.duration);
+    }
     const res = await apiFetch('/pro/chat-v4', {
       method: 'POST',
-      body: JSON.stringify({
-        session_id: workflowSessionId,
-        message: text,
-        skill_id: selectedSkillId || undefined,
-        style: selectedStyle || undefined,
-        writing_mode: writingMode,
-        model
-      })
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     workflowSessionId = data.session_id;
@@ -1724,6 +1728,11 @@ function bindGuideActions(msgDiv, options = {}) {
         sendPrompt();
       } else if (action === 'set_outline') {
         $('#chatInput').focus();
+      } else if (workflowState === 'plan_review' && action === 'approve_plan') {
+        // 计划审阅阶段：读取用户输入的预期时长，一起提交
+        const durationInput = msgDiv.querySelector('.duration-input');
+        const duration = durationInput ? parseInt(durationInput.value, 10) || 3 : 3;
+        runAgentTurn(value || '开始写作', false, { duration });
       } else {
         $('#chatInput').value = value || btn.textContent;
         sendPrompt();
@@ -1764,11 +1773,17 @@ function renderWorkflowStep(step, bindEvents = false, workflowState = '', isLast
     // 后端 reply 已包含结构化内容（流程列表 + 确认 + 下一步提示）
     // 同时渲染 TODO 看板（如果有）
     const todoHtml = renderTodoBoard(step.todo_board);
+    const durationInputHtml = workflowState === 'plan_review' ? `
+      <div class="plan-duration" style="margin:10px 0;padding:10px 12px;background:#f8f8f8;border-radius:8px;border:1px solid #eee;">
+        <label style="font-size:13px;color:#555;font-weight:600;">⏱️ 预期时长（分钟）：</label>
+        <input type="number" class="duration-input" value="3" min="1" max="30" style="width:60px;padding:5px 8px;margin-left:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+      </div>
+    ` : '';
     const actionsHtml = (step.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
     const contentHtml = renderGuideContentHtml(content, workflowState);
-    const html = `${todoHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const html = `${todoHtml}${contentHtml}${durationInputHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
     const msgDiv = addChatMessage('agent', roleName, roleLabel, html, { gradient: roleGradient });
     if (bindEvents) {
       bindGuideActions(msgDiv, {
@@ -1809,11 +1824,17 @@ function renderWorkflowResponse(data) {
   if (type === 'guide') {
     // 引导消息 + 快捷操作
     const todoHtml = renderTodoBoard(data.todo_board);
+    const durationInputHtml = data.workflow_state === 'plan_review' ? `
+      <div class="plan-duration" style="margin:10px 0;padding:10px 12px;background:#f8f8f8;border-radius:8px;border:1px solid #eee;">
+        <label style="font-size:13px;color:#555;font-weight:600;">⏱️ 预期时长（分钟）：</label>
+        <input type="number" class="duration-input" value="3" min="1" max="30" style="width:60px;padding:5px 8px;margin-left:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+      </div>
+    ` : '';
     const actionsHtml = (data.next_actions || []).map(a =>
       `<button class="wf-action-btn" data-action="${escapeHtml(a.action)}" data-value="${escapeHtml(a.value || '')}">${escapeHtml(a.label)}</button>`
     ).join('');
     const contentHtml = renderGuideContentHtml(content, data.workflow_state);
-    const html = `${todoHtml}${contentHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
+    const html = `${todoHtml}${contentHtml}${durationInputHtml}${actionsHtml ? `<div class="wf-actions">${actionsHtml}</div>` : ''}`;
     const msgDiv = addChatMessage('agent', roleName, roleLabel, html, { gradient: roleGradient });
     // 绑定快捷按钮点击事件
     bindGuideActions(msgDiv, {

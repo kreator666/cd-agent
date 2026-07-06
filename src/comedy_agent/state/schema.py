@@ -148,6 +148,10 @@ class ComedyState(BaseModel):
         default=True,
         description="是否使用样例引导+用户输入的逐段写作模式",
     )
+    duration: int = Field(
+        default=3,
+        description="预期创作时长（分钟），供 Skill 控制篇幅",
+    )
 
     # ------------------------------------------------------------------ #
     # Skill 元信息（复用 v3 约定）

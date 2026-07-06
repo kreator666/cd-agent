@@ -136,6 +136,7 @@ def build_prompts(
         "attitude": analysis.get("attitude") or slots.get("态度") or "",
         "bias": analysis.get("bias") or slots.get("偏见") or "",
         "emotion": analysis.get("emotion") or slots.get("情绪") or "",
+        "duration": state.duration or 3,
     }
 
     # System Prompt：基础层 + Skill 层 + 示例层 + 理论知识层

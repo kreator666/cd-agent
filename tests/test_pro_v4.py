@@ -109,6 +109,34 @@ class TestProV4State:
         # GuideAgent 需要的能力列表应被注入
         assert invoked.available_skills == ["standup_generator"]
 
+    def test_duration_parameter_passed_to_state(self, client):
+        """请求中的 duration 应被写入 ComedyState。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = MagicMock(
+            values={
+                "phase": "consulting",
+                "slots": {"话题": "三千万"},
+                "analysis": {"topic": "三千万"},
+                "plan": {"todo": ["t1"], "outline": ["o1"], "tone": "荒诞"},
+                "messages": [],
+            }
+        )
+        state.graph.ainvoke = AsyncMock(
+            return_value={"phase": "complete", "output": "生成完成"}
+        )
+        state.graph.update_state.return_value = None
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "开始写作", "duration": 5},
+        )
+        assert resp.status_code == 200
+
+        invoked = state.graph.ainvoke.call_args.args[0]
+        assert isinstance(invoked, ComedyState)
+        assert invoked.duration == 5
+
     def test_new_creation_request_clears_previous_analysis_and_plan(self, client):
         """新创作请求开始时，应清理上一轮已完成的 analysis / plan，避免旧计划被复用。"""
         from comedy_agent.api.server import state

@@ -52,3 +52,71 @@ def test_no_slot_mention():
     assert result["slots"] is None or result["slots"] == {}
     assert "active_slot_dimension" not in result
     assert "slot_conversations" not in result or not result["slot_conversations"]
+
+
+def test_append_to_existing_slot():
+    """同一维度多次 @ 时，应追加内容而不是覆盖。"""
+    agent = SlotFillingAgent()
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 假如我有三千万",
+            slots={},
+        )
+    )
+    assert result["slots"]["话题"] == "假如我有三千万"
+
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 怕被绑架",
+            slots=result["slots"],
+        )
+    )
+    assert result["slots"]["话题"] == "假如我有三千万；怕被绑架"
+
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 肆意挥霍",
+            slots=result["slots"],
+        )
+    )
+    assert result["slots"]["话题"] == "假如我有三千万；怕被绑架；肆意挥霍"
+
+
+def test_append_existing_substring():
+    """新值与旧值有包含关系时，保留更完整的那份。"""
+    agent = SlotFillingAgent()
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 加班",
+            slots={"话题": "加班文化"},
+        )
+    )
+    assert result["slots"]["话题"] == "加班文化"
+
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 加班文化",
+            slots={"话题": "加班"},
+        )
+    )
+    assert result["slots"]["话题"] == "加班文化"
+
+
+def test_merge_avoids_duplicate_substring():
+    """新值是旧值的子串或旧值包含新值时，避免无意义重复。"""
+    agent = SlotFillingAgent()
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 加班",
+            slots={"话题": "加班文化"},
+        )
+    )
+    assert result["slots"]["话题"] == "加班文化"
+
+    result = agent.run(
+        ComedyState(
+            user_input="@话题 加班文化",
+            slots={"话题": "加班"},
+        )
+    )
+    assert result["slots"]["话题"] == "加班文化"

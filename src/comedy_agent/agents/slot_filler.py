@@ -67,11 +67,17 @@ class SlotFillingAgent:
         for key, value in extracted.items():
             normalized = self._normalize_key(key)
             if normalized:
-                slots[normalized] = value.strip()
+                new_value = value.strip()
+                if normalized in slots and new_value:
+                    # 同一维度多次 @ 时追加内容，保留多轮对话中补充的信息
+                    existing = slots[normalized]
+                    slots[normalized] = self._merge_slot_value(existing, new_value)
+                else:
+                    slots[normalized] = new_value
                 # 将本轮用户输入归档到该维度的独立对话历史中
                 slot_conversations.setdefault(normalized, []).append(HumanMessage(content=user_input))
                 active_dimension = normalized
-                logger.debug("slot_filler: filled %s = %s", normalized, value.strip())
+                logger.debug("slot_filler: filled %s = %s", normalized, slots[normalized])
 
         updates: dict[str, Any] = {
             "slots": slots,
@@ -98,6 +104,21 @@ class SlotFillingAgent:
         """将别名归一化为标准槽位名。"""
         lowered = key.lower().strip().replace("专家", "").replace("达人", "")
         return _SLOT_ALIASES.get(lowered)
+
+    @staticmethod
+    def _merge_slot_value(existing: str, new_value: str) -> str:
+        """合并同一维度的新旧内容，避免重复并保留完整信息。"""
+        if not existing:
+            return new_value
+        if not new_value:
+            return existing
+        # 新值已包含在旧值中，直接保留旧值
+        if new_value in existing:
+            return existing
+        # 旧值已包含在新值中，用新值替换
+        if existing in new_value:
+            return new_value
+        return f"{existing}；{new_value}"
 
     @classmethod
     def missing_slots(cls, slots: dict[str, str] | None) -> list[str]:

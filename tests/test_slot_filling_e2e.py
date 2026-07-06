@@ -95,3 +95,54 @@ def test_at_emotion_fills_slot_and_stays_consulting(
     checkpoint = chat_graph.get_state({"configurable": {"thread_id": thread_id}})
     assert checkpoint.values["slots"]["情绪"] == "开心"
     assert checkpoint.values["phase"] == "consulting"
+
+
+@patch("comedy_agent.agents.guide.ModelFactory.get_model")
+@patch("comedy_agent.agents.intent_classifier.ModelFactory.get_model")
+@patch("comedy_agent.nodes.entry_node.ModelFactory.get_model")
+def test_at_topic_appends_across_turns(
+    mock_entry_factory,
+    mock_intent_factory,
+    mock_guide_factory,
+    chat_graph,
+):
+    """同一维度分多轮 @ 时，应追加内容而不是只保留最后一次。"""
+    guide_llm = _make_guide_llm(
+        "回复: 话题已记录，继续补充\n"
+        "选项:\n"
+        "A. @态度 自嘲\n"
+        "B. @偏见 老板\n"
+        "C. @情绪 开心"
+    )
+    mock_guide_factory.return_value = guide_llm
+    mock_intent_factory.return_value = MagicMock()
+    mock_entry_factory.return_value = MagicMock()
+
+    thread_id = "test-slot-topic-append"
+    inputs = [
+        "@话题 假如我有三千万",
+        "@话题 怕被绑架",
+        "@话题 肆意挥霍",
+    ]
+
+    slots = {}
+    messages = []
+    for text in inputs:
+        messages.append(HumanMessage(content=text))
+        raw_result = chat_graph.invoke(
+            ComedyState(
+                phase="idle",
+                user_input=text,
+                slots=slots,
+                messages=list(messages),
+                session_id=thread_id,
+                user_id="test",
+            ),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+        result = ComedyState.model_validate(raw_result)
+        slots = dict(result.slots or {})
+
+    assert "假如我有三千万" in slots.get("话题", "")
+    assert "怕被绑架" in slots.get("话题", "")
+    assert "肆意挥霍" in slots.get("话题", "")

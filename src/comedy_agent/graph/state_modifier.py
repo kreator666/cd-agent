@@ -70,9 +70,22 @@ def _format_knowledge(items: list[KnowledgeItem]) -> str:
 
 
 def _render(template_text: str, variables: dict) -> str:
-    """使用 Jinja2 渲染模板，变量缺失时静默保留空字符串。"""
+    """使用 Jinja2 渲染模板，变量缺失时静默保留空字符串。
+
+    同时兼容 Python format 风格占位符（如 {topic}）和 Jinja2 风格（如 {{ style }}）。
+    """
+    import re
+
+    # 把单个大括号占位符 {var} 转换为 Jinja2 的 {{ var }}，
+    # 但不影响原生的 Jinja2 双大括号。
+    converted = re.sub(
+        r"(?<!\{)\{([A-Za-z_][A-Za-z0-9_]*)\}(?!\})",
+        r"{{ \1 }}",
+        template_text,
+    )
+
     try:
-        return Template(template_text).render(**variables)
+        return Template(converted).render(**variables)
     except UndefinedError:
         # 若模板使用了未提供的变量，回退到原字符串
         return template_text
@@ -106,6 +119,8 @@ def build_prompts(
     feedback_section = _format_feedback(state.feedback)
     outline_text = "\n".join(f"{i + 1}. {goal}" for i, goal in enumerate(outline))
 
+    analysis = state.analysis or {}
+    slots = state.slots or {}
     variables = {
         "style": state.selected_style or "",
         "user_input": state.user_input,
@@ -114,8 +129,13 @@ def build_prompts(
         "completed_sections": completed_sections,
         "feedback_section": feedback_section,
         "section_index": section_index + 1,
-        "analysis": state.analysis or {},
-        "slots": state.slots or {},
+        "analysis": analysis,
+        "slots": slots,
+        # 兼容 Skill 模板中直接使用 {topic}/{attitude}/{bias}/{emotion} 的写法
+        "topic": analysis.get("topic") or slots.get("话题") or "",
+        "attitude": analysis.get("attitude") or slots.get("态度") or "",
+        "bias": analysis.get("bias") or slots.get("偏见") or "",
+        "emotion": analysis.get("emotion") or slots.get("情绪") or "",
     }
 
     # System Prompt：基础层 + Skill 层 + 示例层 + 理论知识层

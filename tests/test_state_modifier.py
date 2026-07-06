@@ -115,3 +115,37 @@ class TestBuildPrompts:
         )
         assert "【理论知识参考】" in system_prompt
         assert "三番四抖" in system_prompt
+
+    def test_topic_variable_replaced_from_analysis(self, sample_state):
+        """Skill prompt_template 中的 {topic} 应被 analysis/slots 中的话题替换。"""
+        skill = SkillConfig(
+            id="with_topic",
+            name="With Topic",
+            system_prompt="",
+            prompt_template="请创作关于「{topic}」的段子。",
+            skill_dir=Path("."),
+        )
+        sample_state.analysis = {
+            "topic": "假如我有三千万",
+            "attitude": "自嘲",
+            "bias": "无",
+            "emotion": "荒诞",
+        }
+        _, user_prompt = build_prompts(sample_state, skill)
+        assert "假如我有三千万" in user_prompt
+        assert "{topic}" not in user_prompt
+
+    def test_topic_variable_falls_back_to_slots(self, sample_state):
+        """analysis 为空时，{topic} 应回退到 slots 中的话题。"""
+        skill = SkillConfig(
+            id="with_topic",
+            name="With Topic",
+            system_prompt="",
+            prompt_template="请创作关于「{topic}」的段子。",
+            skill_dir=Path("."),
+        )
+        sample_state.analysis = None
+        sample_state.slots = {"话题": "假如我有三千万"}
+        _, user_prompt = build_prompts(sample_state, skill)
+        assert "假如我有三千万" in user_prompt
+        assert "{topic}" not in user_prompt

@@ -1,8 +1,0 @@
-id: writer_agent
-name: 写手阿文
-description: 你的逐段写作搭档。大纲确认后，阿文会为每一段生成 3 个参考样例，然后等你亲笔输入段落正文。
-task_type: creative
-styles: []
-metadata:
-  kind: standup
-  mode: manual

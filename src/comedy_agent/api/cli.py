@@ -377,7 +377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     scripts_list_parser = scripts_sub.add_parser("list", help="列出作品")
     scripts_list_parser.add_argument("--user-id", required=True, help="用户标识")
     scripts_list_parser.add_argument(
-        "--type", default=None, help="作品类型过滤（standup/sketch/crosstalk/sitcom）"
+        "--type", default=None, help="作品类型过滤（standup）"
     )
 
     # scripts get
@@ -432,7 +432,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # evaluate script
     eval_script_parser = eval_sub.add_parser("script", help="评估剧本质量")
     eval_script_parser.add_argument("--content", required=True, help="剧本文本内容")
-    eval_script_parser.add_argument("--type", default="default", help="剧本类型（standup/crosstalk/sketch/sitcom/joke/default）")
+    eval_script_parser.add_argument("--type", default="default", help="剧本类型（standup/default）")
     eval_script_parser.add_argument("--json", action="store_true", help="输出 JSON 格式")
 
     # evaluate output

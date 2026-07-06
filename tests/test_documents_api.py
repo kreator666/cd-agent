@@ -1,5 +1,6 @@
 """文档管理 API 测试。"""
 
+import contextlib
 import os
 import tempfile
 from unittest.mock import MagicMock, patch
@@ -23,7 +24,11 @@ def _patched_create_engine(*args, **kwargs):
 @pytest.fixture
 def client():
     """提供已认证的 TestClient。"""
-    with patch(
+    cm_vector = patch("comedy_agent.api.server.VectorStore")
+    cm_retriever = patch("comedy_agent.api.server.ComedyRetriever")
+    cm_graph = patch("comedy_agent.api.server.build_chat_graph")
+
+    with cm_vector, cm_retriever, cm_graph, patch(
         "comedy_agent.memory.medium_term.create_engine",
         side_effect=_patched_create_engine,
     ), patch(
@@ -44,8 +49,8 @@ def client():
 
             state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
 
-            c.post("/auth/register", json={"user_id": "testuser", "password": "testpass"})
-            login_resp = c.post("/auth/login", json={"user_id": "testuser", "password": "testpass"})
+            c.post("/auth/register", json={"user_id": "admin", "password": "testpass"})
+            login_resp = c.post("/auth/login", json={"user_id": "admin", "password": "testpass"})
             token = login_resp.json()["access_token"]
 
             with TestClient(app, headers={"Authorization": f"Bearer {token}"}) as authed_c:
@@ -80,7 +85,7 @@ class TestDocumentAPI:
                 res = client.post(
                     "/documents/upload",
                     files={"files": ("theory_test.txt", f, "text/plain")},
-                    data={"kind": "sketch", "style": "traditional", "chunk_strategy": "scene", "topic": "职场加班"},
+                    data={"kind": "standup", "style": "traditional", "chunk_strategy": "scene", "topic": "职场加班"},
                 )
             assert res.status_code == 200, res.text
             data = res.json()
@@ -88,7 +93,7 @@ class TestDocumentAPI:
             assert data[0]["filename"] == "theory_test.txt"
             assert data[0]["status"] == "ingested"
             assert data[0]["chunks"] == 3
-            assert data[0]["kind"] == "sketch"
+            assert data[0]["kind"] == "standup"
             assert data[0]["style"] == "traditional"
             assert data[0]["chunk_strategy"] == "scene"
             assert data[0]["topic"] == "职场加班"
@@ -98,7 +103,7 @@ class TestDocumentAPI:
             assert call_kwargs.get("chunk_strategy") == "scene"
             mock_ingestor.ingest_file.assert_called_once()
             ingest_file_args = mock_ingestor.ingest_file.call_args
-            assert ingest_file_args.kwargs.get("kind") == "sketch"
+            assert ingest_file_args.kwargs.get("kind") == "standup"
             assert ingest_file_args.kwargs.get("style") == "traditional"
 
         # 列出文档
@@ -107,7 +112,7 @@ class TestDocumentAPI:
         docs = res2.json()["documents"]
         matched = [d for d in docs if d["filename"] == "theory_test.txt"]
         assert len(matched) == 1
-        assert matched[0]["kind"] == "sketch"
+        assert matched[0]["kind"] == "standup"
         assert matched[0]["style"] == "traditional"
         assert matched[0]["chunk_strategy"] == "scene"
 

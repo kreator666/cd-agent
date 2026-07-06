@@ -137,60 +137,6 @@ class StandupResponse(BaseModel):
     content: str = Field(description="生成的段子")
 
 
-class SketchRequest(BaseModel):
-    """小品创作请求。"""
-
-    theme: str = Field(description="主题")
-    style: str = Field(default="现代小品", description="风格：传统小品/现代小品/荒诞小品/温情小品")
-    characters_count: int = Field(default=3, description="角色数量（2-5人）")
-    setting: str = Field(default="家庭", description="场景设定")
-    duration: int = Field(default=8, description="时长（分钟）")
-    conflict_type: str = Field(default="执念vs现实", description="冲突类型：执念vs现实/执念vs执念/信息差")
-    model: str | None = Field(default=None, description="指定模型")
-
-
-class SketchResponse(BaseModel):
-    """小品创作响应。"""
-
-    content: str = Field(description="生成的剧本")
-
-
-class ManzaiRequest(BaseModel):
-    """漫才创作请求。"""
-
-    topic: str = Field(description="话题")
-    style: str = Field(default="传统漫才", description="风格：传统漫才/快节奏漫才/温情漫才/怪诞漫才")
-    duration: int = Field(default=5, description="时长（分钟）")
-    segments_count: int = Field(default=3, description="段落数量")
-    absurd_level: str = Field(default="标准", description="荒谬等级：轻微/标准/极致")
-    model: str | None = Field(default=None, description="指定模型")
-
-
-class ManzaiResponse(BaseModel):
-    """漫才创作响应。"""
-
-    content: str = Field(description="生成的对白")
-
-
-class JapaneseSketchRequest(BaseModel):
-    """日式短剧创作请求。"""
-
-    theme: str = Field(description="主题")
-    style: str = Field(default="经典コント", description="风格：经典コント/黑色幽默/温情喜剧/荒诞喜剧")
-    characters_count: int = Field(default=2, description="角色数量（2-3人）")
-    setting: str = Field(default="便利店", description="场景设定")
-    duration: int = Field(default=5, description="时长（分钟）")
-    character_type: str = Field(default="偏执", description="极端性格：偏执/懦弱/自大/较真")
-    punchline_density: int = Field(default=4, description="笑点密度（个/分钟）")
-    model: str | None = Field(default=None, description="指定模型")
-
-
-class JapaneseSketchResponse(BaseModel):
-    """日式短剧创作响应。"""
-
-    content: str = Field(description="生成的剧本")
-
-
 # ------------------------------------------------------------------ #
 # 作品管理请求/响应模型
 # ------------------------------------------------------------------ #
@@ -201,7 +147,7 @@ class ScriptCreateRequest(BaseModel):
     title: str | None = Field(default=None, description="作品标题")
     content: str = Field(description="作品内容")
     script_type: str | None = Field(
-        default=None, description="作品类型：standup / sketch / crosstalk / sitcom"
+        default=None, description="作品类型：standup"
     )
     tags: list[str] | None = Field(default=None, description="标签列表")
     rating: float | None = Field(default=None, description="评分 0.0-5.0")
@@ -802,156 +748,6 @@ async def skill_standup(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-SKETCH_MIN_COST = 18
-
-@app.post("/skills/sketch", response_model=SketchResponse, tags=["skills"])
-async def skill_sketch(
-    request: SketchRequest, user_id: str = Depends(get_current_user)
-) -> SketchResponse:
-    """直接调用小品创作 Skill。"""
-    if state.orch is None:
-        raise HTTPException(status_code=503, detail="服务未就绪")
-    if state.memory is not None:
-        account = state.memory.get_token_account(user_id)
-        if account.balance < SKETCH_MIN_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {SKETCH_MIN_COST}，余 {account.balance}）")
-
-    skill = None
-    for tool in state.orch.tools:
-        if getattr(tool, "name", None) == "sketch_generator":
-            skill = tool
-            break
-
-    if skill is None:
-        skill = load_single_skill(Path(settings.skills_dir) / "sketch")
-
-    if request.model is not None:
-        skill.model_name = request.model
-
-    try:
-        start_usage_tracking()
-        content = skill.invoke(
-            {
-                "theme": request.theme,
-                "style": request.style,
-                "characters_count": request.characters_count,
-                "setting": request.setting,
-                "duration": request.duration,
-                "conflict_type": request.conflict_type,
-                "user_id": user_id,
-            }
-        )
-        charge_model_usage(
-            user_id=user_id,
-            endpoint="/skills/sketch",
-            description="小品创作",
-            fallback_cost=SKETCH_MIN_COST,
-        )
-        return SketchResponse(content=content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-MANZAI_MIN_COST = 18
-
-@app.post("/skills/manzai", response_model=ManzaiResponse, tags=["skills"])
-async def skill_manzai(
-    request: ManzaiRequest, user_id: str = Depends(get_current_user)
-) -> ManzaiResponse:
-    """直接调用漫才创作 Skill。"""
-    if state.orch is None:
-        raise HTTPException(status_code=503, detail="服务未就绪")
-    if state.memory is not None:
-        account = state.memory.get_token_account(user_id)
-        if account.balance < MANZAI_MIN_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {MANZAI_MIN_COST}，余 {account.balance}）")
-
-    skill = None
-    for tool in state.orch.tools:
-        if getattr(tool, "name", None) == "manzai_generator":
-            skill = tool
-            break
-
-    if skill is None:
-        skill = load_single_skill(Path(settings.skills_dir) / "manzai")
-
-    if request.model is not None:
-        skill.model_name = request.model
-
-    try:
-        start_usage_tracking()
-        content = skill.invoke(
-            {
-                "topic": request.topic,
-                "style": request.style,
-                "duration": request.duration,
-                "segments_count": request.segments_count,
-                "absurd_level": request.absurd_level,
-                "user_id": user_id,
-            }
-        )
-        charge_model_usage(
-            user_id=user_id,
-            endpoint="/skills/manzai",
-            description="漫才创作",
-            fallback_cost=MANZAI_MIN_COST,
-        )
-        return ManzaiResponse(content=content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-JAPANESE_SKETCH_MIN_COST = 18
-
-@app.post("/skills/japanese-sketch", response_model=JapaneseSketchResponse, tags=["skills"])
-async def skill_japanese_sketch(
-    request: JapaneseSketchRequest, user_id: str = Depends(get_current_user)
-) -> JapaneseSketchResponse:
-    """直接调用日式短剧创作 Skill。"""
-    if state.orch is None:
-        raise HTTPException(status_code=503, detail="服务未就绪")
-    if state.memory is not None:
-        account = state.memory.get_token_account(user_id)
-        if account.balance < JAPANESE_SKETCH_MIN_COST:
-            raise HTTPException(status_code=402, detail=f"Token 余额不足（至少需 {JAPANESE_SKETCH_MIN_COST}，余 {account.balance}）")
-
-    skill = None
-    for tool in state.orch.tools:
-        if getattr(tool, "name", None) == "japanese_sketch_generator":
-            skill = tool
-            break
-
-    if skill is None:
-        skill = load_single_skill(Path(settings.skills_dir) / "japanese_sketch")
-
-    if request.model is not None:
-        skill.model_name = request.model
-
-    try:
-        start_usage_tracking()
-        content = skill.invoke(
-            {
-                "theme": request.theme,
-                "style": request.style,
-                "characters_count": request.characters_count,
-                "setting": request.setting,
-                "duration": request.duration,
-                "character_type": request.character_type,
-                "punchline_density": request.punchline_density,
-                "user_id": user_id,
-            }
-        )
-        charge_model_usage(
-            user_id=user_id,
-            endpoint="/skills/japanese-sketch",
-            description="日式短剧创作",
-            fallback_cost=JAPANESE_SKETCH_MIN_COST,
-        )
-        return JapaneseSketchResponse(content=content)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # ------------------------------------------------------------------ #
 # 作品管理路由
 # ------------------------------------------------------------------ #
@@ -1157,7 +953,7 @@ async def delete_conversation(
 @app.post("/documents/upload", response_model=list[DocumentUploadResponse], tags=["documents"])
 async def upload_documents(
     files: list[UploadFile] = File(...),
-    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
+    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup"),
     style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
     chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
     topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),
@@ -1326,7 +1122,7 @@ async def delete_document(
 @app.post("/me/knowledge/upload", response_model=list[DocumentUploadResponse], tags=["knowledge"])
 async def upload_verified_knowledge(
     files: list[UploadFile] = File(...),
-    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup / sketch / manzai"),
+    kind: str | None = Form(default=None, description="喜剧种类标识，如 standup"),
     style: str | None = Form(default=None, description="风格标识，如 traditional / modern / 自嘲"),
     chunk_strategy: str = Form(default="paragraph", description="分块策略：fixed / paragraph / scene / dialogue / subtitle"),
     topic: str | None = Form(default=None, description="文档主题/话题，如：职场加班、相亲经历"),

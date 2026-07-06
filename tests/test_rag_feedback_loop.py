@@ -82,7 +82,7 @@ class TestIngestHighRatedScripts:
             ScriptData(
                 title="经典小品",
                 content="经典内容",
-                script_type="sketch",
+                script_type="standup",
                 rating=5.0,
             ),
         )

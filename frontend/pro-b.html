@@ -448,14 +448,12 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 
 let allSkills = [];
 let selectedSkills = new Set();
-let selectedSkillId = 'writer_agent';
+let selectedSkillId = 'standup';
 let selectedStyle = '';
 let currentMention = null; // { type: 'slot'|'skill', id, label, value }
-let writingMode = 'sample_guide'; // sample_guide / direct_writer / coach
+let writingMode = 'direct_writer'; // 当前仅保留 standup 一键写作
 const WRITING_MODES = [
-  { id: 'sample_guide', label: '样例引导', skillId: 'writer_agent' },
-  { id: 'direct_writer', label: 'AI 一键写作', skillId: 'standup_coach' },
-  { id: 'coach', label: '教练陪写', skillId: 'standup_v2' },
+  { id: 'direct_writer', label: 'AI 一键写作', skillId: 'standup' },
 ];
 let currentConversationId = null;
 let conversations = [];
@@ -478,7 +476,6 @@ const CORE_SLOTS = [
   { id: '排版', label: '排版', name: '排版设计师', icon: '/static/images/slots/layout.png', desc: '转换为平台文章格式', gradient: 'linear-gradient(135deg,#e0f2fe,#0ea5e9)' },
 ];
 
-const WRITER_AGENT = { id: 'writer_agent', name: '写手阿文', label: 'writer_agent', desc: '你的逐段写作搭档，负责生成参考样例并等你亲笔写稿', gradient: 'linear-gradient(135deg,#e5e7eb,#111827)' };
 
 /* ========== Helpers ========== */
 function toast(msg) {
@@ -804,8 +801,8 @@ function normalizeMultipleMentions() {
 let mentionSelectedIndex = -1;
 
 function getMentionCandidates() {
-  // 核心创作维度 + 写作搭档
-  const candidates = [
+  // 核心创作维度
+  return [
     { name: '话题', desc: '确定创作主题与背景' },
     { name: '态度', desc: '明确核心态度与立场' },
     { name: '偏见', desc: '挖掘独特视角与偏见' },
@@ -813,11 +810,6 @@ function getMentionCandidates() {
     { name: '素材', desc: '搜索网络创作资料' },
     { name: '排版', desc: '转换为平台文章格式' },
   ];
-  const writer = (allSkills || []).find(s => s.id === 'writer_agent');
-  if (writer) {
-    candidates.unshift({ name: writer.name, desc: writer.description || '逐段写作搭档' });
-  }
-  return candidates;
 }
 
 function getMentionSearchTerm() {
@@ -993,8 +985,7 @@ function ensureDefaultSkillSelected() {
     selectedSkillId = cfg.skillId;
   }
   if (!currentMention) {
-    const defaultSkill = (allSkills || []).find(s => s.id === cfg.skillId)
-      || (allSkills || []).find(s => s.id === 'writer_agent');
+    const defaultSkill = (allSkills || []).find(s => s.id === cfg.skillId);
     if (defaultSkill) {
       currentMention = { type: 'skill', id: defaultSkill.id, label: defaultSkill.name, value: defaultSkill.id };
     }
@@ -1002,9 +993,9 @@ function ensureDefaultSkillSelected() {
   renderModeSwitch();
   renderTeamSkills();
   updateMentionBadge();
-  // 初始状态下在空输入框中展示默认 @ 前缀（写手阿文除外）
+  // 初始状态下在空输入框中展示默认 @ 前缀
   const input = $('#chatInput');
-  if (currentMention && currentMention.id !== 'writer_agent' && input && !input.value.trim() && currentWorkflowState === 'idle') {
+  if (currentMention && input && !input.value.trim() && currentWorkflowState === 'idle') {
     input.value = '@' + currentMention.value + ' ';
   }
 }
@@ -1013,24 +1004,28 @@ function renderTeamSkills() {
   const container = $('#teamSkills');
   if (!container) return;
 
-  let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">点击选择你的写作搭档与风格</div>';
+  let html = '<div style="font-size:12px;color:#888;margin-bottom:8px;">点击选择你的写作风格与创作维度</div>';
 
-  // 写作搭档：固定展示 writer_agent（写手阿文）
-  const partner = (allSkills || []).find(s => s.id === 'writer_agent') || WRITER_AGENT;
-  html += '<div style="margin-bottom:12px;">';
-  html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">✍️ 写作搭档</div>';
-  html += '<div class="slot-list">';
-  const partnerActive = currentMention && currentMention.type === 'skill' && currentMention.id === partner.id;
-  const partnerActiveStyle = partnerActive ? 'border:2px solid #333;box-sizing:border-box;' : '';
-  const partnerCheck = partnerActive ? '✓ ' : '';
-  html += `<div class="slot-row" onclick="selectSkill('${partner.id}')" title="${escapeHtml(partner.description || partner.desc || '')}" style="background:linear-gradient(135deg,#e5e7eb,#111827);${partnerActiveStyle}">
-    <div class="slot-avatar" style="display:flex;align-items:center;justify-content:center;font-size:18px;">🧑‍💻</div>
-    <div class="slot-info">
-      <div class="slot-name">${partnerCheck}${escapeHtml(partner.name || partner.name)}</div>
-      <div class="slot-meta">@${escapeHtml(partner.id)} · ${escapeHtml(partner.description || partner.desc || '逐段写作搭档')}</div>
-    </div>
-  </div>`;
-  html += '</div></div>';
+  // 写作风格 Skill 选择
+  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing');
+  if (writingSkills.length > 0) {
+    html += '<div style="margin-bottom:12px;">';
+    html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">🎭 写作风格</div>';
+    html += '<div class="slot-list">';
+    writingSkills.forEach(skill => {
+      const isActive = currentMention && currentMention.type === 'skill' && currentMention.id === skill.id;
+      const activeStyle = isActive ? 'border:2px solid #333;box-sizing:border-box;' : '';
+      const check = isActive ? '✓ ' : '';
+      html += `<div class="slot-row" onclick="selectSkill('${skill.id}')" title="${escapeHtml(skill.description || '')}" style="background:linear-gradient(135deg,#ffedd5,#f97316);${activeStyle}">
+        <div class="slot-avatar" style="display:flex;align-items:center;justify-content:center;font-size:18px;">🎤</div>
+        <div class="slot-info">
+          <div class="slot-name">${check}${escapeHtml(skill.name)}</div>
+          <div class="slot-meta">@${escapeHtml(skill.id)} · ${escapeHtml(skill.description || '写作风格')}</div>
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
 
   // 核心创作维度
   html += '<div style="font-size:13px;color:#888;font-weight:700;margin:12px 0 8px;">🎯 核心创作维度</div>';
@@ -1048,27 +1043,6 @@ function renderTeamSkills() {
     </div>`;
   });
   html += '</div>';
-
-  // 写作风格 Skill 选择（排除 writer_agent，已单独展示）
-  const writingSkills = (allSkills || []).filter(s => s.skill_type === 'writing' && s.id !== 'writer_agent');
-  if (writingSkills.length > 0) {
-    html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;">';
-    html += '<div style="font-size:13px;color:#888;font-weight:700;margin-bottom:8px;">🎭 写作风格</div>';
-    html += '<div class="slot-list">';
-    writingSkills.forEach(skill => {
-      const isActive = currentMention && currentMention.type === 'skill' && currentMention.id === skill.id;
-      const activeStyle = isActive ? 'border:2px solid #333;box-sizing:border-box;' : '';
-      const check = isActive ? '✓ ' : '';
-      html += `<div class="slot-row" onclick="selectSkill('${skill.id}')" title="${escapeHtml(skill.description || '')}" style="background:linear-gradient(135deg,#ffedd5,#f97316);${activeStyle}">
-        <div class="slot-avatar" style="display:flex;align-items:center;justify-content:center;font-size:18px;">🎤</div>
-        <div class="slot-info">
-          <div class="slot-name">${check}${escapeHtml(skill.name)}</div>
-          <div class="slot-meta">@${escapeHtml(skill.id)} · ${escapeHtml(skill.description || '写作风格')}</div>
-        </div>
-      </div>`;
-    });
-    html += '</div></div>';
-  }
 
   container.innerHTML = html;
   updateTeamCount();
@@ -1107,13 +1081,7 @@ function setWritingMode(mode, explicitSkillId, silent = false, updateInput = tru
 function selectSkill(skillId) {
   const skill = (allSkills || []).find(s => s.id === skillId);
   if (!skill) return;
-  if (skill.id === 'writer_agent') {
-    setWritingMode('sample_guide');
-  } else if (skill.id === 'standup_v2') {
-    setWritingMode('coach');
-  } else {
-    setWritingMode('direct_writer', skill.id);
-  }
+  setWritingMode('direct_writer', skill.id);
   closeAll();
 }
 
@@ -1171,13 +1139,7 @@ function parseInputMention() {
   const skill = (allSkills || []).find(s => s.id === name || s.name === name);
   if (skill && skill.skill_type === 'writing') {
     if (!currentMention || currentMention.type !== 'skill' || currentMention.id !== skill.id) {
-      if (skill.id === 'writer_agent') {
-        setWritingMode('sample_guide', null, true, false);
-      } else if (skill.id === 'standup_v2') {
-        setWritingMode('coach', null, true, false);
-      } else {
-        setWritingMode('direct_writer', skill.id, true, false);
-      }
+      setWritingMode('direct_writer', skill.id, true, false);
     }
     return;
   }
@@ -1522,7 +1484,7 @@ async function runAgentTurn(text, silent = false) {
     if (['example_review', 'drafting', 'human_review', 'plan_review'].includes(currentWorkflowState)) {
       // 这些状态下用户需要输入段落或反馈，不应保留 @ 前缀
       chatInput.value = '';
-    } else if (currentMention && currentMention.id !== 'writer_agent') {
+    } else if (currentMention) {
       chatInput.value = '@' + currentMention.value + ' ';
     } else {
       chatInput.value = '';
@@ -2327,10 +2289,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         <label>喜剧种类</label>
         <select id="annKind">
           <option value="standup">standup</option>
-          <option value="sketch">sketch</option>
-          <option value="crosstalk">crosstalk</option>
-          <option value="sitcom">sitcom</option>
-          <option value="manzai">manzai</option>
         </select>
       </div>
       <div class="modal-field">

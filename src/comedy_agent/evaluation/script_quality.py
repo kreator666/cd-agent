@@ -97,9 +97,6 @@ class ScriptQualityEvaluator:
     # 长度期望（按剧本类型，单位：字符数）
     LENGTH_EXPECTATIONS: dict[str, tuple[int, int]] = {
         "standup": (800, 3000),
-        "crosstalk": (1500, 5000),
-        "sketch": (2000, 6000),
-        "sitcom": (3000, 10000),
         "joke": (100, 500),
         "default": (500, 5000),
     }
@@ -120,7 +117,7 @@ class ScriptQualityEvaluator:
         Args:
             script: 剧本文本内容。
             script_type: 剧本类型，影响长度期望。可选：
-                standup / crosstalk / sketch / sitcom / joke / default。
+                standup / joke / default。
 
         Returns:
             ScriptQualityResult: 包含各维度评分与改进建议的结果。

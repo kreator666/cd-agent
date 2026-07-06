@@ -76,7 +76,8 @@ class StandupSkill(ComedySkill):
             f"- 风格：{style}\n"
             f"- 时长：约{duration}分钟\n"
             f"- 受众：{audience}观众\n"
-            f"- 笑点密度：{density}"
+            f"- 笑点密度：{density}\n"
+            f"- 请提供 {perspective_count} 个不同视角的版本"
         )
 
     def _run(

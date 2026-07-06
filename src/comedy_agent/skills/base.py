@@ -56,7 +56,7 @@ class ComedySkill(BaseTool, ABC):
             query: 检索查询（通常用 topic/theme）。
             user_id: 可选用户标识，用于检索个人知识库。
             top_k: 默认库召回数量。
-            kind: 喜剧种类过滤，如 "standup" / "sketch" / "manzai"。
+            kind: 喜剧种类过滤，当前仅 "standup"。
             style: 风格过滤，如 "traditional" / "modern" / "自嘲"。
 
         Returns:

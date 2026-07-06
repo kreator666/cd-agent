@@ -7,36 +7,31 @@ from comedy_agent.state.schema import ComedyState
 
 
 class TestResolveSkill:
-    def test_defaults_to_standup_coach(self):
+    def test_defaults_to_standup(self):
         state = ComedyState(user_input="hello")
         result = resolve_skill(state)
-        assert result["selected_skill"] == "standup_coach"
+        assert result["selected_skill"] == "standup"
         assert result["selected_style"] is None
 
     def test_explicit_skill_id(self):
         state = ComedyState(user_input="hello")
-        result = resolve_skill(state, explicit_skill_id="zhou_qimo")
-        assert result["selected_skill"] == "zhou_qimo"
+        result = resolve_skill(state, explicit_skill_id="standup")
+        assert result["selected_skill"] == "standup"
 
     def test_mention_alias(self):
-        state = ComedyState(user_input="@周奇墨 讲一段")
+        state = ComedyState(user_input="@脱口秀 讲一段")
         result = resolve_skill(state)
-        assert result["selected_skill"] == "zhou_qimo"
-
-    def test_mention_id(self):
-        state = ComedyState(user_input="@hu_lan 讲一段")
-        result = resolve_skill(state)
-        assert result["selected_skill"] == "hu_lan"
+        assert result["selected_skill"] == "standup"
 
     def test_preserve_existing_state(self):
         state = ComedyState(
             user_input="继续",
-            selected_skill="xu_zhisheng",
-            selected_style="高能量",
+            selected_skill="standup",
+            selected_style="自嘲",
         )
         result = resolve_skill(state)
-        assert result["selected_skill"] == "xu_zhisheng"
-        assert result["selected_style"] == "高能量"
+        assert result["selected_skill"] == "standup"
+        assert result["selected_style"] == "自嘲"
 
     def test_explicit_style_overrides_state(self):
         state = ComedyState(
@@ -49,9 +44,9 @@ class TestResolveSkill:
     def test_unknown_skill_fallback(self):
         state = ComedyState(user_input="hello")
         result = resolve_skill(state, explicit_skill_id="not_a_skill")
-        assert result["selected_skill"] == "standup_coach"
+        assert result["selected_skill"] == "standup"
 
     def test_slot_mention_ignored(self):
         state = ComedyState(user_input="@话题 人工智能")
         result = resolve_skill(state)
-        assert result["selected_skill"] == "standup_coach"
+        assert result["selected_skill"] == "standup"

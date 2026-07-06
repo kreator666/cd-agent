@@ -45,7 +45,7 @@ class TestExampleGeneratorNode:
             plan={"outline": ["段落目标"]},
             current_section=0,
             analysis={"topic": "加班", "attitude": "吐槽", "bias": "老板", "emotion": "愤怒"},
-            selected_skill="standup_coach",
+            selected_skill="standup",
         )
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content='{"examples": ["a", "b", "c"]}')

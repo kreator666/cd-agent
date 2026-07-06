@@ -205,7 +205,7 @@ class TestScripts:
         )
         store.save_script(
             "u033",
-            ScriptData(title="B", content="b", script_type="sketch"),
+            ScriptData(title="B", content="b", script_type="draft"),
         )
         store.save_script(
             "u033",

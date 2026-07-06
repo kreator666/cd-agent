@@ -240,7 +240,7 @@ class UserScript(Base):
     title: Mapped[str | None] = mapped_column(String(256), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     script_type: Mapped[str | None] = mapped_column(
-        String(32), nullable=True, comment="standup/sketch/crosstalk/sitcom"
+        String(32), nullable=True, comment="standup"
     )
     rating: Mapped[float | None] = mapped_column(nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
@@ -276,7 +276,7 @@ class UserDocument(Base):
         String(32), nullable=True, comment="theory / case / mixed"
     )
     kind: Mapped[str | None] = mapped_column(
-        String(32), nullable=True, comment="喜剧种类：standup / sketch / manzai / japanese_sketch / crosstalk / sitcom / general"
+        String(32), nullable=True, comment="喜剧种类：standup / general"
     )
     style: Mapped[str | None] = mapped_column(
         String(64), nullable=True, comment="风格标识：traditional / modern / 自嘲 / 讽刺 / 愤怒式 / 荒诞式 / 日常观察"
@@ -378,7 +378,7 @@ class UserProject(Base):
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     project_type: Mapped[str | None] = mapped_column(
-        String(32), nullable=True, comment="standup / sketch / salt / mixed"
+        String(32), nullable=True, comment="standup / salt / mixed"
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False

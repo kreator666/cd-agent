@@ -163,7 +163,7 @@ class ComedyState(BaseModel):
     )
     selected_skill: str | None = Field(
         default=None,
-        description="当前选中的 Skill 标识（如 standup_coach / zhou_qimo）",
+        description="当前选中的 Skill 标识（如 standup / add_salt）",
     )
     selected_style: str | None = Field(
         default=None,

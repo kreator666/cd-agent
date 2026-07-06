@@ -344,7 +344,7 @@ def get_default_skill_config(skills_dir: Path | str | None = None) -> SkillConfi
     """返回默认 Skill，未找到时返回内置兜底配置。"""
     configs = load_skill_configs(skills_dir)
     for cfg in configs:
-        if cfg.id == "standup_coach":
+        if cfg.id == "standup":
             return cfg
     # 兜底：与旧 Writer PROMPT 等价的默认配置
     return SkillConfig(
@@ -626,11 +626,6 @@ def load_plugin_skills(skills_dir: Path | str | None = None) -> list[ComedySkill
 
 _BUILTIN_SKILL_NAMES = {
     "standup_generator",
-    "crosstalk_generator",
-    "sketch_generator",
-    "sitcom_generator",
-    "manzai_generator",
-    "japanese_sketch_generator",
     "add_salt",
 }
 

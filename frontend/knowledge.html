@@ -231,11 +231,6 @@
                     <select id="default-kind">
                         <option value="">通用</option>
                         <option value="standup">脱口秀</option>
-                        <option value="crosstalk">相声</option>
-                        <option value="sketch">小品</option>
-                        <option value="sitcom">情景喜剧</option>
-                        <option value="manzai">漫才</option>
-                        <option value="japanese_sketch">日式短剧</option>
                     </select>
                 </div>
                 <div>
@@ -333,11 +328,6 @@
                     <select onchange="pendingFiles[${idx}].kind=this.value">
                         <option value="" ${item.kind===''?'selected':''}>通用</option>
                         <option value="standup" ${item.kind==='standup'?'selected':''}>脱口秀</option>
-                        <option value="crosstalk" ${item.kind==='crosstalk'?'selected':''}>相声</option>
-                        <option value="sketch" ${item.kind==='sketch'?'selected':''}>小品</option>
-                        <option value="sitcom" ${item.kind==='sitcom'?'selected':''}>情景喜剧</option>
-                        <option value="manzai" ${item.kind==='manzai'?'selected':''}>漫才</option>
-                        <option value="japanese_sketch" ${item.kind==='japanese_sketch'?'selected':''}>日式短剧</option>
                     </select>
                     <input type="text" list="topic-options" placeholder="主题" value="${escapeHtml(item.topic||'')}" onchange="pendingFiles[${idx}].topic=this.value" style="width:120px;" />
                     <input type="text" list="style-options" placeholder="风格" value="${escapeHtml(item.style||'')}" onchange="pendingFiles[${idx}].style=this.value" style="width:100px;" />
@@ -501,8 +491,7 @@
 
         function kindLabel(k) {
             const map = {
-                standup: '脱口秀', crosstalk: '相声', sketch: '小品',
-                sitcom: '情景喜剧', manzai: '漫才', japanese_sketch: '日式短剧',
+                standup: '脱口秀',
             };
             return map[k] || k;
         }

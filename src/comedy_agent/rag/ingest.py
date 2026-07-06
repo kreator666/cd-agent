@@ -135,7 +135,7 @@ class KnowledgeIngestor:
 
         Args:
             file_path: 文件路径。
-            kind: 喜剧种类标识，如 "standup" / "sketch" / "manzai"。
+            kind: 喜剧种类标识，当前仅 "standup"。
             style: 风格标识，如 "traditional" / "modern" / "自嘲"。
 
         Returns:

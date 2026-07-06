@@ -1,8 +1,0 @@
-id: open_source_skill
-name: 开源通用技巧
-description: 基于常见脱口秀技巧（setup/punchline、callback、三段式等）的通用写作风格。
-task_type: creative
-styles: []
-metadata:
-  kind: standup
-  source: open_source

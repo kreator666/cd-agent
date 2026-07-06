@@ -47,14 +47,14 @@ class TestScriptsCLI:
         )
         mock_memory.save_script(
             "u003",
-            ScriptData(title="B", content="b", script_type="sketch"),
+            ScriptData(title="B", content="b", script_type="draft"),
         )
         with patch("comedy_agent.api.cli._get_memory", return_value=mock_memory):
-            code = main(["scripts", "list", "--user-id", "u003", "--type", "sketch"])
+            code = main(["scripts", "list", "--user-id", "u003", "--type", "standup"])
             assert code == 0
             captured = capsys.readouterr()
-            assert "B" in captured.out
-            assert "A" not in captured.out
+            assert "A" in captured.out
+            assert "B" not in captured.out
 
     def test_scripts_get_success(self, capsys, mock_memory):
         from comedy_agent.memory.models import ScriptData

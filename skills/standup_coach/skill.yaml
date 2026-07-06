@@ -1,8 +1,0 @@
-id: standup_coach
-name: 脱口秀教练
-description: 基于 BVT 无害冒犯、ER 情绪流、观众理解五阶段等中文脱口秀理论体系的专业教练式写作 Skill，输出可直接背诵表演的逐字稿。
-task_type: creative
-styles: []
-metadata:
-  kind: standup
-  author: default

@@ -1,5 +1,6 @@
 """作品管理 API 单元测试。"""
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,7 +22,11 @@ def _patched_create_engine(*args, **kwargs):
 @pytest.fixture
 def client():
     """提供 TestClient，memory 使用内存数据库，带认证。"""
-    with patch(
+    cm_vector = patch("comedy_agent.api.server.VectorStore")
+    cm_retriever = patch("comedy_agent.api.server.ComedyRetriever")
+    cm_graph = patch("comedy_agent.api.server.build_chat_graph")
+
+    with cm_vector, cm_retriever, cm_graph, patch(
         "comedy_agent.memory.medium_term.create_engine",
         side_effect=_patched_create_engine,
     ), patch(
@@ -125,7 +130,7 @@ class TestListScripts:
                 "user_id": "u011",
                 "title": "B",
                 "content": "b",
-                "script_type": "sketch",
+                "script_type": "standup",
             },
         )
         response = client.get("/scripts?user_id=u011")
@@ -149,7 +154,7 @@ class TestListScripts:
                 "user_id": "u012",
                 "title": "B",
                 "content": "b",
-                "script_type": "sketch",
+                "script_type": "draft",
             },
         )
         response = client.get("/scripts?user_id=u012&script_type=standup")

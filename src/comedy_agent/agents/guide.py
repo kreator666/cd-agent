@@ -106,7 +106,7 @@ class GuideAgent:
 
     def _load_collection_prompt(self, state: ComedyState) -> str | None:
         """若当前选中的 Skill 提供 collection_prompt.md，则加载之。"""
-        skill_id = getattr(state, "selected_skill", None) or "standup_coach"
+        skill_id = getattr(state, "selected_skill", None) or "standup"
         if not skill_id:
             return None
         prompt_path = settings.skills_dir / skill_id / "collection_prompt.md"

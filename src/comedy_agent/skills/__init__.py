@@ -2,19 +2,10 @@
 
 from comedy_agent.skills.base import ComedySkill
 from comedy_agent.skills.standup import StandupSkill
-from comedy_agent.skills.crosstalk import CrosstalkSkill
-from comedy_agent.skills.sketch import SketchSkill
-from comedy_agent.skills.sitcom import SitcomSkill
-from comedy_agent.skills.manzai import ManzaiSkill
-from comedy_agent.skills.japanese_sketch import JapaneseSketchSkill
 from comedy_agent.skills.add_salt import AddSaltSkill
+
 __all__ = [
     "ComedySkill",
     "StandupSkill",
-    "CrosstalkSkill",
-    "SketchSkill",
-    "SitcomSkill",
-    "ManzaiSkill",
-    "JapaneseSketchSkill",
     "AddSaltSkill",
 ]

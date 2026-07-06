@@ -60,8 +60,8 @@ class TestScriptQualityEvaluator:
     def test_length_expectations(self):
         evaluator = ScriptQualityEvaluator()
         short = "大家好，谢谢。"
-        result = evaluator.evaluate(short, script_type="crosstalk")
-        # 相声期望 1500-5000 字，短文本长度分应该低
+        result = evaluator.evaluate(short, script_type="standup")
+        # 脱口秀期望 800-3000 字，短文本长度分应该低
         assert result.length_score < 10
 
     def test_result_to_dict(self):

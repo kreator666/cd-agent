@@ -68,7 +68,7 @@ class ScriptData(BaseModel):
     title: str | None = Field(default=None, description="作品标题")
     content: str = Field(description="作品内容")
     script_type: str | None = Field(
-        default=None, description="作品类型：standup / sketch / crosstalk / sitcom"
+        default=None, description="作品类型：standup"
     )
     rating: float | None = Field(default=None, description="用户评分 0.0-5.0")
     tags: list[str] | None = Field(default=None, description="标签列表")
@@ -86,7 +86,7 @@ class DocumentData(BaseModel):
     user_id: str = Field(description="所属用户")
     filename: str = Field(description="原始文件名")
     doc_type: str | None = Field(default=None, description="文档类型：theory / case / mixed")
-    kind: str | None = Field(default=None, description="喜剧种类：standup / sketch / manzai / japanese_sketch / crosstalk / sitcom / general")
+    kind: str | None = Field(default=None, description="喜剧种类：standup / general")
     style: str | None = Field(default=None, description="风格标识：traditional / modern / 自嘲 / 讽刺 / 愤怒式 / 荒诞式 / 日常观察")
     chunk_strategy: str | None = Field(default=None, description="分块策略：fixed / paragraph / scene / dialogue / subtitle")
     topic: str | None = Field(default=None, description="文档主题/话题，如：职场加班、相亲经历")
@@ -142,7 +142,7 @@ class ProjectData(BaseModel):
     project_id: str | None = Field(default=None, description="项目唯一标识，留空则自动生成")
     user_id: str = Field(description="所属用户")
     name: str = Field(description="项目名称")
-    project_type: str | None = Field(default=None, description="项目类型：standup / sketch / salt / mixed")
+    project_type: str | None = Field(default=None, description="项目类型：standup / salt / mixed")
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
 

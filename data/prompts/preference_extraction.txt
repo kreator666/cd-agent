@@ -9,7 +9,7 @@
   "disliked_tropes": ["用户明确讨厌的梗或套路，没有则省略"],
   "preferred_duration": "用户偏好的作品时长，如3分钟、5-10分钟，没有则省略",
   "preferred_audience": "用户偏好的受众，如年轻人、职场人，没有则省略",
-  "preferred_script_type": "用户偏好的作品类型，如standup/sketch/crosstalk/sitcom，没有则省略",
+  "preferred_script_type": "用户偏好的作品类型，当前仅支持 standup，没有则省略",
   "creative_notes": "其他创作相关的偏好或习惯，没有则省略"
 }
 

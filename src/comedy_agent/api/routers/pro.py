@@ -199,12 +199,7 @@ async def list_pro_skills(skill_type: str | None = None) -> list[dict]:
     from comedy_agent.core.skill_loader import load_skill_configs
 
     for cfg in load_skill_configs(settings.skills_dir):
-        if cfg.metadata.get("kind") != "standup" and cfg.id not in {
-            "open_source_skill",
-            "zhou_qimo",
-            "xu_zhisheng",
-            "hu_lan",
-        }:
+        if cfg.metadata.get("kind") != "standup":
             continue
         info = {
             "id": cfg.id,

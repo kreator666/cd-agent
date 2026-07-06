@@ -1,4 +1,4 @@
-"""建议节点：使用 standup_v2 教练思路对用户段落给出改进建议。
+"""建议节点：使用 standup 理论体系对用户段落给出改进建议。
 
 用户点击"给出建议"后调用，输出建议文本并回到 human_review 展示。
 """
@@ -39,7 +39,7 @@ _SUGGEST_PROMPT = """{coach_system_prompt}
 
 
 def suggest_node(state: ComedyState, llm: BaseChatModel | None = None) -> dict:
-    """基于 standup_v2 理论对用户段落给出建议。
+    """基于 standup 理论对用户段落给出建议。
 
     Returns:
         dict: suggestions + phase="human_review"
@@ -55,14 +55,14 @@ def suggest_node(state: ComedyState, llm: BaseChatModel | None = None) -> dict:
 
     analysis = state.analysis or {}
 
-    # 加载 standup_v2 的理论体系作为教练视角
+    # 加载 standup 的理论体系作为教练视角
     coach_system = ""
     try:
-        coach_cfg = load_skill_config(settings.skills_dir / "standup_v2")
+        coach_cfg = load_skill_config(settings.skills_dir / "standup")
         if coach_cfg:
             coach_system = coach_cfg.system_prompt or ""
     except Exception as e:
-        logger.warning("加载 standup_v2 失败: %s", e)
+        logger.warning("加载 standup 失败: %s", e)
 
     if not coach_system:
         coach_system = (

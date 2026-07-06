@@ -100,9 +100,9 @@ def test_manual_section_mode_flow():
         assert interrupt_value.get("section_examples")
         assert interrupt_value.get("section_goal") == "铺垫通勤"
 
-        # 用户提交第一段（模拟前端残留的 @writer_agent 前缀）
+        # 用户提交第一段（模拟前端残留的 @standup 前缀）
         result = graph.invoke(
-            Command(resume="@writer_agent 用户写的第一段"),
+            Command(resume="@standup 用户写的第一段"),
             config={"configurable": {"thread_id": thread_id}},
         )
         assert result["phase"] == "human_review"

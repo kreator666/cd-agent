@@ -2,6 +2,8 @@
 
 根据用户输入中的 @ 提及、UI 显式选择、当前 State 中已有的 Skill 选择，
 决定本次请求应使用的 `selected_skill` 与 `selected_style`。
+
+当前仅保留 standup 写作 Skill。
 """
 
 from __future__ import annotations
@@ -17,13 +19,8 @@ logger = logging.getLogger(__name__)
 
 # 常见 Skill 名称/别名到 Skill ID 的映射
 _SKILL_ALIASES: dict[str, str] = {
-    "默认": "standup_coach",
-    "脱口秀教练": "standup_coach",
-    "开源": "open_source_skill",
-    "开源通用技巧": "open_source_skill",
-    "周奇墨": "zhou_qimo",
-    "徐志胜": "xu_zhisheng",
-    "呼兰": "hu_lan",
+    "默认": "standup",
+    "脱口秀": "standup",
 }
 
 # 哪些 metadata.kind 被视为写作类 Skill
@@ -31,7 +28,7 @@ _WRITING_KINDS = {"standup"}
 
 
 def _list_writing_skill_ids() -> set[str]:
-    """加载所有写作类 Skill 的 ID。"""
+    """加载所有写作类 Skill 的 ID。当前仅保留 standup。"""
     configs = load_skill_configs(settings.skills_dir)
     return {
         cfg.id
@@ -58,9 +55,9 @@ def resolve_skill(
 
     优先级：
     1. 前端显式传入的 skill_id / style。
-    2. 用户输入中的 @ 提及（如 @周奇墨）。
+    2. 用户输入中的 @ 提及（如 @standup / @脱口秀）。
     3. State 中已保存的 selected_skill / selected_style（跨轮保留）。
-    4. 兜底：standup_coach。
+    4. 兜底：standup。
 
     Args:
         state: 当前 LangGraph 状态。
@@ -94,7 +91,7 @@ def resolve_skill(
         style = state.selected_style
 
     # 4. 兜底
-    default_id = "standup_coach"
+    default_id = "standup"
     if not skill_id:
         skill_id = default_id
 

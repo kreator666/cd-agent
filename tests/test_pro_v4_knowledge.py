@@ -13,8 +13,8 @@ class TestProV4Knowledge:
             output="最终剧本内容",
             response_type="script",
             skill_meta={
-                "skill_id": "standup_coach",
-                "skill_name": "脱口秀教练",
+                "skill_id": "standup",
+                "skill_name": "脱口秀",
                 "retrieved_examples_count": 2,
                 "knowledge_references": [
                     {"id": "three-setup-four-punch", "title": "三番四抖", "category": "technique"}

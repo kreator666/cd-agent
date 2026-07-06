@@ -347,6 +347,7 @@ class SQLMemoryStore(MemoryStore):
         summary: str | None = None,
         source: str = "chat",
         metadata: dict[str, Any] | None = None,
+        slot_conversations: dict[str, list[dict[str, Any]]] | None = None,
     ) -> None:
         with self._new_session() as session:
             conv = (
@@ -354,6 +355,9 @@ class SQLMemoryStore(MemoryStore):
                 .filter_by(session_id=session_id)
                 .first()
             )
+            extra_metadata = dict(metadata) if metadata else {}
+            if slot_conversations is not None:
+                extra_metadata["slot_conversations"] = slot_conversations
             if conv is None:
                 conv = UserConversation(
                     session_id=session_id,
@@ -361,7 +365,7 @@ class SQLMemoryStore(MemoryStore):
                     messages=messages,
                     summary=summary,
                     source=source,
-                    extra_metadata=metadata,
+                    extra_metadata=extra_metadata or None,
                     expires_at=self._now() + timedelta(hours=24),
                 )
                 session.add(conv)
@@ -369,8 +373,7 @@ class SQLMemoryStore(MemoryStore):
                 conv.messages = messages
                 conv.summary = summary
                 conv.source = source
-                if metadata is not None:
-                    conv.extra_metadata = metadata
+                conv.extra_metadata = extra_metadata or None
                 conv.updated_at = self._now()
             session.commit()
             logger.debug("Saved conversation: %s (%s)", session_id, source)
@@ -386,12 +389,15 @@ class SQLMemoryStore(MemoryStore):
             )
             if conv is None or self._is_expired(conv):
                 return None
+            metadata = conv.extra_metadata or {}
+            slot_conversations = metadata.pop("slot_conversations", None)
             return ConversationData(
                 session_id=conv.session_id,
                 messages=conv.messages,
                 summary=conv.summary,
                 source=conv.source,
-                metadata=conv.extra_metadata,
+                metadata=metadata or None,
+                slot_conversations=slot_conversations,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
                 expires_at=conv.expires_at,

@@ -56,6 +56,9 @@ class ConversationData(BaseModel):
     summary: str | None = Field(default=None, description="对话摘要")
     source: str = Field(default="chat", description="来源：chat / salt / actor / speed / pro")
     metadata: dict[str, Any] | None = Field(default=None, description="额外元数据")
+    slot_conversations: dict[str, list[dict[str, Any]]] | None = Field(
+        default=None, description="各维度独立对话历史"
+    )
     created_at: datetime | None = Field(default=None, description="创建时间")
     updated_at: datetime | None = Field(default=None, description="更新时间")
     expires_at: datetime | None = Field(default=None, description="过期时间")

@@ -528,10 +528,16 @@ async def pro_chat_v4(
             if not prev_values and state.memory is not None:
                 try:
                     conv = state.memory.load_conversation(user_id, session_id)
-                    if conv and conv.messages:
-                        history_messages = dicts_to_messages(conv.messages)
+                    if conv:
+                        if conv.messages:
+                            history_messages = dicts_to_messages(conv.messages)
                         if conv.summary:
                             prev_values["conversation_summary"] = conv.summary
+                        if conv.slot_conversations:
+                            prev_values["slot_conversations"] = {
+                                dim: dicts_to_messages(msgs)
+                                for dim, msgs in conv.slot_conversations.items()
+                            }
                 except Exception:
                     logger.debug("从 memory 加载会话历史失败", exc_info=True)
 
@@ -591,10 +597,21 @@ async def pro_chat_v4(
 
         # 把本轮 AI 回复追加到 checkpoint，供下一轮 Context Analyzer / Planner 读取
         try:
+            ai_message = AIMessage(content=response.content)
             state.graph.update_state(
                 config,
-                {"messages": [AIMessage(content=response.content)]},
+                {"messages": [ai_message]},
             )
+
+            # 同时把 AI 回复归档到当前活跃维度的独立对话历史中
+            current_values = state.graph.get_state(config)
+            if current_values and current_values.values:
+                active_dim = current_values.values.get("active_slot_dimension")
+                if active_dim:
+                    state.graph.update_state(
+                        config,
+                        {"slot_conversations": {active_dim: [ai_message]}},
+                    )
         except Exception:
             logger.debug("追加 AI 消息到 checkpoint 失败，继续返回响应", exc_info=True)
 
@@ -603,12 +620,17 @@ async def pro_chat_v4(
             final_state = state.graph.get_state(config)
             if final_state and final_state.values and state.memory is not None:
                 msgs = final_state.values.get("messages") or []
+                slot_conversations = final_state.values.get("slot_conversations") or {}
                 state.memory.save_conversation(
                     user_id=user_id,
                     session_id=session_id,
                     messages=messages_to_dicts(msgs),
                     summary=response.content[:80] if response.content else None,
                     source="pro_v4",
+                    slot_conversations={
+                        dim: messages_to_dicts(msgs)
+                        for dim, msgs in slot_conversations.items()
+                    },
                 )
         except Exception:
             logger.debug("保存会话到 memory 失败", exc_info=True)

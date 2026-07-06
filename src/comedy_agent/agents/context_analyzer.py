@@ -29,6 +29,9 @@ PROMPT = """你是一位喜剧创作分析助手。请根据用户与创作助�
 ## 已收集的槽位（可能为空）
 {slots}
 
+## 各维度专项对话历史（如没有则忽略）
+{slot_conversations}
+
 ## 上一轮分析（如没有则忽略）
 {previous_analysis}
 
@@ -42,6 +45,35 @@ PROMPT = """你是一位喜剧创作分析助手。请根据用户与创作助�
 - emotion: 目标情绪基调，如愤怒/荒诞/尴尬/温暖/无奈
 
 只输出结构化结果，不要解释。"""
+
+
+def _format_slot_conversations(
+    slot_conversations: dict[str, list[AnyMessage]] | None,
+    max_turns: int = 6,
+) -> str:
+    """把各维度独立对话历史格式化为文本。"""
+    if not slot_conversations:
+        return "（无）"
+
+    lines: list[str] = []
+    for dimension in ("话题", "态度", "偏见", "情绪"):
+        msgs = slot_conversations.get(dimension)
+        if not msgs:
+            continue
+        lines.append(f"【{dimension}】")
+        recent = msgs[-max_turns * 2:]
+        for m in recent:
+            role = getattr(m, "type", "unknown")
+            content = str(getattr(m, "content", "")).strip()
+            if not content:
+                continue
+            if role == "human":
+                lines.append(f"  用户：{content}")
+            elif role == "ai":
+                lines.append(f"  助手：{content}")
+            else:
+                lines.append(f"  {role}：{content}")
+    return "\n".join(lines) if lines else "（无）"
 
 
 def _format_history(
@@ -118,6 +150,7 @@ class ContextAnalyzerAgent:
             conversation_summary=state.conversation_summary or "（无）",
             conversation_history=_format_history(state.messages),
             slots="\n".join(f"- {k}：{v}" for k, v in slots.items()) or "（无）",
+            slot_conversations=_format_slot_conversations(state.slot_conversations),
             previous_analysis="\n".join(f"- {k}：{v}" for k, v in previous.items()) or "（无）",
             user_input=state.user_input,
         )

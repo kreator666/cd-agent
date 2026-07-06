@@ -37,6 +37,9 @@ PROMPT = """你是一位脱口秀结构规划师。请根据完整对话历史�
 - 偏见注意：{bias}
 - 情绪基调：{emotion}
 
+## 各维度最终理解（基于用户专项对话总结）
+{slot_summaries}
+
 ## 可参考的喜剧理论/技法/结构模板
 {knowledge_context}
 
@@ -142,6 +145,7 @@ class PlannerAgent:
             )
 
         analysis = state.analysis or {}
+        slot_summaries = self._summarize_slot_conversations(state, llm)
         knowledge_context, knowledge_references = self._retrieve_knowledge(analysis, state.user_input)
         prompt = PROMPT.format(
             conversation_summary=state.conversation_summary or "（无）",
@@ -151,6 +155,7 @@ class PlannerAgent:
             attitude=analysis.get("attitude", ""),
             bias=analysis.get("bias", ""),
             emotion=analysis.get("emotion", ""),
+            slot_summaries=slot_summaries,
             knowledge_context=knowledge_context,
         )
 
@@ -172,6 +177,47 @@ class PlannerAgent:
             "current_section": 0,
             "sections": [],
         }
+
+    @staticmethod
+    def _summarize_slot_conversations(
+        state: ComedyState, llm: BaseChatModel
+    ) -> str:
+        """四个维度都填满时，对各维度独立对话历史做总结。
+
+        若维度未填满或无专项对话历史，返回空字符串。
+        """
+        slots = state.slots or {}
+        slot_conversations = state.slot_conversations or {}
+
+        # 判断四个维度是否都已收集（中文 slots 优先）
+        required = ("话题", "态度", "偏见", "情绪")
+        if not all(slots.get(dim) for dim in required):
+            return "（维度未集齐，不做专项总结）"
+
+        if not slot_conversations:
+            return "（无专项对话历史）"
+
+        summary_lines: list[str] = []
+        for dim in required:
+            msgs = slot_conversations.get(dim)
+            if not msgs:
+                summary_lines.append(f"- {dim}：{slots.get(dim, '')}")
+                continue
+
+            history_text = _format_history(msgs, max_turns=6)
+            prompt = (
+                f"请根据用户与助手关于「{dim}」的以下对话，"
+                f"总结用户最终想要的 {dim}。只输出一句话。\n\n{history_text}"
+            )
+            try:
+                response = llm.invoke([("human", prompt)])
+                summary = str(getattr(response, "content", response)).strip()
+            except Exception as e:
+                logger.warning("总结 %s 维度对话失败: %s", dim, e)
+                summary = slots.get(dim, "")
+            summary_lines.append(f"- {dim}：{summary}")
+
+        return "\n".join(summary_lines)
 
     @staticmethod
     def _retrieve_knowledge(

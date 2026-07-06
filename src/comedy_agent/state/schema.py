@@ -13,6 +13,17 @@ from langgraph.graph.message import add_messages
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def add_slot_conversations(
+    left: dict[str, list[AnyMessage]] | None,
+    right: dict[str, list[AnyMessage]] | None,
+) -> dict[str, list[AnyMessage]]:
+    """合并两个维度对话字典，相同维度的消息列表做 extend。"""
+    merged: dict[str, list[AnyMessage]] = {k: list(v) for k, v in (left or {}).items()}
+    for k, msgs in (right or {}).items():
+        merged.setdefault(k, []).extend(msgs)
+    return merged
+
+
 class ComedyState(BaseModel):
     """喜剧创作 Agent 的全局状态。
 
@@ -184,6 +195,14 @@ class ComedyState(BaseModel):
     slots: dict[str, str] | None = Field(
         default=None,
         description="已收集的 4 维度槽位：话题/态度/偏见/情绪",
+    )
+    active_slot_dimension: str | None = Field(
+        default=None,
+        description="当前活跃维度（用户最近一次 @ 的维度），用于归档助手回复",
+    )
+    slot_conversations: Annotated[dict[str, list[AnyMessage]], add_slot_conversations] = Field(
+        default_factory=dict,
+        description="各维度的独立对话历史：key 为维度名（话题/态度/偏见/情绪）",
     )
 
     # ------------------------------------------------------------------ #

@@ -224,3 +224,106 @@ class TestProV4State:
         assert invoked.conversation_summary == "测试摘要"
         # 验证调用了 memory 加载
         state.memory.load_conversation.assert_called_once_with("prouser", "fallback-session")
+
+    def test_memory_fallback_loads_slot_conversations(self, client):
+        """checkpoint 为空时，应从 memory 加载维度独立对话历史。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = None
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "complete",
+                "output": "继续的回复",
+            }
+        )
+        state.graph.update_state.return_value = None
+
+        mock_conv = MagicMock()
+        mock_conv.messages = []
+        mock_conv.summary = None
+        mock_conv.slot_conversations = {
+            "话题": [{"role": "human", "content": "@话题 加班"}],
+            "态度": [{"role": "human", "content": "@态度 讽刺"}],
+        }
+        state.memory.load_conversation = MagicMock(return_value=mock_conv)
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "继续", "session_id": "slot-session"},
+        )
+        assert resp.status_code == 200
+
+        invoked = state.graph.ainvoke.call_args.args[0]
+        assert isinstance(invoked, ComedyState)
+        assert invoked.slot_conversations is not None
+        assert invoked.slot_conversations["话题"][0].content == "@话题 加班"
+        assert invoked.slot_conversations["态度"][0].content == "@态度 讽刺"
+
+    def test_ai_reply_archived_to_active_slot_dimension(self, client):
+        """AI 回复应归档到当前活跃维度的独立对话历史中。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = MagicMock(
+            values={
+                "phase": "consulting",
+                "active_slot_dimension": "话题",
+                "slot_conversations": {
+                    "话题": [HumanMessage(content="@话题 加班")]
+                },
+            }
+        )
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "consulting",
+                "output": "收到，话题是加班",
+            }
+        )
+        state.graph.update_state.return_value = None
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "@话题 加班"},
+        )
+        assert resp.status_code == 200
+
+        # 验证 update_state 被调用以追加 AI 消息到 slot_conversations
+        update_calls = [call.args for call in state.graph.update_state.call_args_list]
+        slot_conv_update = [c for c in update_calls if len(c) > 1 and "slot_conversations" in c[1]]
+        assert len(slot_conv_update) == 1
+        updated = slot_conv_update[0][1]["slot_conversations"]
+        assert "话题" in updated
+        assert updated["话题"][0].content == "收到，话题是加班"
+
+    def test_save_conversation_persists_slot_conversations(self, client):
+        """保存会话时应持久化维度独立对话历史。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = MagicMock(
+            values={
+                "phase": "complete",
+                "messages": [HumanMessage(content="@话题 加班")],
+                "slot_conversations": {
+                    "话题": [HumanMessage(content="@话题 加班")]
+                },
+            }
+        )
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "complete",
+                "output": "收到",
+            }
+        )
+        state.graph.update_state.return_value = None
+        state.memory.save_conversation = MagicMock()
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "@话题 加班", "session_id": "persist-session"},
+        )
+        assert resp.status_code == 200
+
+        save_call = state.memory.save_conversation.call_args
+        assert save_call is not None
+        saved_slot_conversations = save_call.kwargs.get("slot_conversations")
+        assert saved_slot_conversations is not None
+        assert saved_slot_conversations["话题"][0]["content"] == "@话题 加班"

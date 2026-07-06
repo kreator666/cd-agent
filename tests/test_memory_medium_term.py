@@ -59,6 +59,25 @@ class TestConversationShortTerm:
     def test_load_nonexistent_conversation(self, store: SQLMemoryStore) -> None:
         assert store.load_conversation("u011", "s999") is None
 
+    def test_save_and_load_slot_conversations(self, store: SQLMemoryStore) -> None:
+        """维度独立对话历史应能正确保存和恢复。"""
+        store.get_or_create_user("u016")
+        store.save_conversation(
+            "u016",
+            "s006",
+            messages=[{"role": "human", "content": "hello"}],
+            slot_conversations={
+                "话题": [{"role": "human", "content": "@话题 加班"}],
+                "态度": [{"role": "human", "content": "@态度 讽刺"}],
+            },
+        )
+
+        conv = store.load_conversation("u016", "s006")
+        assert conv is not None
+        assert conv.slot_conversations is not None
+        assert conv.slot_conversations["话题"][0]["content"] == "@话题 加班"
+        assert conv.slot_conversations["态度"][0]["content"] == "@态度 讽刺"
+
     def test_update_conversation(self, store: SQLMemoryStore) -> None:
         store.get_or_create_user("u012")
         store.save_conversation("u012", "s002", [{"role": "human", "content": "a"}])

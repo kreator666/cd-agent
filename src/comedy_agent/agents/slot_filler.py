@@ -10,6 +10,8 @@ import logging
 import re
 from typing import Any
 
+from langchain_core.messages import HumanMessage
+
 from comedy_agent.state.schema import ComedyState
 
 logger = logging.getLogger(__name__)
@@ -52,10 +54,13 @@ class SlotFillingAgent:
             llm: 预留参数，当前实现基于规则解析，暂不使用 LLM。
 
         Returns:
-            包含 ``slots`` 与 ``phase=slot_checking`` 的更新字典。
+            包含 ``slots``、``slot_conversations``、``active_slot_dimension``
+            与 ``phase=slot_checking`` 的更新字典。
         """
         slots = dict(state.slots or {})
+        slot_conversations = {k: list(v) for k, v in (state.slot_conversations or {}).items()}
         user_input = state.user_input or ""
+        active_dimension: str | None = None
 
         # 解析 @mention 与显式槽位声明
         extracted = self._extract_slots(user_input)
@@ -63,12 +68,20 @@ class SlotFillingAgent:
             normalized = self._normalize_key(key)
             if normalized:
                 slots[normalized] = value.strip()
+                # 将本轮用户输入归档到该维度的独立对话历史中
+                slot_conversations.setdefault(normalized, []).append(HumanMessage(content=user_input))
+                active_dimension = normalized
                 logger.debug("slot_filler: filled %s = %s", normalized, value.strip())
 
-        return {
+        updates: dict[str, Any] = {
             "slots": slots,
             "phase": "slot_checking",
         }
+        if slot_conversations:
+            updates["slot_conversations"] = slot_conversations
+        if active_dimension:
+            updates["active_slot_dimension"] = active_dimension
+        return updates
 
     def _extract_slots(self, text: str) -> dict[str, str]:
         """从文本中提取槽位键值对。"""

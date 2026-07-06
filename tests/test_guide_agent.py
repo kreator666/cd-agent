@@ -35,7 +35,7 @@ def test_guide_parses_abc_options(agent):
         llm=_make_llm(content),
     )
     assert result["response_type"] == "guide"
-    assert result["phase"] == "complete"
+    assert result["phase"] == "consulting"
     assert "确定话题" in result["output"]
     assert len(result["suggested_actions"]) == 3
     assert result["suggested_actions"][0]["value"] == "@话题 加班"

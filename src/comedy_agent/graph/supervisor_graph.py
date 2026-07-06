@@ -121,13 +121,14 @@ def build_supervisor_graph() -> CompiledStateGraph:
 
     # Worker 执行完后回到 Supervisor
     for name in WORKER_NODES:
-        if name in ("chat", "plan_review", "process_plan_feedback"):
-            # chat 直接结束；计划审阅链路单独定义
+        if name in ("chat", "guide", "plan_review", "process_plan_feedback"):
+            # chat/guide 直接结束；计划审阅链路单独定义
             continue
         builder.add_edge(name, "supervisor")
 
-    # chat 与 finalize 直连 END
+    # chat、guide 与 finalize 直连 END
     builder.add_edge("chat", END)
+    builder.add_edge("guide", END)
     builder.add_edge("finalize", END)
 
     # 人类审阅链路：human -> process_feedback -> supervisor

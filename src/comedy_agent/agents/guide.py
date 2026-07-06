@@ -100,7 +100,7 @@ class GuideAgent:
         return {
             "output": reply,
             "response_type": "guide",
-            "phase": "complete",
+            "phase": "consulting",
             "suggested_actions": actions,
         }
 

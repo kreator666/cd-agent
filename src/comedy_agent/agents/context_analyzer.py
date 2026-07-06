@@ -39,11 +39,12 @@ PROMPT = """你是一位喜剧创作分析助手。请根据用户与创作助�
 {user_input}
 
 请综合以上信息，输出以下 JSON 对应结构：
-- topic: 核心话题（10 字以内）
+- topic: 核心话题
 - attitude: 创作者对话题的态度，如讽刺/自嘲/观察/批判/温情
 - bias: 可能存在的认知偏见或刻板印象，没有则写'无'
 - emotion: 目标情绪基调，如愤怒/荒诞/尴尬/温暖/无奈
 
+重要：如果「已收集的槽位」中已明确包含某个维度，请直接使用槽位中的值，不要自由发挥或改写。
 只输出结构化结果，不要解释。"""
 
 
@@ -136,9 +137,24 @@ class ContextAnalyzerAgent:
             logger.warning("上下文分析结构化输出失败，使用文本兜底: %s", e)
             result = self._text_fallback(llm, state)
 
-        logger.debug("context_analyzer: %s", result.model_dump())
+        analysis = result.model_dump()
+
+        # 如果 slots 中已经明确收集了某个维度，优先使用 slots 中的值，
+        # 避免 LLM 自由提炼后偏离用户原意。
+        slots = state.slots or {}
+        slot_to_analysis = {
+            "话题": "topic",
+            "态度": "attitude",
+            "偏见": "bias",
+            "情绪": "emotion",
+        }
+        for slot_key, analysis_key in slot_to_analysis.items():
+            if slots.get(slot_key):
+                analysis[analysis_key] = slots[slot_key]
+
+        logger.debug("context_analyzer: %s", analysis)
         return {
-            "analysis": result.model_dump(),
+            "analysis": analysis,
             "phase": "planning",
         }
 

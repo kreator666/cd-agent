@@ -111,3 +111,34 @@ def test_analyzer_fallback_uses_previous_analysis():
 
     assert captured["prompt"]
     assert result["analysis"]["topic"] == "相亲"
+
+
+def test_analyzer_respects_existing_slots():
+    """slots 中已填充的维度应优先使用，覆盖 LLM 的自由提炼。"""
+    agent = ContextAnalyzerAgent()
+    llm = MagicMock()
+
+    structured = MagicMock()
+    structured.invoke.return_value = AnalysisResult(
+        topic="相亲", attitude="自嘲", bias="无", emotion="尴尬"
+    )
+    llm.with_structured_output.return_value = structured
+
+    result = agent.run(
+        ComedyState(
+            user_input="开始创作",
+            slots={
+                "话题": "假如我有三千万；我怕被绑架；肆意挥霍",
+                "态度": "自嘲",
+                "偏见": "有钱人都怕被绑架",
+                "情绪": "荒诞",
+            },
+            messages=[HumanMessage(content="@话题 假如我有三千万")],
+        ),
+        llm=llm,
+    )
+
+    assert result["analysis"]["topic"] == "假如我有三千万；我怕被绑架；肆意挥霍"
+    assert result["analysis"]["attitude"] == "自嘲"
+    assert result["analysis"]["bias"] == "有钱人都怕被绑架"
+    assert result["analysis"]["emotion"] == "荒诞"

@@ -12,6 +12,7 @@ from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
+from comedy_agent.agents.slot_filler import SlotFillingAgent
 from comedy_agent.core.config import settings
 from comedy_agent.models.factory import ModelFactory
 from comedy_agent.state.schema import ComedyState
@@ -108,7 +109,7 @@ class GuideAgent:
         """加载用于槽位收集的 Skill collection_prompt.md。
 
         优先使用当前选中 Skill 的 collection_prompt；若话题维度缺失，
-        则回退到专用的话题引导 Skill。
+        或用户刚聊完话题需要继续深挖，则回退到专用的话题引导 Skill。
         """
         skill_id = getattr(state, "selected_skill", None) or "standup"
         if skill_id:
@@ -116,9 +117,15 @@ class GuideAgent:
             if prompt_path.exists():
                 return prompt_path.read_text(encoding="utf-8").strip()
 
-        # 若话题尚未收集，使用话题引导 Skill 的 collection_prompt
         slots = state.slots or {}
-        if not slots.get("话题"):
+        active_dim = getattr(state, "active_slot_dimension", None)
+        missing = SlotFillingAgent.missing_slots(slots)
+
+        # 话题缺失，或刚聊完话题且还有其他维度未收集时，使用话题引导 Skill
+        topic_missing = not slots.get("话题")
+        just_talked_topic = active_dim == "话题" and "话题" not in missing and missing
+
+        if topic_missing or just_talked_topic:
             topic_prompt_path = settings.skills_dir / "topic" / "collection_prompt.md"
             if topic_prompt_path.exists():
                 return topic_prompt_path.read_text(encoding="utf-8").strip()

@@ -115,7 +115,26 @@ def test_guide_uses_topic_skill_when_topic_missing(agent):
 
     assert result["response_type"] == "guide"
     prompt = llm.invoke.call_args[0][0][0][1]
-    assert "话题引导师" in prompt or "深挖子话题" in prompt
+    assert "话题引导师" in prompt or "深挖子话题" in prompt or "话题缺失时" in prompt
+
+
+def test_guide_uses_topic_skill_to_deepen_topic(agent):
+    """话题已填充但用户刚聊完话题时，应继续用 topic Skill 深挖子话题。"""
+    llm = _make_llm(
+        "回复: 你想重点讲暴富后的哪个场景？\n选项:\nA. 被绑架的焦虑\nB. 挥霍的日常\nC. 三千万带来的社交变化"
+    )
+    state = ComedyState(
+        user_input="@话题 假如我有三千万",
+        phase="consulting",
+        slots={"话题": "假如我有三千万"},
+        active_slot_dimension="话题",
+        selected_skill="standup",
+    )
+    result = agent.run(state, llm=llm)
+
+    assert result["response_type"] == "guide"
+    prompt = llm.invoke.call_args[0][0][0][1]
+    assert "话题引导师" in prompt or "深挖子话题" in prompt or "话题已给出" in prompt
 
 
 def test_guide_falls_back_to_default_prompt_when_slots_full(agent):

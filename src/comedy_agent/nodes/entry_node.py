@@ -49,6 +49,10 @@ def entry_node(state: ComedyState) -> dict:
     if _looks_like_unknown_term_query(user_input):
         return {"intent": "search", "phase": "searching"}
 
+    # 用户确认满意并触发大纲/创作：直接判定为 writing
+    if _looks_like_creation_confirmation(user_input):
+        return {"intent": "writing", "phase": "filling_slots"}
+
     llm = ModelFactory.get_model(state.model, task_type="analytical")
     result = _agent.run(state, llm=llm)
 
@@ -69,3 +73,13 @@ def _looks_like_unknown_term_query(user_input: str) -> bool:
         if pattern.search(text):
             return True
     return False
+
+
+# 明确触发创作的确认口令
+_CREATION_CONFIRMATION_KEYWORDS = ("生成大纲", "开始写作", "直接开始写作", "确认满意")
+
+
+def _looks_like_creation_confirmation(user_input: str) -> bool:
+    """判断用户输入是否是确认满意并触发创作的口令。"""
+    text = user_input.strip()
+    return any(kw in text for kw in _CREATION_CONFIRMATION_KEYWORDS)

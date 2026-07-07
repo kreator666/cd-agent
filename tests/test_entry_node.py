@@ -79,3 +79,21 @@ def test_long_statement_not_treated_as_unknown_term():
     assert result["intent"] == "writing"
     assert result["phase"] == "filling_slots"
     mock_factory.get_model.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "user_input",
+    [
+        "确认满意，生成大纲",
+        "直接开始写作",
+        "开始写作吧",
+    ],
+)
+def test_creation_confirmation_directly_routes_to_writing(user_input):
+    """用户确认满意并触发创作时直接判定为 writing，不调用 LLM。"""
+    with patch("comedy_agent.nodes.entry_node.ModelFactory") as mock_factory:
+        result = entry_node(ComedyState(user_input=user_input))
+
+    assert result["intent"] == "writing"
+    assert result["phase"] == "filling_slots"
+    mock_factory.get_model.assert_not_called()

@@ -42,7 +42,7 @@ PROMPT = """你是一位意图分类助手。请根据用户输入判断其意�
 # 规则兜底关键词
 _WRITING_KEYWORDS = (
     "写", "创作", "来一段", "写一段", "写个", "来个", "段子", "脱口秀",
-    "小品", "相声", "漫才", "剧本",
+    "小品", "相声", "漫才", "剧本", "生成大纲", "出大纲", "定大纲",
 )
 _SEARCH_KEYWORDS = ("搜索", "查一下", "查", "找", "资料", "素材")
 _CONTROL_KEYWORDS = ("停止", "结束", "退出", "重置", "清空")
@@ -125,7 +125,7 @@ class IntentClassifierAgent:
             return IntentClassificationResult(UserIntent.CONTROL), False
         if any(kw in lowered for kw in ("search", "搜索", "查", "找资料")):
             return IntentClassificationResult(UserIntent.SEARCH), False
-        if any(kw in lowered for kw in ("writing", "创作", "写作", "写一段")):
+        if any(kw in lowered for kw in ("writing", "创作", "写作", "写一段", "生成大纲", "出大纲")):
             return IntentClassificationResult(UserIntent.WRITING), False
         if any(kw in lowered for kw in ("consult", "咨询", "建议", "怎么")):
             return IntentClassificationResult(UserIntent.CONSULT), False

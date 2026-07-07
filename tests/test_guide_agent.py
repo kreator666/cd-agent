@@ -137,15 +137,35 @@ def test_guide_uses_topic_skill_to_deepen_topic(agent):
     assert "话题引导师" in prompt or "深挖子话题" in prompt or "话题已给出" in prompt
 
 
-def test_guide_falls_back_to_default_prompt_when_slots_full(agent):
-    """槽位已全时，应回退到默认引导提示词。"""
+def test_guide_uses_satisfaction_prompt_when_slots_full(agent):
+    """槽位已全时，应使用满意确认专用提示词。"""
     llm = _make_llm(
-        "回复: 4 个维度齐了\n选项:\nA. 生成计划\nB. 修改槽位\nC. 直接开始写作"
+        "回复: 4 个维度都齐了，确认满意的话我就开始生成大纲\n选项:\nA. 确认满意，生成大纲\nB. 继续修改某个维度\nC. 我想重新说明需求"
     )
     state = ComedyState(
         user_input="开始吧",
         phase="consulting",
-        slots={"话题": "加班", "态度": "难", "偏见": "剥削", "情绪": "愤怒"},
+        slots={"话题": "加班", "态度": "讽刺", "偏见": "无", "情绪": "愤怒"},
+        selected_skill="standup",
+    )
+    result = agent.run(state, llm=llm)
+
+    assert result["response_type"] == "guide"
+    prompt = llm.invoke.call_args[0][0][0][1]
+    assert "4 个创作维度" in prompt
+    assert "确认满意，生成大纲" in prompt
+    assert "确认是否满意" in prompt
+
+
+def test_guide_falls_back_to_default_prompt_when_slots_full_and_wants_modify(agent):
+    """槽位已全但用户表示想修改时，应回退到默认引导提示词。"""
+    llm = _make_llm(
+        "回复: 没问题，你想修改哪个维度？\n选项:\nA. @话题 新话题\nB. @态度 自嘲\nC. 我先想想"
+    )
+    state = ComedyState(
+        user_input="我想修改话题",
+        phase="consulting",
+        slots={"话题": "加班", "态度": "讽刺", "偏见": "无", "情绪": "愤怒"},
         selected_skill="standup",
     )
     result = agent.run(state, llm=llm)
@@ -153,7 +173,7 @@ def test_guide_falls_back_to_default_prompt_when_slots_full(agent):
     assert result["response_type"] == "guide"
     prompt = llm.invoke.call_args[0][0][0][1]
     assert "专业的喜剧创作助手" in prompt
-    assert "四维度收集阶段" not in prompt
+    assert "确认满意，生成大纲" not in prompt
 
 
 def test_topic_collection_prompt_has_subtopic_guidance(agent):

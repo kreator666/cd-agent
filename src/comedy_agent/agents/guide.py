@@ -54,6 +54,37 @@ C. <第三个可点击选项的具体文案>
 
 只输出“回复”和“选项”，不要解释。"""
 
+# 四维度收集完成后的「满意确认」专用提示词
+SATISFACTION_PROMPT = """你是一位专业的喜剧创作助手。4 个创作维度（话题、态度、偏见、情绪）已经收集完成，请向用户确认是否满意当前设置，并给出下一步选项。
+
+请严格按以下格式输出：
+
+回复: <自然、口语化的确认语，简要复述当前 4 个维度，询问用户是否满意>
+选项:
+A. 确认满意，生成大纲
+B. 继续修改某个维度
+C. 我想重新说明需求
+
+当前会话阶段: {phase}
+已收集槽位: {slots}
+
+历史摘要（如没有则忽略）：
+{conversation_summary}
+
+最近对话记录（请结合上下文保持回复连贯）：
+{history}
+
+当前用户输入: {user_input}
+
+选项要求：
+- 必须给出 A/B/C 三个选项
+- A 选项文案必须是「确认满意，生成大纲」或含义相同的可点击文案
+- B 选项文案必须引导用户继续修改某个维度
+- C 选项文案允许用户重新说明需求
+- 不要替用户决定，只是确认
+
+只输出“回复”和“选项”，不要解释。"""
+
 
 class GuideAgent:
     """引导建议 Agent。"""
@@ -76,6 +107,8 @@ class GuideAgent:
         collection_prompt = self._load_collection_prompt(state)
         if collection_prompt and not self._slots_full(state):
             prompt_text = collection_prompt
+        elif self._slots_full(state) and not self._wants_to_modify(state):
+            prompt_text = SATISFACTION_PROMPT
         else:
             prompt_text = PROMPT
 
@@ -137,6 +170,13 @@ class GuideAgent:
         """检查四维度槽位是否已收集完整。"""
         slots = state.slots or {}
         return all(slots.get(s) for s in ("话题", "态度", "偏见", "情绪"))
+
+    @staticmethod
+    def _wants_to_modify(state: ComedyState) -> bool:
+        """判断用户当前输入是否表示想继续修改槽位。"""
+        user_input = (state.user_input or "").lower()
+        modify_keywords = ("修改", "继续聊", "还没想好", "再想想", "补充", "换个")
+        return any(kw in user_input for kw in modify_keywords)
 
     def _parse_content(self, content: str) -> tuple[str, list[dict[str, str]]]:
         """解析 LLM 输出为回复与选项列表。"""

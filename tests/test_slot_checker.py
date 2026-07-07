@@ -13,8 +13,8 @@ def agent():
     return SlotCheckingAgent()
 
 
-def test_all_slots_filled_moves_to_analyzing(agent):
-    """4 个维度都填满时进入 analyzing，由 Context Analyzer 生成 analysis。"""
+def test_all_slots_filled_without_confirmation_routes_to_consulting(agent):
+    """4 个维度都填满但用户未确认时，先进入 consulting 由 GuideAgent 询问是否满意。"""
     result = agent.run(
         ComedyState(
             slots={
@@ -23,6 +23,23 @@ def test_all_slots_filled_moves_to_analyzing(agent):
                 "偏见": "无",
                 "情绪": "无奈",
             }
+        )
+    )
+    assert result["phase"] == "consulting"
+    assert "analysis" not in result
+
+
+def test_all_slots_filled_with_confirmation_moves_to_analyzing(agent):
+    """4 个维度都填满且用户确认「生成大纲」时进入 analyzing。"""
+    result = agent.run(
+        ComedyState(
+            slots={
+                "话题": "通勤",
+                "态度": "讽刺",
+                "偏见": "无",
+                "情绪": "无奈",
+            },
+            user_input="确认满意，生成大纲",
         )
     )
     assert result["phase"] == "analyzing"

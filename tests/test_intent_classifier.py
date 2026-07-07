@@ -120,3 +120,23 @@ def test_intent_classifier_no_llm_uses_factory(agent):
         result = agent.run(ComedyState(user_input="你好", phase="idle"))
 
     assert result["intent"] == "chat"
+
+
+def test_intent_classification_for_outline_confirmation(agent):
+    """用户确认「生成大纲」时应被识别为 writing，进入 filling_slots → slot_checker → analyzing。"""
+    result = agent.run(
+        ComedyState(user_input="确认满意，生成大纲", phase="consulting"),
+        llm=_make_plain_llm("意图: writing\n置信度: 0.9\n理由: 用户确认生成大纲"),
+    )
+    assert result["intent"] == "writing"
+    assert result["phase"] == "filling_slots"
+
+
+def test_intent_classification_rule_fallback_for_outline(agent):
+    """LLM 输出不规范时，「生成大纲」关键词兜底为 writing。"""
+    result = agent.run(
+        ComedyState(user_input="直接开始写作", phase="consulting"),
+        llm=_make_plain_llm("这是开始创作的请求"),
+    )
+    assert result["intent"] == "writing"
+    assert result["phase"] == "filling_slots"

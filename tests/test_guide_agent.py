@@ -154,3 +154,25 @@ def test_guide_falls_back_to_default_prompt_when_slots_full(agent):
     prompt = llm.invoke.call_args[0][0][0][1]
     assert "专业的喜剧创作助手" in prompt
     assert "四维度收集阶段" not in prompt
+
+
+def test_topic_collection_prompt_has_subtopic_guidance(agent):
+    """话题收集提示词应包含子话题深挖的明确引导。"""
+    llm = _make_llm(
+        "回复: 你想讲职场的哪个具体场景？\n选项:\nA. 加班\nB. 开会\nC. 老板"
+    )
+    state = ComedyState(
+        user_input="我想写职场",
+        phase="consulting",
+        slots={},
+        selected_skill="standup",
+    )
+    result = agent.run(state, llm=llm)
+
+    assert result["response_type"] == "guide"
+    prompt = llm.invoke.call_args[0][0][0][1]
+    assert "阶段 1" in prompt
+    assert "阶段 2" in prompt
+    assert "子话题" in prompt
+    assert "太宽" in prompt
+    assert "整体话题" in prompt

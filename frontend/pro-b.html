@@ -119,7 +119,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .dropdown,.panel,.modal,.toast{position:absolute;z-index:40;background:rgba(255,255,255,.96);backdrop-filter:blur(18px);box-shadow:var(--shadow);border:1px solid rgba(230,232,238,.86);border-radius:22px;opacity:0;pointer-events:none;transform:translateY(10px) scale(.98);transition:.25s cubic-bezier(.2,.8,.2,1)}
 .dropdown.open,.panel.open,.modal.open,.toast.show{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
 .team-menu{top:66px;left:24px;width:290px;padding:14px}.menu-item{display:flex;align-items:center;gap:12px;padding:13px;border-radius:14px;font-weight:700;color:#444;cursor:pointer;}.menu-item:hover{background:#f7f8fa}.mini-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f0c26f,#222)}.menu-sub{font-size:13px;color:#9aa0a6;font-weight:600;margin-top:2px}
-.panel{top:86px;right:30px;width:360px;max-height:70vh;padding:18px;overflow:auto}.panel h3{margin:4px 0 16px;font-size:17px}.history-item,.file-item{padding:13px;border-radius:16px;margin-bottom:8px;background:#fafafa;line-height:1.6;cursor:pointer;}.history-item:hover,.file-item:hover{background:#fff2ed}.file-type{font-size:12px;color:#ff764a;font-weight:800}.drawer-close{float:right;color:#888;font-size:20px;border-radius:8px;padding:2px 8px;}.drawer-close:hover{background:#f4f5f7;}.modal{position:fixed;left:50%;top:50%;width:420px;padding:24px;transform:translate(-50%,-46%) scale(.98)}.modal.open{transform:translate(-50%,-50%) scale(1)}.modal h3{margin:0 0 14px}.share-box{background:#f7f8fa;border-radius:14px;padding:14px;color:#777;margin:14px 0;word-break:break-all}.copy-btn{background:#15171a;color:#fff;border-radius:14px;padding:11px 16px;font-weight:800}.mask{position:fixed;inset:0;background:rgba(20,24,32,.08);z-index:35;opacity:0;pointer-events:none;transition:.22s}.mask.open{opacity:1;pointer-events:auto}.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,16px);border-radius:999px;padding:12px 18px;font-weight:800;color:#333}.toast.show{transform:translate(-50%,0)}
+.panel{top:86px;right:30px;width:360px;max-height:70vh;padding:18px;overflow:auto}.panel h3{margin:4px 0 16px;font-size:17px}.history-item,.file-item{position:relative;padding:13px;border-radius:16px;margin-bottom:8px;background:#fafafa;line-height:1.6;cursor:pointer;}.history-item:hover,.file-item:hover{background:#fff2ed}.history-item .delete-btn{position:absolute;top:8px;right:8px;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;opacity:0;transition:.18s;background:transparent;}.history-item:hover .delete-btn{opacity:1;}.history-item .delete-btn:hover{background:#ffeae5;color:#ff4a4a;}.history-item .delete-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;}.file-type{font-size:12px;color:#ff764a;font-weight:800}.drawer-close{float:right;color:#888;font-size:20px;border-radius:8px;padding:2px 8px;}.drawer-close:hover{background:#f4f5f7;}.modal{position:fixed;left:50%;top:50%;width:420px;padding:24px;transform:translate(-50%,-46%) scale(.98)}.modal.open{transform:translate(-50%,-50%) scale(1)}.modal h3{margin:0 0 14px}.share-box{background:#f7f8fa;border-radius:14px;padding:14px;color:#777;margin:14px 0;word-break:break-all}.copy-btn{background:#15171a;color:#fff;border-radius:14px;padding:11px 16px;font-weight:800}.mask{position:fixed;inset:0;background:rgba(20,24,32,.08);z-index:35;opacity:0;pointer-events:none;transition:.22s}.mask.open{opacity:1;pointer-events:auto}.toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,16px);border-radius:999px;padding:12px 18px;font-weight:800;color:#333}.toast.show{transform:translate(-50%,0)}
 
 /* Core dimension slot cards in team menu */
 .slot-list{display:flex;flex-direction:column;gap:10px;padding:4px 8px;}
@@ -1327,11 +1327,59 @@ function renderHistory() {
   }
   list.innerHTML = conversations.map(c => {
     const date = new Date(c.updatedAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return `<div class="history-item" data-id="${c.id}"><b>${escapeHtml(c.title)}</b><br><span style="font-size:12px;color:#888;">${date} · ${c.skillIds?.length || 0} 个 Skill</span></div>`;
+    return `<div class="history-item" data-id="${c.id}">
+      <button class="delete-btn" data-id="${c.id}" title="删除对话">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/></svg>
+      </button>
+      <b>${escapeHtml(c.title)}</b><br><span style="font-size:12px;color:#888;">${date} · ${c.skillIds?.length || 0} 个 Skill</span>
+    </div>`;
   }).join('');
   list.querySelectorAll('.history-item').forEach(item => {
-    item.addEventListener('click', async () => { await loadConversation(item.dataset.id); });
+    item.addEventListener('click', async (e) => {
+      if (e.target.closest('.delete-btn')) return;
+      await loadConversation(item.dataset.id);
+    });
   });
+  list.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await deleteConversation(btn.dataset.id);
+    });
+  });
+}
+
+async function deleteConversation(id) {
+  const c = conversations.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`确定要删除对话「${c.title || '未命名'}」吗？`)) return;
+
+  // 如果已同步到后端，先调用后端删除
+  if (c.sessionId) {
+    try {
+      await apiFetch(`/conversations/${encodeURIComponent(c.sessionId)}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('[history] 删除后端会话失败', err);
+      toast('删除失败：' + (err.message || '未知错误'));
+      return;
+    }
+  }
+
+  conversations = conversations.filter(x => x.id !== id);
+  saveConversations();
+  renderHistory();
+
+  // 如果删除的是当前会话，清空界面
+  if (currentConversationId === id) {
+    currentConversationId = null;
+    workflowSessionId = null;
+    $('#pageTitle').textContent = '喜剧创作';
+    $('#chatMessages').innerHTML = '';
+    $('#artifactsPanel').innerHTML = '<div class="artifacts-empty">在左侧与写作团队对话，生成的内容将以卡片形式展示在这里。</div>';
+    artifactsState = {};
+    selectedSkills = new Set();
+  }
+
+  toast('已删除对话');
 }
 
 function isPartialArtifactsOutput(html) {

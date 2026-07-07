@@ -1358,9 +1358,14 @@ async function deleteConversation(id) {
     try {
       await apiFetch(`/conversations/${encodeURIComponent(c.sessionId)}`, { method: 'DELETE' });
     } catch (err) {
-      console.error('[history] 删除后端会话失败', err);
-      toast('删除失败：' + (err.message || '未知错误'));
-      return;
+      // 后端不存在该会话时，仍允许前端清理本地记录
+      if (err.message && err.message.includes('404')) {
+        console.warn('[history] 后端会话不存在，仅清理本地记录:', c.sessionId);
+      } else {
+        console.error('[history] 删除后端会话失败', err);
+        toast('删除失败：' + (err.message || '未知错误'));
+        return;
+      }
     }
   }
 

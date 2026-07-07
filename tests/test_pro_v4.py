@@ -355,3 +355,46 @@ class TestProV4State:
         saved_slot_conversations = save_call.kwargs.get("slot_conversations")
         assert saved_slot_conversations is not None
         assert saved_slot_conversations["话题"][0]["content"] == "@话题 加班"
+
+    def test_chat_v4_conversation_can_be_deleted(self, client):
+        """/pro/chat-v4 创建的会话应能通过 DELETE /conversations/{session_id} 删除。"""
+        from comedy_agent.api.server import state
+
+        state.graph.get_state.return_value = MagicMock(
+            values={
+                "phase": "complete",
+                "messages": [HumanMessage(content="写一段脱口秀")],
+                "slot_conversations": {},
+            }
+        )
+        state.graph.ainvoke = AsyncMock(
+            return_value={
+                "phase": "complete",
+                "output": "好的，请告诉我话题",
+            }
+        )
+        state.graph.update_state.return_value = None
+
+        # 使用真实 memory 保存会话
+        from comedy_agent.memory.unified import UnifiedMemory
+
+        state.memory = UnifiedMemory(db_url="sqlite:///:memory:")
+
+        resp = client.post(
+            "/pro/chat-v4",
+            json={"message": "写一段脱口秀", "session_id": "delete-me-session"},
+        )
+        assert resp.status_code == 200
+        session_id = resp.json()["session_id"]
+
+        # 验证会话已保存
+        get_resp = client.get(f"/conversations/{session_id}")
+        assert get_resp.status_code == 200
+
+        # 删除会话
+        del_resp = client.delete(f"/conversations/{session_id}")
+        assert del_resp.status_code == 200
+
+        # 验证已删除
+        get_resp2 = client.get(f"/conversations/{session_id}")
+        assert get_resp2.status_code == 404

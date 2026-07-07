@@ -662,7 +662,7 @@ async def pro_chat_v4(
                     },
                 )
         except Exception:
-            logger.debug("保存会话到 memory 失败", exc_info=True)
+            logger.warning("保存会话到 memory 失败", exc_info=True)
 
         charge_model_usage(
             user_id=user_id,

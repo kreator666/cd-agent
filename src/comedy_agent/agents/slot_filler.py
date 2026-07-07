@@ -34,6 +34,10 @@ _SLOT_ALIASES: dict[str, str] = {
 
 _REQUIRED_SLOTS = ("话题", "态度", "偏见", "情绪")
 
+# 防止 SQLite 等存储层出现 string/blob too big
+_MAX_SLOT_VALUE_LENGTH = 500
+_MAX_SLOT_CONVERSATION_TURNS = 20
+
 # 匹配模式：@话题 内容 / 话题：内容 / 我的话题是 内容 / 话题=内容
 _SLOT_PATTERNS = [
     # @话题 内容
@@ -71,11 +75,14 @@ class SlotFillingAgent:
                 if normalized in slots and new_value:
                     # 同一维度多次 @ 时追加内容，保留多轮对话中补充的信息
                     existing = slots[normalized]
-                    slots[normalized] = self._merge_slot_value(existing, new_value)
+                    slots[normalized] = self._truncate_slot_value(
+                        self._merge_slot_value(existing, new_value)
+                    )
                 else:
-                    slots[normalized] = new_value
-                # 将本轮用户输入归档到该维度的独立对话历史中
+                    slots[normalized] = self._truncate_slot_value(new_value)
+                # 将本轮用户输入归档到该维度的独立对话历史中，限制条数防止存储过大
                 slot_conversations.setdefault(normalized, []).append(HumanMessage(content=user_input))
+                slot_conversations[normalized] = slot_conversations[normalized][-_MAX_SLOT_CONVERSATION_TURNS:]
                 active_dimension = normalized
                 logger.debug("slot_filler: filled %s = %s", normalized, slots[normalized])
 
@@ -104,6 +111,15 @@ class SlotFillingAgent:
         """将别名归一化为标准槽位名。"""
         lowered = key.lower().strip().replace("专家", "").replace("达人", "")
         return _SLOT_ALIASES.get(lowered)
+
+    @staticmethod
+    def _truncate_slot_value(value: str) -> str:
+        """截断过长的槽位值，避免存储层 string/blob too big。"""
+        if len(value) <= _MAX_SLOT_VALUE_LENGTH:
+            return value
+        # 保留后半部分（最近的补充），并加上截断提示
+        prefix = "…"
+        return prefix + value[-(_MAX_SLOT_VALUE_LENGTH - len(prefix)):]
 
     @staticmethod
     def _merge_slot_value(existing: str, new_value: str) -> str:

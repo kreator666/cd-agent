@@ -88,6 +88,29 @@ def _is_feedback_message(message: str) -> bool:
     return any(kw in lowered for kw in feedback_keywords) or lowered.startswith("通过")
 
 
+# 防止 SQLite checkpoint / memory 出现 string/blob too big
+_MAX_MESSAGE_HISTORY = 30
+_MAX_MESSAGE_CONTENT_LENGTH = 2000
+
+
+def _truncate_messages(
+    messages: list[Any], max_count: int = _MAX_MESSAGE_HISTORY, max_content_length: int = _MAX_MESSAGE_CONTENT_LENGTH
+) -> list[Any]:
+    """截断消息列表与单条消息内容，防止序列化后过大。"""
+    truncated = messages[-max_count:] if len(messages) > max_count else list(messages)
+    result: list[Any] = []
+    for m in truncated:
+        content = getattr(m, "content", None)
+        if isinstance(content, str) and len(content) > max_content_length:
+            new_content = content[:max_content_length] + "…"
+            if hasattr(m, "model_copy"):
+                m = m.model_copy(update={"content": new_content})
+            else:
+                m.content = new_content
+        result.append(m)
+    return result
+
+
 def _extract_interrupt_info(raw: dict) -> dict[str, Any]:
     """从 LangGraph 中断结果中提取计划审阅或段落审阅信息。"""
     section_default = {
@@ -546,11 +569,17 @@ async def pro_chat_v4(
 
             # 构造本轮传入图的消息链：checkpoint 历史由 LangGraph 自动合并，
             # 仅当 checkpoint 为空且从 memory 回填时才把历史一并传入，避免重复
-            messages_for_graph = history_messages + [HumanMessage(content=request.message)]
+            messages_for_graph = _truncate_messages(
+                history_messages + [HumanMessage(content=request.message)]
+            )
 
             # 计算完整历史长度（checkpoint 历史 + 当前输入），用于判断是否触发摘要
             checkpoint_messages = prev_values.get("messages") or []
             total_history = list(checkpoint_messages) + [HumanMessage(content=request.message)]
+
+            # 截断过长的 checkpoint 历史，避免 SQLite string/blob too big
+            if checkpoint_messages:
+                prev_values["messages"] = _truncate_messages(checkpoint_messages)
 
             # 若历史消息过长且尚无摘要，生成对话摘要以保留早期关键信息
             if len(total_history) > 20 and not prev_values.get("conversation_summary"):

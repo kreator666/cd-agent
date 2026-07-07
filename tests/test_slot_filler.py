@@ -120,3 +120,31 @@ def test_merge_avoids_duplicate_substring():
         )
     )
     assert result["slots"]["话题"] == "加班文化"
+
+
+def test_long_slot_value_is_truncated():
+    """过长的槽位值应被截断，避免 SQLite string/blob too big。"""
+    agent = SlotFillingAgent()
+    long_value = "x" * 1000
+    result = agent.run(ComedyState(user_input=f"@话题 {long_value}"))
+    stored = result["slots"]["话题"]
+    assert len(stored) <= 500
+    assert stored.endswith("x")
+
+
+def test_slot_conversation_turns_are_limited():
+    """每个维度的 slot_conversations 应限制条数。"""
+    agent = SlotFillingAgent()
+    slots = {}
+    conversations = {}
+    for i in range(25):
+        result = agent.run(
+            ComedyState(
+                user_input=f"@话题 内容{i}",
+                slots=slots,
+                slot_conversations=conversations,
+            )
+        )
+        slots = result["slots"]
+        conversations = result["slot_conversations"]
+    assert len(conversations["话题"]) <= 20

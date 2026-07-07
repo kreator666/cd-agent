@@ -22,6 +22,9 @@ _START_CREATION_KEYWORDS = (
     "确认满意", "直接开始写作", "开始写作", "生成计划",
 )
 
+# 明确的创作请求关键词（槽位全满时直接 proceed，无需二次确认）
+_WRITING_REQUEST_KEYWORDS = ("写一段", "写个", "来个", "创作", "段子", "脱口秀")
+
 
 class SlotCheckingAgent:
     """槽位检查 Agent。"""
@@ -53,9 +56,10 @@ class SlotCheckingAgent:
         """判断是否可以进入分析阶段。"""
         user_input = (state.user_input or "").strip()
         user_triggered = any(kw in user_input for kw in _START_CREATION_KEYWORDS)
+        is_writing_request = any(kw in user_input for kw in _WRITING_REQUEST_KEYWORDS)
 
-        # 4 个维度槽位已显式填满，且用户明确确认/触发创作
-        if not missing and user_triggered:
+        # 4 个维度槽位已显式填满，且用户给出明确创作命令或确认生成大纲
+        if not missing and (user_triggered or is_writing_request):
             return True
 
         # 用户明确触发创作/大纲（允许强制开始，即使槽位未填满）

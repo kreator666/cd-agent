@@ -16,7 +16,7 @@ def agent():
 
 
 def test_search_agent_returns_results_and_output(agent):
-    """SearchAgent 执行搜索后应写入 search_results 并生成 output。"""
+    """SearchAgent 执行搜索后应写入 search_results、knowledge_context 并返回 consulting。"""
     llm = MagicMock()
     llm.invoke.return_value = MagicMock(content="通勤 地铁 拥挤 段子素材")
     llm.with_structured_output.return_value.invoke.return_value = MagicMock()
@@ -37,14 +37,16 @@ def test_search_agent_returns_results_and_output(agent):
             llm=llm,
         )
 
-    assert result["phase"] == "complete"
+    assert result["phase"] == "consulting"
     assert result["search_results"]
     assert len(result["search_results"]) == 3
+    assert result["knowledge_context"]
+    assert len(result["knowledge_context"]) == 3
     assert "通勤" in result["output"]
 
 
 def test_search_agent_offline_fallback(agent):
-    """搜索工具不可用时返回空结果与友好提示。"""
+    """搜索工具不可用时返回空结果与友好提示，仍然回到 consulting。"""
     llm = MagicMock()
     llm.invoke.return_value = MagicMock(content="通勤 素材")
 
@@ -54,6 +56,7 @@ def test_search_agent_offline_fallback(agent):
             llm=llm,
         )
 
-    assert result["phase"] == "complete"
+    assert result["phase"] == "consulting"
     assert result["search_results"] == []
+    assert result["knowledge_context"] == []
     assert "没有找到相关搜索结果" in result["output"]

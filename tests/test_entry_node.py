@@ -43,3 +43,39 @@ def test_non_at_input_uses_llm_for_classification():
     assert result["intent"] == "writing"
     assert result["phase"] == "filling_slots"
     mock_factory.get_model.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "user_input",
+    [
+        "什么是内卷？",
+        "内卷是什么",
+        "解释一下躺平",
+        "躺平是什么意思？",
+    ],
+)
+def test_unknown_term_query_routes_to_search(user_input):
+    """用户询问未知名词含义时直接触发搜索，不调用 LLM。"""
+    with patch("comedy_agent.nodes.entry_node.ModelFactory") as mock_factory:
+        result = entry_node(ComedyState(user_input=user_input))
+
+    assert result["intent"] == "search"
+    assert result["phase"] == "searching"
+    mock_factory.get_model.assert_not_called()
+
+
+def test_long_statement_not_treated_as_unknown_term():
+    """过长的陈述句不应被误判为名词解释请求。"""
+    user_input = "我想写一段关于职场内卷的脱口秀，内卷就是大家互相竞争越来越累"
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = MagicMock(
+        content="意图: writing\n置信度: 0.9\n理由: 用户要求创作"
+    )
+
+    with patch("comedy_agent.nodes.entry_node.ModelFactory") as mock_factory:
+        mock_factory.get_model.return_value = mock_llm
+        result = entry_node(ComedyState(user_input=user_input))
+
+    assert result["intent"] == "writing"
+    assert result["phase"] == "filling_slots"
+    mock_factory.get_model.assert_called_once()

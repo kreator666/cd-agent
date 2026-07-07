@@ -56,10 +56,24 @@ class SearchAgent:
 
         output = self._format_output(query, results)
         logger.debug("search: query=%s, results=%d", query, len(results))
+
+        # 将搜索结果同时写入 knowledge_context，供后续 GuideAgent / Planner / Writer 使用
+        knowledge_items = [
+            {
+                "title": f"搜索：{query}",
+                "category": "search",
+                "content": item.snippet,
+                "summary": item.snippet,
+                "source": "duckduckgo",
+            }
+            for item in results
+        ]
+
         return {
             "search_results": [r.model_dump() for r in results],
+            "knowledge_context": knowledge_items,
             "output": output,
-            "phase": "complete",
+            "phase": "consulting",
             "response_type": "guide",
         }
 

@@ -2,11 +2,14 @@
 
 Phase 2 委托给 IntentClassifierAgent，节点本身负责：
 1. 快速判断明确的 @ 槽位填充，节省 token。
-2. 其余情况再调用 LLM 意图分类。
-3. Phase 3 新增：调用 Skill 路由器解析选中的 Skill/风格。
+2. 检测用户询问未知名词/概念，优先触发搜索。
+3. 其余情况再调用 LLM 意图分类。
+4. Phase 3 新增：调用 Skill 路由器解析选中的 Skill/风格。
 """
 
 from __future__ import annotations
+
+import re
 
 from comedy_agent.agents.intent_classifier import IntentClassifierAgent
 from comedy_agent.core.skill_router import resolve_skill
@@ -15,6 +18,14 @@ from comedy_agent.state.schema import ComedyState
 
 _agent = IntentClassifierAgent()
 _SLOT_KEYS = ("话题", "态度", "偏见", "情绪")
+
+# 询问未知名词的常见句式
+_UNKNOWN_TERM_PATTERNS = [
+    re.compile(r"什么是\s*(.+?)[？?\s]*$"),
+    re.compile(r"(.+?)\s*是什么[？?\s]*$"),
+    re.compile(r"(?:解释|科普|介绍)一下\s*(.+?)[？?\s]*$"),
+    re.compile(r"(.+?)\s*是什么意思[？?\s]*$"),
+]
 
 
 def entry_node(state: ComedyState) -> dict:
@@ -34,6 +45,10 @@ def entry_node(state: ComedyState) -> dict:
             if f"@{key}" in user_input:
                 return {"intent": "fill_slot", "phase": "filling_slots"}
 
+    # 用户询问未知名词/概念：优先触发搜索
+    if _looks_like_unknown_term_query(user_input):
+        return {"intent": "search", "phase": "searching"}
+
     llm = ModelFactory.get_model(state.model, task_type="analytical")
     result = _agent.run(state, llm=llm)
 
@@ -42,3 +57,15 @@ def entry_node(state: ComedyState) -> dict:
     result.update(skill_updates)
 
     return result
+
+
+def _looks_like_unknown_term_query(user_input: str) -> bool:
+    """判断用户输入是否像在询问某个名词/概念的含义。"""
+    text = user_input.strip()
+    if len(text) > 80:
+        # 过长输入更可能是陈述，不是名词解释请求
+        return False
+    for pattern in _UNKNOWN_TERM_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False

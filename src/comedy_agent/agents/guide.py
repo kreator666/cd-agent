@@ -35,6 +35,9 @@ C. <第三个可点击选项的具体文案>
 当前计划: {plan}
 已生成段落: {sections}
 
+搜索结果（如没有则忽略）：
+{search_results}
+
 历史摘要（如没有则忽略）：
 {conversation_summary}
 
@@ -67,6 +70,9 @@ C. 我想重新说明需求
 
 当前会话阶段: {phase}
 已收集槽位: {slots}
+
+搜索结果（如没有则忽略）：
+{search_results}
 
 历史摘要（如没有则忽略）：
 {conversation_summary}
@@ -118,6 +124,7 @@ class GuideAgent:
             slots=_format_slots(state.slots),
             plan=_format_plan(state.plan),
             sections=_format_sections(state.sections),
+            search_results=_format_search_results(state.search_results, state.knowledge_context),
             conversation_summary=state.conversation_summary or "无",
             history=_format_history(getattr(state, "messages", None)),
             user_input=state.user_input,
@@ -276,6 +283,22 @@ def _format_skills(skills: list[str] | None) -> str:
     if not skills:
         return "写脱口秀、单口喜剧、段子等喜剧文本"
     return "、".join(skills)
+
+
+def _format_search_results(
+    search_results: list[dict[str, Any]] | None,
+    knowledge_context: list[dict[str, Any]] | None,
+) -> str:
+    """格式化搜索结果供 GuideAgent 使用。"""
+    items = search_results or knowledge_context or []
+    if not items:
+        return "无"
+    lines = []
+    for i, item in enumerate(items[:5], 1):
+        snippet = item.get("snippet") or item.get("content") or item.get("summary") or ""
+        if snippet:
+            lines.append(f"{i}. {snippet}")
+    return "\n".join(lines) if lines else "无"
 
 
 def _format_history(messages: list[Any] | None, summary: str | None = None) -> str:

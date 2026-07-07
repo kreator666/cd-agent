@@ -175,6 +175,21 @@ class TestBuildPrompts:
         assert "情绪：荒诞" in user_prompt
         assert "时长：5分钟" in user_prompt
 
+    def test_search_context_in_system_prompt(self, sample_state, sample_skill):
+        """state.knowledge_context 应被注入 system prompt。"""
+        sample_state.knowledge_context = [
+            {
+                "title": "搜索：内卷",
+                "category": "search",
+                "content": "内卷指过度竞争导致边际收益下降。",
+                "summary": "内卷指过度竞争导致边际收益下降。",
+                "source": "duckduckgo",
+            }
+        ]
+        system_prompt, _ = build_prompts(sample_state, sample_skill)
+        assert "【搜索资料参考】" in system_prompt
+        assert "内卷指过度竞争" in system_prompt
+
     def test_standup_skill_prompt_is_segment_aware(self, sample_state):
         """standup Skill 的 prompt 应包含逐段写作指令和上下文变量。"""
         from comedy_agent.core.config import settings

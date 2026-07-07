@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from jinja2 import Template, UndefinedError
 
 from comedy_agent.core.few_shot_formatter import format_examples
@@ -66,6 +68,20 @@ def _format_knowledge(items: list[KnowledgeItem]) -> str:
         lines.append(f"{idx}. {item.title}（{item.category}）")
         body = item.summary or item.content
         lines.append(body)
+    return "\n".join(lines).strip()
+
+
+def _format_search_context(items: list[dict[str, Any]] | None) -> str:
+    """将搜索得到的 knowledge_context 格式化为 Prompt 文本。"""
+    if not items:
+        return ""
+    lines = ["【搜索资料参考】"]
+    for idx, item in enumerate(items, 1):
+        title = item.get("title", "搜索结果")
+        body = item.get("summary") or item.get("content", "")
+        if body:
+            lines.append(f"{idx}. {title}")
+            lines.append(str(body))
     return "\n".join(lines).strip()
 
 
@@ -155,8 +171,9 @@ def build_prompts(
     )
 
     knowledge_text = _format_knowledge(retrieved_knowledge or [])
+    search_context_text = _format_search_context(state.knowledge_context)
 
-    system_parts = [BASE_SYSTEM_PROMPT, skill_system, examples_text, knowledge_text]
+    system_parts = [BASE_SYSTEM_PROMPT, skill_system, examples_text, knowledge_text, search_context_text]
     system_prompt = "\n\n".join(part for part in system_parts if part.strip())
 
     # User Prompt：优先使用 Skill 自带模板，否则使用默认模板

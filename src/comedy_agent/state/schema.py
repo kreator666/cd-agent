@@ -145,8 +145,8 @@ class ComedyState(BaseModel):
         description="AI 对用户段落的改进建议",
     )
     manual_section_mode: bool = Field(
-        default=True,
-        description="是否使用样例引导+用户输入的逐段写作模式",
+        default=False,
+        description="是否使用样例引导+用户输入的逐段写作模式（已废弃，默认 AI 一键写作）",
     )
     duration: int = Field(
         default=3,

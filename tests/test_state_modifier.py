@@ -174,3 +174,39 @@ class TestBuildPrompts:
         assert "偏见：无" in user_prompt
         assert "情绪：荒诞" in user_prompt
         assert "时长：5分钟" in user_prompt
+
+    def test_standup_skill_prompt_is_segment_aware(self, sample_state):
+        """standup Skill 的 prompt 应包含逐段写作指令和上下文变量。"""
+        from comedy_agent.core.config import settings
+        from comedy_agent.core.skill_loader import load_skill_config
+
+        skill = load_skill_config(settings.skills_dir / "standup")
+        assert skill is not None
+        assert skill.id == "standup"
+
+        sample_state.analysis = {
+            "topic": "职场加班",
+            "attitude": "讽刺",
+            "bias": "无",
+            "emotion": "愤怒",
+        }
+        sample_state.duration = 5
+        sample_state.plan = {"outline": ["开场铺垫", "冲突升级", "收尾callback"]}
+        sample_state.current_section = 1
+        sample_state.sections = ["这是已经完成的开场段落。"]
+        sample_state.feedback = ""
+        sample_state.selected_skill = "standup"
+
+        system_prompt, user_prompt = build_prompts(sample_state, skill)
+        assert "逐段" in system_prompt
+        assert "当前段落" in system_prompt
+        assert "已完成段落" in system_prompt
+        assert "不要提前写未来段落" in system_prompt
+        assert "当前段落目标" in user_prompt
+        assert "冲突升级" in user_prompt
+        assert "这是已经完成的开场段落" in user_prompt
+        assert "话题：职场加班" in user_prompt
+        assert "态度：讽刺" in user_prompt
+        assert "时长：约 5 分钟" in user_prompt
+        assert "{section_goal}" not in user_prompt
+        assert "{completed_sections}" not in user_prompt

@@ -105,13 +105,24 @@ class GuideAgent:
         }
 
     def _load_collection_prompt(self, state: ComedyState) -> str | None:
-        """若当前选中的 Skill 提供 collection_prompt.md，则加载之。"""
+        """加载用于槽位收集的 Skill collection_prompt.md。
+
+        优先使用当前选中 Skill 的 collection_prompt；若话题维度缺失，
+        则回退到专用的话题引导 Skill。
+        """
         skill_id = getattr(state, "selected_skill", None) or "standup"
-        if not skill_id:
-            return None
-        prompt_path = settings.skills_dir / skill_id / "collection_prompt.md"
-        if prompt_path.exists():
-            return prompt_path.read_text(encoding="utf-8").strip()
+        if skill_id:
+            prompt_path = settings.skills_dir / skill_id / "collection_prompt.md"
+            if prompt_path.exists():
+                return prompt_path.read_text(encoding="utf-8").strip()
+
+        # 若话题尚未收集，使用话题引导 Skill 的 collection_prompt
+        slots = state.slots or {}
+        if not slots.get("话题"):
+            topic_prompt_path = settings.skills_dir / "topic" / "collection_prompt.md"
+            if topic_prompt_path.exists():
+                return topic_prompt_path.read_text(encoding="utf-8").strip()
+
         return None
 
     @staticmethod

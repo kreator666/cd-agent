@@ -100,6 +100,24 @@ def test_guide_uses_collection_prompt_when_slots_missing(agent):
     assert "脱口秀" in prompt or "四维度收集阶段" in prompt
 
 
+def test_guide_uses_topic_skill_when_topic_missing(agent):
+    """当前 Skill 无 collection_prompt 且话题缺失时，应使用 topic Skill 的引导 prompt。"""
+    llm = _make_llm(
+        "回复: 你想聊这个话题的哪个方面？\n选项:\nA. 加班本身\nB. 老板的奇葩要求\nC. 同事的内卷"
+    )
+    state = ComedyState(
+        user_input="我想写加班",
+        phase="consulting",
+        slots={},
+        selected_skill="standup",
+    )
+    result = agent.run(state, llm=llm)
+
+    assert result["response_type"] == "guide"
+    prompt = llm.invoke.call_args[0][0][0][1]
+    assert "话题引导师" in prompt or "深挖子话题" in prompt
+
+
 def test_guide_falls_back_to_default_prompt_when_slots_full(agent):
     """槽位已全时，应回退到默认引导提示词。"""
     llm = _make_llm(

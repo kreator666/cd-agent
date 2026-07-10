@@ -165,11 +165,14 @@ def generate_template_files(
     plus_sections: list[tuple[str, str]] | None = None,
     max_combinations: int | None = None,
     combination_depth: int | None = None,
+    exact_depth: int | None = None,
 ) -> list[tuple[str, Path, list[tuple[str, str]]]]:
     """生成所有排列组合模板文件，返回组合元数据列表。
 
     Args:
         plus_sections: 来自 plus.md 的额外可选段落，会与 middle 一起参与组合。
+        exact_depth: 若指定，只生成恰好包含该数量段落的组合；
+                     为 None 时生成 1..combination_depth 的所有组合。
     """
     template_dir.mkdir(parents=True, exist_ok=True)
 
@@ -179,9 +182,14 @@ def generate_template_files(
 
     # 中间段落的所有非空子集组合（按原有顺序）
     all_combos: list[tuple[tuple[str, str], ...]] = []
-    max_r = len(all_middle) if combination_depth is None else min(combination_depth, len(all_middle))
-    for r in range(1, max_r + 1):
+
+    if exact_depth is not None:
+        r = min(exact_depth, len(all_middle))
         all_combos.extend(combinations(all_middle, r))
+    else:
+        max_r = len(all_middle) if combination_depth is None else min(combination_depth, len(all_middle))
+        for r in range(1, max_r + 1):
+            all_combos.extend(combinations(all_middle, r))
 
     if max_combinations is not None:
         all_combos = all_combos[:max_combinations]
@@ -276,6 +284,12 @@ def main() -> int:
         help="每个组合最多包含几个段落（1=单段，2=两段...），默认不限制",
     )
     parser.add_argument(
+        "--exact-depth",
+        type=int,
+        default=None,
+        help="只生成恰好包含 N 个段落的组合，避免重复生成低深度组合",
+    )
+    parser.add_argument(
         "--user-input", type=str, default=DEFAULT_USER_INPUT,
         help="用户输入文本"
     )
@@ -338,7 +352,11 @@ def main() -> int:
     total_middle = len(middle) + (len(plus_sections) if plus_sections else 0)
     print(f"解析到固定开头 1 段，中间可组合段落 {total_middle} 段，固定结尾 1 段。")
 
-    if args.combination_depth is None and args.max_combinations is None:
+    if args.exact_depth is not None:
+        from math import comb
+        total_combos = comb(total_middle, args.exact_depth)
+        print(f"将生成恰好 {args.exact_depth} 个段落的 {total_combos} 种组合。")
+    elif args.combination_depth is None and args.max_combinations is None:
         total_combos = 2 ** total_middle - 1
         print(f"将生成全部 {total_combos} 种非空组合。")
     else:
@@ -354,6 +372,7 @@ def main() -> int:
         plus_sections=plus_sections,
         max_combinations=args.max_combinations,
         combination_depth=args.combination_depth,
+        exact_depth=args.exact_depth,
     )
     print(f"已生成 {len(records)} 个提示词模板到：{args.template_dir}")
 

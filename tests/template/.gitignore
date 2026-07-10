@@ -2,4 +2,6 @@
 comb_*.txt
 
 # 模型调用结果文件
-result/*.txt
+result/
+result_*/
+*.zip

@@ -43,6 +43,7 @@ from comedy_agent.models.factory import ModelFactory
 # 常量
 # --------------------------------------------------------------------------- #
 DEFAULT_SKILL_MD = PROJECT_ROOT / "skills" / "standup" / "SKILL.md"
+DEFAULT_PLUS_MD = PROJECT_ROOT / "tests" / "template" / "plus.md"
 DEFAULT_TEMPLATE_DIR = PROJECT_ROOT / "tests" / "template"
 DEFAULT_RESULT_DIR = PROJECT_ROOT / "tests" / "template" / "result"
 
@@ -66,7 +67,10 @@ DEFAULT_USER_INPUT = (
 )
 
 
-def parse_sections(markdown_text: str) -> tuple[str, list[tuple[str, str]], str]:
+def parse_sections(
+    markdown_text: str,
+    keep_final_constraint: bool = True,
+) -> tuple[str, list[tuple[str, str]], str]:
     """把系统提示词拆分为：固定开头、可选中间段落、固定结尾。
 
     拆分规则：
@@ -106,19 +110,50 @@ def parse_sections(markdown_text: str) -> tuple[str, list[tuple[str, str]], str]
             continue
         middle.append((title, body))
 
-    outro = trailing_constraint
+    outro = trailing_constraint if keep_final_constraint else ""
     return intro, middle, outro
 
 
-def build_system_prompt(intro: str, sections: Iterable[tuple[str, str]], outro: str) -> str:
+def parse_plus_sections(markdown_text: str) -> list[tuple[str, str]]:
+    """专门解析 plus.md：按 ``# plus1``、``# plus2`` 等标题切分版块。
+
+    每个 plus 版块从 ``# plusN`` 开始，直到下一个 ``# plusN+1`` 或文件结束。
+    版块内部的其他 ``# `` 标题会保留在该版块内。
+    """
+    # 找到所有 # plusN 标题的位置
+    matches = list(re.finditer(r"\n?# plus\d+\b", markdown_text, flags=re.IGNORECASE))
+    if not matches:
+        return []
+
+    sections: list[tuple[str, str]] = []
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(markdown_text)
+        block = markdown_text[start:end].strip()
+        if not block:
+            continue
+        lines = block.splitlines()
+        title = lines[0].strip()
+        body = "\n".join(lines[1:]).strip()
+        sections.append((title, body))
+
+    return sections
+
+
+def build_system_prompt(
+    intro: str,
+    sections: Iterable[tuple[str, str]],
+    outro: str,
+    append_output_constraint: bool = True,
+) -> str:
     """根据给定的段落组合构建完整系统提示词。"""
     parts = [intro]
     for title, body in sections:
         parts.append(f"{title}\n\n{body}")
     if outro:
         parts.append(outro)
-    # 最后附加 skill.py 中的硬编码约束
-    parts.append(OUTPUT_CONSTRAINT)
+    if append_output_constraint:
+        parts.append(OUTPUT_CONSTRAINT)
     return "\n\n--------------------------------------------------\n\n".join(parts)
 
 
@@ -127,17 +162,26 @@ def generate_template_files(
     intro: str,
     middle: list[tuple[str, str]],
     outro: str,
+    plus_sections: list[tuple[str, str]] | None = None,
     max_combinations: int | None = None,
     combination_depth: int | None = None,
 ) -> list[tuple[str, Path, list[tuple[str, str]]]]:
-    """生成所有排列组合模板文件，返回组合元数据列表。"""
+    """生成所有排列组合模板文件，返回组合元数据列表。
+
+    Args:
+        plus_sections: 来自 plus.md 的额外可选段落，会与 middle 一起参与组合。
+    """
     template_dir.mkdir(parents=True, exist_ok=True)
+
+    all_middle = list(middle)
+    if plus_sections:
+        all_middle.extend(plus_sections)
 
     # 中间段落的所有非空子集组合（按原有顺序）
     all_combos: list[tuple[tuple[str, str], ...]] = []
-    max_r = len(middle) if combination_depth is None else min(combination_depth, len(middle))
+    max_r = len(all_middle) if combination_depth is None else min(combination_depth, len(all_middle))
     for r in range(1, max_r + 1):
-        all_combos.extend(combinations(middle, r))
+        all_combos.extend(combinations(all_middle, r))
 
     if max_combinations is not None:
         all_combos = all_combos[:max_combinations]
@@ -205,6 +249,12 @@ def write_result(
 def main() -> int:
     parser = argparse.ArgumentParser(description="脱口秀提示词段落组合测试")
     parser.add_argument("--skill-md", type=Path, default=DEFAULT_SKILL_MD)
+    parser.add_argument(
+        "--plus-md",
+        type=Path,
+        default=None,
+        help="可选的 plus.md 路径，其中的 # plus1 / # plus2 等版块会参与组合",
+    )
     parser.add_argument("--template-dir", type=Path, default=DEFAULT_TEMPLATE_DIR)
     parser.add_argument("--result-dir", type=Path, default=DEFAULT_RESULT_DIR)
     parser.add_argument(
@@ -275,10 +325,21 @@ def main() -> int:
     system_block = re.sub(r"^## 系统提示词\n+", "", system_block, flags=re.MULTILINE)
 
     intro, middle, outro = parse_sections(system_block)
-    print(f"解析到固定开头 1 段，中间可组合段落 {len(middle)} 段，固定结尾 1 段。")
+
+    # 解析 plus.md
+    plus_sections: list[tuple[str, str]] | None = None
+    if args.plus_md and args.plus_md.exists():
+        plus_text = args.plus_md.read_text(encoding="utf-8")
+        plus_sections = parse_plus_sections(plus_text)
+        print(f"从 {args.plus_md} 解析到 {len(plus_sections)} 个 plus 段落。")
+    elif args.plus_md:
+        print(f"警告：找不到 plus.md 文件：{args.plus_md}", file=sys.stderr)
+
+    total_middle = len(middle) + (len(plus_sections) if plus_sections else 0)
+    print(f"解析到固定开头 1 段，中间可组合段落 {total_middle} 段，固定结尾 1 段。")
 
     if args.combination_depth is None and args.max_combinations is None:
-        total_combos = 2 ** len(middle) - 1
+        total_combos = 2 ** total_middle - 1
         print(f"将生成全部 {total_combos} 种非空组合。")
     else:
         depth_msg = f"最多 {args.combination_depth} 个段落" if args.combination_depth else "任意段落数"
@@ -290,8 +351,9 @@ def main() -> int:
         intro,
         middle,
         outro,
-        args.max_combinations,
-        args.combination_depth,
+        plus_sections=plus_sections,
+        max_combinations=args.max_combinations,
+        combination_depth=args.combination_depth,
     )
     print(f"已生成 {len(records)} 个提示词模板到：{args.template_dir}")
 

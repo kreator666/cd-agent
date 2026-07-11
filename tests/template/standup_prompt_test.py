@@ -76,9 +76,12 @@ def parse_sections(
     拆分规则：
     - 按 Markdown 一级标题 ``# `` 切分。
     - 第一个一级标题之前的内容（角色定义）作为固定开头 intro。
-    - 名为 ``# 十一、最终原则（最重要）`` 的段落之后、以及独立的
+    - 名为 ``# 十一、最终原则（最重要）`` 的段落以及独立的
       ``【最终输出约束...`` 块作为固定结尾 outro。
-    - 其余一级标题段落作为可自由组合的中间段落。
+    - 其余一级标题段落（# 一 ~ # 十）作为可自由组合的中间段落。
+
+    该行为与 ``src/comedy_agent/skills/loader.py`` 保持一致：
+    ``## 系统提示词`` 代码块内的全部内容都会进入 system prompt。
 
     Returns:
         (intro, [(title, body), ...], outro)
@@ -96,6 +99,7 @@ def parse_sections(
 
     intro = parts[0].strip() if parts else ""
     middle: list[tuple[str, str]] = []
+    final_principle_text = ""
 
     for part in parts[1:]:
         part = part.strip()
@@ -105,13 +109,95 @@ def parse_sections(
         lines = part.splitlines()
         title = lines[0].strip()
         body = "\n".join(lines[1:]).strip()
-        # 跳过最终原则段落，把它并入 outro
-        if "最终原则" in title or "最终输出约束" in title:
+        # 把 # 十一、最终原则 作为固定结尾保留
+        if "最终原则" in title:
+            final_principle_text = f"{title}\n\n{body}"
+            continue
+        # 独立的最终输出约束块已经被切出，这里跳过即可
+        if "最终输出约束" in title:
             continue
         middle.append((title, body))
 
-    outro = trailing_constraint if keep_final_constraint else ""
+    # 构建 outro：# 十一正文 + 最终输出约束
+    outro_parts: list[str] = []
+    if keep_final_constraint:
+        if final_principle_text:
+            outro_parts.append(final_principle_text)
+        if trailing_constraint:
+            outro_parts.append(trailing_constraint)
+
+    outro = (
+        "\n\n--------------------------------------------------\n\n".join(outro_parts)
+        if outro_parts
+        else ""
+    )
     return intro, middle, outro
+
+
+def parse_prompt_template(markdown_text: str) -> str:
+    """从 SKILL.md 中提取 ``## 提示词模板`` 内容。
+
+    与 ``src/comedy_agent/skills/loader.py`` 中的解析逻辑保持一致：
+    优先匹配代码块格式，其次匹配纯文本格式。
+    """
+    pt_match = re.search(
+        r"^##\s+提示词模板\s*\n+```.*?\n(.*?)```",
+        markdown_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if pt_match:
+        return pt_match.group(1).strip()
+
+    pt_match = re.search(
+        r"^##\s+提示词模板\s*\n+(.+?)(?=\n^##|\Z)",
+        markdown_text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if pt_match:
+        return pt_match.group(1).strip()
+
+    return ""
+
+
+def parse_user_params(user_input: str) -> dict[str, str]:
+    """从用户输入文本中解析四维度参数，用于填充提示词模板。"""
+    params: dict[str, str] = {}
+    patterns = {
+        "topic": r"话题[：:]\s*([^态度偏见情绪时长\n]+)",
+        "attitude": r"态度[：:]\s*([^偏见情绪时长\n]+)",
+        "bias": r"偏见[：:]\s*([^情绪时长\n]+)",
+        "emotion": r"情绪[：:]\s*([^时长\n]+)",
+        "duration": r"时长[：:]\s*(\d+)",
+    }
+    for key, pattern in patterns.items():
+        match = re.search(pattern, user_input)
+        if match:
+            params[key] = match.group(1).strip()
+    return params
+
+
+def build_user_input(
+    user_input: str,
+    prompt_template: str = "",
+    default_duration: int = 3,
+) -> str:
+    """根据提示词模板格式化用户输入；解析失败时回退到原始输入。"""
+    if not prompt_template:
+        return user_input
+
+    params = parse_user_params(user_input)
+    if not params:
+        return user_input
+
+    params.setdefault("duration", str(default_duration))
+    # 测试程序单次生成完整段子，分段写作变量使用占位符
+    params.setdefault("section_goal", "创作一段完整的脱口秀段子")
+    params.setdefault("completed_sections", "无")
+
+    try:
+        return prompt_template.format(**params)
+    except (KeyError, ValueError):
+        return user_input
 
 
 def parse_plus_sections(markdown_text: str) -> list[tuple[str, str]]:
@@ -294,6 +380,11 @@ def main() -> int:
         help="用户输入文本"
     )
     parser.add_argument(
+        "--use-prompt-template",
+        action="store_true",
+        help="使用 SKILL.md 中的 ## 提示词模板 格式化用户输入（与产品 loader 行为一致）",
+    )
+    parser.add_argument(
         "--skip-call",
         action="store_true",
         help="只生成提示词模板，不调用模型",
@@ -339,6 +430,13 @@ def main() -> int:
     system_block = re.sub(r"^## 系统提示词\n+", "", system_block, flags=re.MULTILINE)
 
     intro, middle, outro = parse_sections(system_block)
+
+    # 提取 ## 提示词模板（与产品 loader 行为一致）
+    prompt_template = parse_prompt_template(skill_md_text)
+    if prompt_template:
+        print(f"从 SKILL.md 解析到提示词模板（{len(prompt_template)} 字符）。")
+    else:
+        print("SKILL.md 中未找到提示词模板，将使用原始用户输入。")
 
     # 解析 plus.md
     plus_sections: list[tuple[str, str]] | None = None
@@ -390,6 +488,12 @@ def main() -> int:
 
     print(f"将使用模型：{', '.join(model_names)}")
 
+    # 根据 prompt_template 构建最终用户输入
+    user_input = args.user_input
+    if args.use_prompt_template and prompt_template:
+        user_input = build_user_input(args.user_input, prompt_template)
+        print("已使用提示词模板格式化用户输入。")
+
     index = 0
     for combo_label, template_path, combo_sections in records:
         system_prompt = template_path.read_text(encoding="utf-8")
@@ -405,7 +509,7 @@ def main() -> int:
 
             print(f"[{index}] 调用 {model_name} / {combo_label} ...", end=" ", flush=True)
             try:
-                content = call_model(model_name, system_prompt, args.user_input)
+                content = call_model(model_name, system_prompt, user_input)
                 write_result(result_path, combo_label, model_name, section_titles, content)
                 print(f"完成 -> {result_path.name}")
             except Exception as exc:  # noqa: BLE001

@@ -679,3 +679,77 @@ class BannedWord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+# ------------------------------------------------------------------ #
+# EvalSession —— 笑果评测会话
+# ------------------------------------------------------------------ #
+class EvalSession(Base):
+    """笑果评测会话表。"""
+
+    __tablename__ = "eval_sessions"
+
+    session_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    skill_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(64), nullable=False)
+    topic: Mapped[str] = mapped_column(String(256), nullable=False)
+    attitude: Mapped[str] = mapped_column(String(128), nullable=False)
+    bias: Mapped[str] = mapped_column(String(512), nullable=False)
+    emotion: Mapped[str] = mapped_column(String(128), nullable=False)
+    duration: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), default="running", nullable=False, comment="running / done / failed"
+    )
+    total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Relationship
+    results: Mapped[list["EvalResult"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class EvalResult(Base):
+    """笑果评测结果表。"""
+
+    __tablename__ = "eval_results"
+
+    result_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_sessions.session_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    section_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    section_title: Mapped[str] = mapped_column(String(256), nullable=False)
+    section_body: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / running / done / failed"
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rating: Mapped[str | None] = mapped_column(
+        String(8), nullable=True, comment="bad / ok / top"
+    )
+    model: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Relationship
+    session: Mapped["EvalSession"] = relationship(back_populates="results")

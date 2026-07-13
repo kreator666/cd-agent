@@ -38,6 +38,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from comedy_agent.models.factory import ModelFactory
+from comedy_agent.skills.prompt_sections import (
+    build_user_input as _build_user_input,
+    extract_system_prompt_block,
+    parse_prompt_template,
+    parse_sections,
+)
 
 # --------------------------------------------------------------------------- #
 # 常量
@@ -65,139 +71,6 @@ DEFAULT_USER_INPUT = (
     "偏见：喝凉水都会长胖，到哪都不受待见 "
     "情绪：愤怒又无奈"
 )
-
-
-def parse_sections(
-    markdown_text: str,
-    keep_final_constraint: bool = True,
-) -> tuple[str, list[tuple[str, str]], str]:
-    """把系统提示词拆分为：固定开头、可选中间段落、固定结尾。
-
-    拆分规则：
-    - 按 Markdown 一级标题 ``# `` 切分。
-    - 第一个一级标题之前的内容（角色定义）作为固定开头 intro。
-    - 名为 ``# 十一、最终原则（最重要）`` 的段落以及独立的
-      ``【最终输出约束...`` 块作为固定结尾 outro。
-    - 其余一级标题段落（# 一 ~ # 十）作为可自由组合的中间段落。
-
-    该行为与 ``src/comedy_agent/skills/loader.py`` 保持一致：
-    ``## 系统提示词`` 代码块内的全部内容都会进入 system prompt。
-
-    Returns:
-        (intro, [(title, body), ...], outro)
-    """
-    # 先把 "【最终输出约束..." 这种独立块单独切出来，不作为标题段落
-    constraint_pattern = re.compile(r"(【最终输出约束.*)$", re.DOTALL)
-    constraint_match = constraint_pattern.search(markdown_text)
-    trailing_constraint = ""
-    if constraint_match:
-        markdown_text = markdown_text[: constraint_match.start()].rstrip()
-        trailing_constraint = constraint_match.group(1).strip()
-
-    # 按一级标题切分，保留标题行
-    parts = re.split(r"\n(?=# )", markdown_text)
-
-    intro = parts[0].strip() if parts else ""
-    middle: list[tuple[str, str]] = []
-    final_principle_text = ""
-
-    for part in parts[1:]:
-        part = part.strip()
-        if not part:
-            continue
-        # 提取标题（第一行）
-        lines = part.splitlines()
-        title = lines[0].strip()
-        body = "\n".join(lines[1:]).strip()
-        # 把 # 十一、最终原则 作为固定结尾保留
-        if "最终原则" in title:
-            final_principle_text = f"{title}\n\n{body}"
-            continue
-        # 独立的最终输出约束块已经被切出，这里跳过即可
-        if "最终输出约束" in title:
-            continue
-        middle.append((title, body))
-
-    # 构建 outro：# 十一正文 + 最终输出约束
-    outro_parts: list[str] = []
-    if keep_final_constraint:
-        if final_principle_text:
-            outro_parts.append(final_principle_text)
-        if trailing_constraint:
-            outro_parts.append(trailing_constraint)
-
-    outro = (
-        "\n\n--------------------------------------------------\n\n".join(outro_parts)
-        if outro_parts
-        else ""
-    )
-    return intro, middle, outro
-
-
-def parse_prompt_template(markdown_text: str) -> str:
-    """从 SKILL.md 中提取 ``## 提示词模板`` 内容。
-
-    与 ``src/comedy_agent/skills/loader.py`` 中的解析逻辑保持一致：
-    优先匹配代码块格式，其次匹配纯文本格式。
-    """
-    pt_match = re.search(
-        r"^##\s+提示词模板\s*\n+```.*?\n(.*?)```",
-        markdown_text,
-        re.MULTILINE | re.DOTALL,
-    )
-    if pt_match:
-        return pt_match.group(1).strip()
-
-    pt_match = re.search(
-        r"^##\s+提示词模板\s*\n+(.+?)(?=\n^##|\Z)",
-        markdown_text,
-        re.MULTILINE | re.DOTALL,
-    )
-    if pt_match:
-        return pt_match.group(1).strip()
-
-    return ""
-
-
-def parse_user_params(user_input: str) -> dict[str, str]:
-    """从用户输入文本中解析四维度参数，用于填充提示词模板。"""
-    params: dict[str, str] = {}
-    patterns = {
-        "topic": r"话题[：:]\s*([^态度偏见情绪时长\n]+)",
-        "attitude": r"态度[：:]\s*([^偏见情绪时长\n]+)",
-        "bias": r"偏见[：:]\s*([^情绪时长\n]+)",
-        "emotion": r"情绪[：:]\s*([^时长\n]+)",
-        "duration": r"时长[：:]\s*(\d+)",
-    }
-    for key, pattern in patterns.items():
-        match = re.search(pattern, user_input)
-        if match:
-            params[key] = match.group(1).strip()
-    return params
-
-
-def build_user_input(
-    user_input: str,
-    prompt_template: str = "",
-    default_duration: int = 3,
-) -> str:
-    """根据提示词模板格式化用户输入；解析失败时回退到原始输入。"""
-    if not prompt_template:
-        return user_input
-
-    params = parse_user_params(user_input)
-    if not params:
-        return user_input
-
-    params.setdefault("duration", str(default_duration))
-    # 测试程序单次生成完整段子，分段写作变量使用占位符
-    params.setdefault("section_goal", "创作一段完整的脱口秀段子")
-    params.setdefault("completed_sections", "无")
-
-    try:
-        return prompt_template.format(**params)
-    except (KeyError, ValueError):
-        return user_input
 
 
 def parse_plus_sections(markdown_text: str) -> list[tuple[str, str]]:
@@ -232,15 +105,17 @@ def build_system_prompt(
     outro: str,
     append_output_constraint: bool = True,
 ) -> str:
-    """根据给定的段落组合构建完整系统提示词。"""
-    parts = [intro]
-    for title, body in sections:
-        parts.append(f"{title}\n\n{body}")
-    if outro:
-        parts.append(outro)
+    """根据给定的段落组合构建完整系统提示词。
+
+    复用 ``comedy_agent.skills.prompt_sections`` 的拼接逻辑，
+    并额外追加测试程序所需的硬编码输出约束。
+    """
+    from comedy_agent.skills.prompt_sections import build_system_prompt as _base_build
+
+    prompt = _base_build(intro, sections, outro)
     if append_output_constraint:
-        parts.append(OUTPUT_CONSTRAINT)
-    return "\n\n--------------------------------------------------\n\n".join(parts)
+        prompt = prompt + "\n\n--------------------------------------------------\n\n" + OUTPUT_CONSTRAINT
+    return prompt
 
 
 def generate_template_files(
@@ -409,25 +284,10 @@ def main() -> int:
 
     skill_md_text = args.skill_md.read_text(encoding="utf-8")
 
-    # 定位 "## 系统提示词" 区块
-    sys_start = skill_md_text.find("## 系统提示词")
-    if sys_start == -1:
+    system_block = extract_system_prompt_block(skill_md_text)
+    if not system_block:
         print("错误：SKILL.md 中找不到 ## 系统提示词 区块", file=sys.stderr)
         return 1
-
-    # 系统提示词区块以 "## 提示词模板" 结束
-    sys_end = skill_md_text.find("## 提示词模板", sys_start)
-    if sys_end == -1:
-        system_block = skill_md_text[sys_start:]
-    else:
-        system_block = skill_md_text[sys_start:sys_end]
-
-    # 去掉代码块标记（开头的 ```markdown 和结尾的 ```）
-    system_block = re.sub(r"^```markdown\n?", "", system_block, flags=re.MULTILINE)
-    system_block = re.sub(r"\n```\s*$", "", system_block, flags=re.MULTILINE)
-
-    # 去掉 "## 系统提示词" 这个二级标题本身，它不属于提示词内容
-    system_block = re.sub(r"^## 系统提示词\n+", "", system_block, flags=re.MULTILINE)
 
     intro, middle, outro = parse_sections(system_block)
 
@@ -491,7 +351,11 @@ def main() -> int:
     # 根据 prompt_template 构建最终用户输入
     user_input = args.user_input
     if args.use_prompt_template and prompt_template:
-        user_input = build_user_input(args.user_input, prompt_template)
+        user_input = _build_user_input(
+            args.user_input,
+            prompt_template,
+            extra_defaults={"section_goal": "创作一段完整的脱口秀段子", "completed_sections": "无"},
+        )
         print("已使用提示词模板格式化用户输入。")
 
     index = 0

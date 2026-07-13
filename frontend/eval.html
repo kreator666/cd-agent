@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>笑果评测｜Prompt 组合评测</title>
+<style>
+:root{
+  --bg:#ffffff;
+  --ink:#343434;
+  --muted:#888b92;
+  --light:#f5f6f8;
+  --line:#eceef2;
+  --line-dark:#dfe2e7;
+  --orange:#ff764a;
+  --green:#18a058;
+  --red:#ff4a4a;
+  --yellow:#f5af19;
+  --icon:#5f6368;
+  --shadow:0 18px 50px rgba(20,26,38,.10);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+  font-size:15px;letter-spacing:.02em;
+}
+.app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+/* Topbar */
+.topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+.title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+.actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+.action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
+.action:hover{background:#f7f8fa;transform:translateY(-1px)}
+.action svg{width:20px;height:20px;stroke:#41454b;stroke-width:2;fill:none;transition:.24s}.action:hover svg{stroke:#ff764a;transform:scale(1.05)}
+
+/* Nav sidebar */
+.nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+.nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+.nav-sidebar a:hover{background:#f0f1f4;}
+.nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+/* Main layout */
+.main{flex:1;min-height:0;padding-left:56px;overflow:hidden;display:flex;}
+.eval-container{display:flex;width:100%;height:100%;}
+
+/* Left config panel */
+.config-panel{width:360px;min-width:320px;max-width:420px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.config-header{padding:20px 22px 14px;border-bottom:1px solid var(--line);}
+.config-header h2{margin:0;font-size:18px;font-weight:780;color:#232323;}
+.config-header p{margin:6px 0 0;font-size:13px;color:var(--muted);}
+.config-body{flex:1;overflow-y:auto;padding:20px 22px;}
+.config-section{margin-bottom:22px;}
+.config-section h3{margin:0 0 12px;font-size:14px;font-weight:760;color:#232323;display:flex;align-items:center;gap:8px;}
+.config-section h3 .badge{font-size:11px;font-weight:650;color:var(--orange);background:#fff2ed;padding:2px 8px;border-radius:10px;}
+
+.model-select{width:100%;padding:10px 12px;border:1px solid var(--line-dark);border-radius:10px;font-size:14px;background:#fff;outline:none;}
+.model-select:focus{border-color:var(--orange);}
+
+.section-list{display:flex;flex-direction:column;gap:8px;}
+.section-item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.2s;}
+.section-item:hover{border-color:#ffd4c5;}
+.section-item.selected{border-color:var(--orange);background:#fff7f4;}
+.section-item input[type=checkbox]{margin-right:10px;accent-color:var(--orange);}
+.section-title{font-size:14px;font-weight:700;color:#232323;margin-bottom:4px;}
+.section-preview{font-size:12px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+
+.dim-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;}
+.dim-row{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+.dim-row:last-child{margin-bottom:0;}
+.dim-row label{font-size:13px;font-weight:650;color:#555;}
+.dim-row input{width:100%;padding:9px 12px;border:1px solid var(--line-dark);border-radius:9px;font-size:14px;outline:none;}
+.dim-row input:focus{border-color:var(--orange);}
+
+.start-btn{width:100%;padding:13px 16px;background:var(--orange);color:#fff;border-radius:12px;font-size:15px;font-weight:780;transition:.2s;margin-top:4px;}
+.start-btn:hover{filter:brightness(1.05);transform:translateY(-1px);}
+.start-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+.history-btn{width:100%;padding:10px 16px;background:#fff;border:1px solid var(--line-dark);color:#333;border-radius:12px;font-size:14px;font-weight:650;transition:.2s;margin-top:10px;}
+.history-btn:hover{background:#f5f6f8;}
+
+/* Right result panel */
+.result-panel{flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;background:#fff;}
+.result-header{padding:20px 28px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+.result-header h2{margin:0;font-size:18px;font-weight:780;color:#232323;}
+.stats{display:flex;gap:16px;}
+.stat{display:flex;align-items:center;gap:6px;font-size:13px;color:#555;background:#f5f6f8;padding:6px 12px;border-radius:20px;}
+.stat b{color:#232323;font-weight:700;}
+
+.result-body{flex:1;overflow-y:auto;padding:24px 28px;}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));gap:18px;}
+
+.result-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:.2s;}
+.result-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-1px);}
+.result-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.result-section-title{font-size:14px;font-weight:780;color:#232323;}
+.result-status{font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;}
+.result-status.pending{background:#f0f0f0;color:#888;}
+.result-status.running{background:#fff2ed;color:var(--orange);}
+.result-status.done{background:#e8f5e9;color:var(--green);}
+.result-status.failed{background:#ffebee;color:var(--red);}
+
+.result-model{font-size:12px;color:var(--muted);margin-bottom:10px;}
+.result-content{color:#444;font-size:14px;line-height:1.8;font-weight:500;max-height:160px;overflow:hidden;position:relative;}
+.result-content.expanded{max-height:none;}
+.result-content p{margin:0 0 8px;}
+.result-fade{position:absolute;bottom:0;left:0;right:0;height:50px;background:linear-gradient(transparent, #fff);pointer-events:none;}
+.result-content.expanded .result-fade{display:none;}
+
+.result-actions{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+.rating-group{display:flex;gap:8px;}
+.rating-btn{padding:6px 12px;border-radius:10px;font-size:13px;font-weight:700;background:#f5f6f8;color:#555;transition:.2s;}
+.rating-btn:hover{background:#ffe8e0;color:var(--orange);}
+.rating-btn.active.bad{background:#ffebee;color:var(--red);}
+.rating-btn.active.ok{background:#fff8e1;color:#b78c00;}
+.rating-btn.active.top{background:#e8f5e9;color:var(--green);}
+.copy-btn{font-size:13px;font-weight:650;color:var(--muted);padding:6px 10px;border-radius:8px;transition:.2s;}
+.copy-btn:hover{background:#f5f6f8;color:#333;}
+.expand-btn{font-size:13px;font-weight:650;color:var(--orange);padding:6px 10px;border-radius:8px;transition:.2s;margin-top:8px;}
+.expand-btn:hover{background:#fff2ed;}
+
+.empty-state{text-align:center;padding:80px 20px;color:#999;}
+.empty-state h3{margin:0 0 10px;font-size:18px;color:#555;}
+
+.progress-bar{width:100%;height:4px;background:#f0f0f0;border-radius:2px;margin:12px 0 6px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--orange);width:0%;transition:width .3s;}
+
+/* History modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;}
+.modal-overlay.active{display:flex;}
+.modal-box{background:#fff;padding:24px;border-radius:16px;width:560px;max-width:90vw;max-height:80vh;overflow-y:auto;}
+.modal-box h3{margin:0 0 16px;font-size:18px;font-weight:780;color:#232323;}
+.history-list{display:flex;flex-direction:column;gap:10px;}
+.history-item{padding:14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:.2s;}
+.history-item:hover{background:#fff7f4;border-color:#ffd4c5;}
+.history-item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.history-title{font-size:14px;font-weight:700;color:#232323;}
+.history-meta{font-size:12px;color:var(--muted);}
+.close-modal{float:right;font-size:20px;color:#888;padding:4px 8px;border-radius:8px;}
+.close-modal:hover{background:#f5f6f8;}
+
+@media(max-width:900px){
+  .config-panel{width:280px;min-width:260px;}
+  .result-grid{grid-template-columns:1fr;}
+}
+@media(max-width:768px){
+  .eval-container{flex-direction:column;}
+  .config-panel{width:100%;height:auto;max-height:50%;border-right:none;border-bottom:1px solid var(--line);}
+  .main{padding-left:0;}
+  .nav-sidebar{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div></div>
+    <div class="title">笑果评测｜Prompt 组合评测</div>
+    <div class="actions">
+      <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
+    </div>
+  </header>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro-b.html" title="专业版">🎬</a>
+    <a href="/static/eval.html" class="active" title="笑果评测">🎯</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="eval-container">
+      <!-- Left: config -->
+      <aside class="config-panel">
+        <div class="config-header">
+          <h2>评测配置</h2>
+          <p>选择章节模板 + 输入四维度，生成对比结果</p>
+        </div>
+        <div class="config-body">
+          <div class="config-section">
+            <h3>模型 <span class="badge">单模型</span></h3>
+            <select id="model-select" class="model-select">
+              <option value="deepseek-v3">deepseek-v3</option>
+            </select>
+          </div>
+
+          <div class="config-section">
+            <h3>章节模板 <span class="badge" id="section-count">0/0</span></h3>
+            <div class="section-list" id="section-list">
+              <div class="section-item">
+                <div class="section-title">加载中...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="config-section">
+            <h3>四维度输入</h3>
+            <div class="dim-card">
+              <div class="dim-row">
+                <label>话题 topic</label>
+                <input type="text" id="input-topic" placeholder="例如：骨折" value="骨折">
+              </div>
+              <div class="dim-row">
+                <label>态度 attitude</label>
+                <input type="text" id="input-attitude" placeholder="例如：自嘲" value="自嘲">
+              </div>
+              <div class="dim-row">
+                <label>偏见 bias</label>
+                <input type="text" id="input-bias" placeholder="例如：长辈总觉得年轻人脆弱" value="长辈总觉得年轻人脆弱">
+              </div>
+              <div class="dim-row">
+                <label>情绪 emotion</label>
+                <input type="text" id="input-emotion" placeholder="例如：荒诞" value="荒诞">
+              </div>
+            </div>
+          </div>
+
+          <button id="start-btn" class="start-btn">开始评测</button>
+          <button id="history-btn" class="history-btn">📜 历史会话</button>
+        </div>
+      </aside>
+
+      <!-- Right: results -->
+      <section class="result-panel">
+        <div class="result-header">
+          <h2>评测结果</h2>
+          <div class="stats">
+            <div class="stat">总数 <b id="stat-total">0</b></div>
+            <div class="stat">已评分 <b id="stat-rated">0</b></div>
+            <div class="stat">顶率 <b id="stat-top-rate">0%</b></div>
+          </div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="result-body" id="result-body">
+          <div class="empty-state">
+            <h3>👈 在左侧配置后开始评测</h3>
+            <p>选择章节模板并输入四维度，点击「开始评测」生成结果。</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- History modal -->
+<div class="modal-overlay" id="history-modal">
+  <div class="modal-box">
+    <button class="close-modal" onclick="closeHistory()">✕</button>
+    <h3>历史评测会话</h3>
+    <div class="history-list" id="history-list"></div>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+requireAuth();
+
+let currentSessionId = null;
+let pollTimer = null;
+let sectionsData = [];
+let selectedSectionIds = new Set();
+
+const modelSelect = document.getElementById('model-select');
+const sectionList = document.getElementById('section-list');
+const sectionCount = document.getElementById('section-count');
+const startBtn = document.getElementById('start-btn');
+const historyBtn = document.getElementById('history-btn');
+const resultBody = document.getElementById('result-body');
+const progressFill = document.getElementById('progress-fill');
+
+async function init() {
+  await loadModels();
+  await loadSections();
+}
+
+async function loadModels() {
+  try {
+    const res = await apiFetch('/models');
+    const data = await res.json();
+    const models = data.models || [];
+    modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    if (!models.includes('deepseek-v3')) {
+      modelSelect.innerHTML = '<option value="deepseek-v3">deepseek-v3</option>' + modelSelect.innerHTML;
+    }
+  } catch (err) {
+    console.error('加载模型失败', err);
+  }
+}
+
+async function loadSections() {
+  try {
+    const res = await apiFetch('/eval/skills/standup_focused/sections');
+    const data = await res.json();
+    sectionsData = data.sections || [];
+    renderSections();
+  } catch (err) {
+    sectionList.innerHTML = `<div class="section-item"><div class="section-title">加载失败：${escapeHtml(err.message)}</div></div>`;
+  }
+}
+
+function renderSections() {
+  sectionCount.textContent = `${selectedSectionIds.size}/${sectionsData.length}`;
+  if (sectionsData.length === 0) {
+    sectionList.innerHTML = '<div class="section-item"><div class="section-title">无可用章节</div></div>';
+    return;
+  }
+  sectionList.innerHTML = sectionsData.map(sec => {
+    const checked = selectedSectionIds.has(sec.id) ? 'checked' : '';
+    const selectedClass = selectedSectionIds.has(sec.id) ? 'selected' : '';
+    const preview = escapeHtml(sec.body).replace(/\n/g, ' ').substring(0, 80);
+    return `
+      <div class="section-item ${selectedClass}" onclick="toggleSection('${sec.id}')">
+        <input type="checkbox" ${checked} onclick="event.stopPropagation();toggleSection('${sec.id}')">
+        <div class="section-title">${escapeHtml(sec.title)}</div>
+        <div class="section-preview">${preview}...</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleSection(id) {
+  if (selectedSectionIds.has(id)) {
+    selectedSectionIds.delete(id);
+  } else {
+    selectedSectionIds.add(id);
+  }
+  renderSections();
+}
+
+startBtn.addEventListener('click', async () => {
+  if (selectedSectionIds.size === 0) {
+    alert('请至少选择一个章节模板');
+    return;
+  }
+  const topic = document.getElementById('input-topic').value.trim();
+  const attitude = document.getElementById('input-attitude').value.trim();
+  const bias = document.getElementById('input-bias').value.trim();
+  const emotion = document.getElementById('input-emotion').value.trim();
+  if (!topic || !attitude || !emotion) {
+    alert('请填写话题、态度和情绪');
+    return;
+  }
+
+  startBtn.disabled = true;
+  startBtn.textContent = '生成中...';
+  resultBody.innerHTML = renderLoadingCards(Array.from(selectedSectionIds));
+
+  try {
+    const res = await apiFetch('/eval/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        skill_name: 'standup_focused',
+        model: modelSelect.value,
+        topic,
+        attitude,
+        bias: bias || '无',
+        emotion,
+        section_ids: Array.from(selectedSectionIds),
+      }),
+    });
+    const data = await res.json();
+    currentSessionId = data.session_id;
+    startPolling();
+  } catch (err) {
+    alert('创建评测失败：' + err.message);
+    startBtn.disabled = false;
+    startBtn.textContent = '开始评测';
+  }
+});
+
+function renderLoadingCards(ids) {
+  return ids.map(id => {
+    const sec = sectionsData.find(s => s.id === id) || { title: id };
+    return `
+      <div class="result-card" data-section-id="${id}">
+        <div class="result-card-header">
+          <div class="result-section-title">${escapeHtml(sec.title)}</div>
+          <span class="result-status pending">生成中</span>
+        </div>
+        <div class="result-model">${escapeHtml(modelSelect.value)}</div>
+        <div class="result-content">等待模型返回结果...</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    if (!currentSessionId) return;
+    try {
+      const res = await apiFetch(`/eval/sessions/${currentSessionId}`);
+      const data = await res.json();
+      renderResults(data);
+      const completed = data.results.filter(r => r.status === 'done' || r.status === 'failed').length;
+      const pct = data.total ? (completed / data.total * 100) : 0;
+      progressFill.style.width = pct + '%';
+      if (data.status === 'done' || data.status === 'failed' || completed === data.total) {
+        clearInterval(pollTimer);
+        startBtn.disabled = false;
+        startBtn.textContent = '开始评测';
+      }
+    } catch (err) {
+      console.error('轮询失败', err);
+    }
+  }, 2000);
+}
+
+function renderResults(data) {
+  document.getElementById('stat-total').textContent = data.total;
+  document.getElementById('stat-rated').textContent = data.rated;
+  const topRate = data.total ? Math.round(data.top_count / data.total * 100) : 0;
+  document.getElementById('stat-top-rate').textContent = topRate + '%';
+
+  if (!data.results || data.results.length === 0) return;
+
+  resultBody.innerHTML = data.results.map(r => renderResultCard(r)).join('');
+}
+
+function renderResultCard(r) {
+  const sec = sectionsData.find(s => s.id === r.section_id) || { title: r.section_title };
+  const statusText = { pending: '排队中', running: '生成中', done: '完成', failed: '失败' }[r.status] || r.status;
+  const statusClass = r.status;
+  const content = r.content ? escapeHtml(r.content).replace(/\n/g, '<br>') : '等待生成...';
+  const errorHint = r.status === 'failed' ? `<div style="color:#ff4a4a;font-size:13px;margin-top:8px">${escapeHtml(r.error || '生成失败')}</div>` : '';
+
+  const badActive = r.rating === 'bad' ? 'active bad' : '';
+  const okActive = r.rating === 'ok' ? 'active ok' : '';
+  const topActive = r.rating === 'top' ? 'active top' : '';
+
+  return `
+    <div class="result-card" data-result-id="${r.id}">
+      <div class="result-card-header">
+        <div class="result-section-title">${escapeHtml(sec.title)}</div>
+        <span class="result-status ${statusClass}">${statusText}</span>
+      </div>
+      <div class="result-model">${escapeHtml(r.model)}</div>
+      <div class="result-content" id="content-${r.id}">
+        ${content}
+        ${r.content ? '<div class="result-fade"></div>' : ''}
+      </div>
+      ${r.content ? `<button class="expand-btn" onclick="toggleExpand('${r.id}')">展开全文</button>` : ''}
+      ${errorHint}
+      <div class="result-actions">
+        <div class="rating-group">
+          <button class="rating-btn ${badActive}" onclick="rateResult('${r.id}', 'bad')">拉</button>
+          <button class="rating-btn ${okActive}" onclick="rateResult('${r.id}', 'ok')">还行</button>
+          <button class="rating-btn ${topActive}" onclick="rateResult('${r.id}', 'top')">顶</button>
+        </div>
+        ${r.content ? `<button class="copy-btn" onclick="copyResult('${r.id}')">复制</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function toggleExpand(id) {
+  const el = document.getElementById(`content-${id}`);
+  el.classList.toggle('expanded');
+  const btn = el.nextElementSibling;
+  btn.textContent = el.classList.contains('expanded') ? '收起' : '展开全文';
+}
+
+async function rateResult(resultId, rating) {
+  try {
+    await apiFetch(`/eval/results/${resultId}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ rating }),
+    });
+    // 刷新当前会话
+    if (currentSessionId) {
+      const res = await apiFetch(`/eval/sessions/${currentSessionId}`);
+      renderResults(await res.json());
+    }
+  } catch (err) {
+    alert('评分失败：' + err.message);
+  }
+}
+
+async function copyResult(id) {
+  const el = document.getElementById(`content-${id}`);
+  const text = el.innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = el.parentElement.querySelector('.copy-btn');
+    const old = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => btn.textContent = old, 1500);
+  } catch {
+    alert('复制失败');
+  }
+}
+
+historyBtn.addEventListener('click', async () => {
+  try {
+    const res = await apiFetch('/eval/sessions');
+    const data = await res.json();
+    renderHistory(data.sessions || []);
+    document.getElementById('history-modal').classList.add('active');
+  } catch (err) {
+    alert('加载历史失败：' + err.message);
+  }
+});
+
+function renderHistory(sessions) {
+  const list = document.getElementById('history-list');
+  if (sessions.length === 0) {
+    list.innerHTML = '<div class="history-item"><div class="history-title">暂无历史会话</div></div>';
+    return;
+  }
+  list.innerHTML = sessions.map(s => `
+    <div class="history-item" onclick="loadSession('${s.session_id}')">
+      <div class="history-item-top">
+        <div class="history-title">${escapeHtml(s.topic)} · ${escapeHtml(s.model)}</div>
+        <div class="history-meta">${s.total} 个结果 / ${s.rated} 已评 / ${s.top_count} 顶</div>
+      </div>
+      <div class="history-meta">${new Date(s.created_at).toLocaleString()}</div>
+    </div>
+  `).join('');
+}
+
+function closeHistory() {
+  document.getElementById('history-modal').classList.remove('active');
+}
+
+async function loadSession(sessionId) {
+  closeHistory();
+  currentSessionId = sessionId;
+  try {
+    const res = await apiFetch(`/eval/sessions/${sessionId}`);
+    const data = await res.json();
+    // 根据会话结果反选章节
+    selectedSectionIds = new Set(data.results.map(r => r.section_id));
+    renderSections();
+    // 回填输入
+    document.getElementById('input-topic').value = data.inputs.topic || '';
+    document.getElementById('input-attitude').value = data.inputs.attitude || '';
+    document.getElementById('input-bias').value = data.inputs.bias || '';
+    document.getElementById('input-emotion').value = data.inputs.emotion || '';
+    modelSelect.value = data.model;
+    renderResults(data);
+    if (data.status === 'running') {
+      startBtn.disabled = true;
+      startBtn.textContent = '生成中...';
+      startPolling();
+    }
+  } catch (err) {
+    alert('加载会话失败：' + err.message);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

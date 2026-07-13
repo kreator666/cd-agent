@@ -22,6 +22,7 @@ from comedy_agent.skills.loader import load_skill_config
 from comedy_agent.skills.prompt_sections import (
     build_system_prompt,
     build_user_input,
+    generate_combinations,
     parse_sections,
     section_id_from_title,
 )
@@ -55,7 +56,7 @@ class SkillSectionsResponse(BaseModel):
 class EvalCreateRequest(BaseModel):
     """创建评测会话请求。"""
 
-    skill_name: str = Field(default="standup_focused", description="Skill 名称")
+    skill_name: str = Field(default="standup", description="Skill 名称")
     model: str = Field(default="deepseek-v3", description="模型名称")
     topic: str = Field(description="话题")
     attitude: str = Field(description="态度")
@@ -79,6 +80,8 @@ class EvalResultItem(BaseModel):
     id: str
     section_id: str
     section_title: str
+    combo_id: str | None = None
+    combo_sections: list[dict[str, str]] | None = None
     content: str | None
     status: str
     rating: str | None
@@ -175,6 +178,44 @@ async def get_skill_sections(
 
 
 # --------------------------------------------------------------------------- #
+# 组合辅助函数
+# --------------------------------------------------------------------------- #
+
+
+def _build_section_combos(
+    selected_sections: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """把选中的章节列表生成所有非空排列组合。
+
+    四维度（话题/态度/偏见/情绪）作为固定输入，与每个章节组合搭配。
+    返回列表中每项包含：combo_id、combo_title、combo_sections、sections、section_body。
+    """
+    combos = generate_combinations(selected_sections)
+    result: list[dict[str, Any]] = []
+    for combo_tuple, combo_id in combos:
+        combo_list = list(combo_tuple)
+        section_names = [
+            title.lstrip("# ").split("、")[0] for title, _ in combo_list
+        ]
+        combo_title = " + ".join(section_names)
+        result.append(
+            {
+                "combo_id": combo_id,
+                "combo_title": combo_title,
+                "combo_sections": [
+                    {"id": section_id_from_title(title), "title": title}
+                    for title, _ in combo_list
+                ],
+                "sections": combo_list,
+                "section_body": "\n\n--------------------------------------------------\n\n".join(
+                    f"{title}\n\n{body}" for title, body in combo_list
+                ),
+            }
+        )
+    return result
+
+
+# --------------------------------------------------------------------------- #
 # 评测会话接口
 # --------------------------------------------------------------------------- #
 
@@ -205,6 +246,8 @@ async def create_eval_session(
     if not selected_sections:
         raise HTTPException(status_code=400, detail="选中的章节 ID 无效")
 
+    combos = _build_section_combos(selected_sections)
+
     session_id = uuid.uuid4().hex[:16]
     now = datetime.utcnow()
 
@@ -220,19 +263,21 @@ async def create_eval_session(
             emotion=request.emotion,
             duration=request.duration,
             status="running",
-            total=len(selected_sections),
+            total=len(combos),
             created_at=now,
             updated_at=now,
         )
         session.add(eval_session)
 
-        for title, body in selected_sections:
+        for combo in combos:
             result = EvalResult(
                 result_id=uuid.uuid4().hex[:16],
                 session_id=session_id,
-                section_id=section_id_from_title(title),
-                section_title=title,
-                section_body=body,
+                section_id=combo["combo_id"],
+                section_title=f"组合：{combo['combo_title']}",
+                section_body=combo["section_body"],
+                combo_id=combo["combo_id"],
+                combo_sections=combo["combo_sections"],
                 status="pending",
                 model=request.model,
                 created_at=now,
@@ -257,7 +302,7 @@ async def create_eval_session(
     return EvalCreateResponse(
         session_id=session_id,
         status="running",
-        total=len(selected_sections),
+        total=len(combos),
     )
 
 
@@ -308,6 +353,8 @@ async def get_eval_session(
                     id=r.result_id,
                     section_id=r.section_id,
                     section_title=r.section_title,
+                    combo_id=r.combo_id,
+                    combo_sections=r.combo_sections,
                     content=r.content,
                     status=r.status,
                     rating=r.rating,
@@ -413,6 +460,7 @@ def _run_eval_generation(
             for title, body in middle
             if section_id_from_title(title) in section_ids
         ]
+        combos = _build_section_combos(selected_sections)
 
         user_input = build_user_input(
             f"话题：{topic} 态度：{attitude} 偏见：{bias} 情绪：{emotion} 时长：{duration}分钟",
@@ -433,14 +481,13 @@ def _run_eval_generation(
             if eval_session is None:
                 return
 
-        for title, body in selected_sections:
-            section_id = section_id_from_title(title)
+        for combo in combos:
             _generate_one(
                 session_id=session_id,
                 user_id=user_id,
-                section_id=section_id,
+                section_id=combo["combo_id"],
                 intro=intro,
-                section=(title, body),
+                sections=combo["sections"],
                 outro=outro,
                 user_input=user_input,
                 model=model,
@@ -476,7 +523,7 @@ def _generate_one(
     user_id: str,
     section_id: str,
     intro: str,
-    section: tuple[str, str],
+    sections: list[tuple[str, str]],
     outro: str,
     user_input: str,
     model: str,
@@ -494,7 +541,7 @@ def _generate_one(
         session.commit()
 
     try:
-        system_prompt = build_system_prompt(intro, [section], outro)
+        system_prompt = build_system_prompt(intro, sections, outro)
         llm = ModelFactory.get_model_with_fallback(name=model)
 
         # 转义花括号，避免被 LangChain 当作模板变量

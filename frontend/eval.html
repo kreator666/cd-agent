@@ -177,7 +177,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <aside class="config-panel">
         <div class="config-header">
           <h2>评测配置</h2>
-          <p>选择章节模板 + 输入四维度，生成对比结果</p>
+          <p>选择章节模板 + 输入四维度，生成所有章节组合的对比结果</p>
         </div>
         <div class="config-body">
           <div class="config-section">
@@ -237,7 +237,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
         <div class="result-body" id="result-body">
           <div class="empty-state">
             <h3>👈 在左侧配置后开始评测</h3>
-            <p>选择章节模板并输入四维度，点击「开始评测」生成结果。</p>
+            <p>选择章节模板并输入四维度，系统将生成所选章节的全部非空组合，每个组合搭配四维度进行评测。</p>
           </div>
         </div>
       </section>
@@ -292,7 +292,7 @@ async function loadModels() {
 
 async function loadSections() {
   try {
-    const res = await apiFetch('/eval/skills/standup_focused/sections');
+    const res = await apiFetch('/eval/skills/standup/sections');
     const data = await res.json();
     sectionsData = data.sections || [];
     renderSections();
@@ -352,7 +352,7 @@ startBtn.addEventListener('click', async () => {
     const res = await apiFetch('/eval/sessions', {
       method: 'POST',
       body: JSON.stringify({
-        skill_name: 'standup_focused',
+        skill_name: 'standup',
         model: modelSelect.value,
         topic,
         attitude,
@@ -372,12 +372,12 @@ startBtn.addEventListener('click', async () => {
 });
 
 function renderLoadingCards(ids) {
-  return ids.map(id => {
-    const sec = sectionsData.find(s => s.id === id) || { title: id };
+  // 后端会生成所选章节的全部非空组合，这里先展示与选中数量匹配的占位卡片
+  return ids.map((_, idx) => {
     return `
-      <div class="result-card" data-section-id="${id}">
+      <div class="result-card" data-loading-index="${idx}">
         <div class="result-card-header">
-          <div class="result-section-title">${escapeHtml(sec.title)}</div>
+          <div class="result-section-title">组合生成中...</div>
           <span class="result-status pending">生成中</span>
         </div>
         <div class="result-model">${escapeHtml(modelSelect.value)}</div>
@@ -421,7 +421,10 @@ function renderResults(data) {
 }
 
 function renderResultCard(r) {
-  const sec = sectionsData.find(s => s.id === r.section_id) || { title: r.section_title };
+  const title = r.section_title || (r.combo_sections ? `组合：${r.combo_sections.map(s => s.title).join(' + ')}` : r.section_id);
+  const comboTags = r.combo_sections && r.combo_sections.length
+    ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.6">包含章节：${r.combo_sections.map(s => escapeHtml(s.title)).join('、')}</div>`
+    : '';
   const statusText = { pending: '排队中', running: '生成中', done: '完成', failed: '失败' }[r.status] || r.status;
   const statusClass = r.status;
   const content = r.content ? escapeHtml(r.content).replace(/\n/g, '<br>') : '等待生成...';
@@ -434,10 +437,11 @@ function renderResultCard(r) {
   return `
     <div class="result-card" data-result-id="${r.id}">
       <div class="result-card-header">
-        <div class="result-section-title">${escapeHtml(sec.title)}</div>
+        <div class="result-section-title">${escapeHtml(title)}</div>
         <span class="result-status ${statusClass}">${statusText}</span>
       </div>
       <div class="result-model">${escapeHtml(r.model)}</div>
+      ${comboTags}
       <div class="result-content" id="content-${r.id}">
         ${content}
         ${r.content ? '<div class="result-fade"></div>' : ''}

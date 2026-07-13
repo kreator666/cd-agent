@@ -49,15 +49,15 @@ class TestEvalSections:
     """章节模板接口测试。"""
 
     def test_get_sections(self, client):
-        res = client.get("/eval/skills/standup_focused/sections")
+        res = client.get("/eval/skills/standup/sections")
         assert res.status_code == 200, res.text
         data = res.json()
-        assert data["skill_name"] == "standup_focused"
-        assert len(data["sections"]) == 3
+        assert data["skill_name"] == "standup"
+        assert len(data["sections"]) == 10
         ids = [s["id"] for s in data["sections"]]
+        assert "sec-1" in ids
         assert "sec-2" in ids
-        assert "sec-4" in ids
-        assert "sec-9" in ids
+        assert "sec-10" in ids
 
     def test_get_sections_not_found(self, client):
         res = client.get("/eval/skills/nonexistent/sections")
@@ -74,17 +74,18 @@ class TestEvalSession:
             mock_factory.get_model_with_fallback.return_value = mock_llm
 
             res = client.post("/eval/sessions", json={
-                "skill_name": "standup_focused",
+                "skill_name": "standup",
                 "model": "deepseek-v3",
                 "topic": "骨折",
                 "attitude": "自嘲",
                 "bias": "无",
                 "emotion": "荒诞",
-                "section_ids": ["sec-2", "sec-4"],
+                "section_ids": ["sec-1", "sec-2"],
             })
             assert res.status_code == 200, res.text
             data = res.json()
-            assert data["total"] == 2
+            # 2 个章节会产生 3 种非空组合：a、b、ab
+            assert data["total"] == 3
             assert data["status"] == "running"
             assert "session_id" in data
 
@@ -93,12 +94,18 @@ class TestEvalSession:
             res2 = client.get(f"/eval/sessions/{session_id}")
             assert res2.status_code == 200, res2.text
             detail = res2.json()
-            assert detail["total"] == 2
-            assert len(detail["results"]) == 2
+            assert detail["total"] == 3
+            assert len(detail["results"]) == 3
+            # 验证存在组合结果
+            combo_result = next(
+                (r for r in detail["results"] if r["combo_sections"] and len(r["combo_sections"]) > 1),
+                None,
+            )
+            assert combo_result is not None
 
     def test_create_session_no_sections(self, client):
         res = client.post("/eval/sessions", json={
-            "skill_name": "standup_focused",
+            "skill_name": "standup",
             "model": "deepseek-v3",
             "topic": "骨折",
             "attitude": "自嘲",
@@ -123,13 +130,13 @@ class TestEvalRate:
             mock_factory.get_model_with_fallback.return_value = mock_llm
 
             res = client.post("/eval/sessions", json={
-                "skill_name": "standup_focused",
+                "skill_name": "standup",
                 "model": "deepseek-v3",
                 "topic": "骨折",
                 "attitude": "自嘲",
                 "bias": "无",
                 "emotion": "荒诞",
-                "section_ids": ["sec-2"],
+                "section_ids": ["sec-1"],
             })
             session_id = res.json()["session_id"]
 
@@ -159,13 +166,13 @@ class TestEvalList:
             mock_factory.get_model_with_fallback.return_value = mock_llm
 
             client.post("/eval/sessions", json={
-                "skill_name": "standup_focused",
+                "skill_name": "standup",
                 "model": "deepseek-v3",
                 "topic": "骨折",
                 "attitude": "自嘲",
                 "bias": "无",
                 "emotion": "荒诞",
-                "section_ids": ["sec-2"],
+                "section_ids": ["sec-1"],
             })
 
             res = client.get("/eval/sessions")

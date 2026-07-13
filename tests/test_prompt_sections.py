@@ -11,6 +11,7 @@ from comedy_agent.skills.prompt_sections import (
     build_system_prompt,
     build_user_input,
     extract_system_prompt_block,
+    generate_combinations,
     load_skill_sections,
     parse_sections,
     section_id_from_title,
@@ -140,6 +141,44 @@ class TestLoadSkillSections:
         assert "sec-2" in ids
         assert "sec-4" in ids
         assert "sec-9" in ids
+
+    def test_standup(self):
+        data = load_skill_sections(Path("skills/standup/SKILL.md"))
+        assert data["intro"]
+        assert data["outro"]
+        assert len(data["sections"]) == 10
+        ids = [s["id"] for s in data["sections"]]
+        assert "sec-1" in ids
+        assert "sec-10" in ids
+
+
+class TestGenerateCombinations:
+    """章节排列组合测试。"""
+
+    def test_all_nonempty_combinations(self):
+        sections = [
+            ("# 一、核心", "核心内容"),
+            ("# 二、技巧", "技巧内容"),
+            ("# 三、示例", "示例内容"),
+        ]
+        combos = generate_combinations(sections)
+        # 3 个章节应生成 2^3 - 1 = 7 种非空组合
+        assert len(combos) == 7
+        labels = [label for _, label in combos]
+        assert "comb_一" in labels
+        assert "comb_一_二" in labels
+        assert "comb_一_二_三" in labels
+
+    def test_combination_depth(self):
+        sections = [
+            ("# 一、核心", "核心内容"),
+            ("# 二、技巧", "技巧内容"),
+            ("# 三、示例", "示例内容"),
+        ]
+        combos = generate_combinations(sections, combination_depth=2)
+        # 只生成 1 个和 2 个章节的组合：C(3,1) + C(3,2) = 6
+        assert len(combos) == 6
+        assert all(len(combo) <= 2 for combo, _ in combos)
 
 
 if __name__ == "__main__":

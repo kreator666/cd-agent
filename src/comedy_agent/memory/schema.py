@@ -737,6 +737,12 @@ class EvalResult(Base):
     section_id: Mapped[str] = mapped_column(String(64), nullable=False)
     section_title: Mapped[str] = mapped_column(String(256), nullable=False)
     section_body: Mapped[str] = mapped_column(Text, nullable=False)
+    combo_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="章节组合 ID"
+    )
+    combo_sections: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True, comment="组合包含的章节列表"
+    )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
         String(16), default="pending", nullable=False, comment="pending / running / done / failed"

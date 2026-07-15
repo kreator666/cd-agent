@@ -358,7 +358,7 @@ function renderDetail(detail, comments) {
           <div class="rating-label">我的评分</div>
           <div class="my-rating">
             <input id="my-score" type="number" class="score-input" min="0" max="10" step="1" value="${detail.my_score != null ? detail.my_score : ''}" placeholder="0-10">
-            <button class="submit-rate-btn" onclick="submitRate('${detail.result_id}')">提交</button>
+            <button id="submit-rate-btn" class="submit-rate-btn">提交</button>
           </div>
         </div>
       </div>
@@ -368,7 +368,7 @@ function renderDetail(detail, comments) {
       <div class="detail-section-title">点评 (${detail.comment_count})</div>
       <div class="comment-form">
         <input id="comment-input" class="comment-input" type="text" placeholder="写下你的点评..." maxlength="2000">
-        <button class="comment-submit" onclick="submitComment('${detail.result_id}')">发送</button>
+        <button id="submit-comment-btn" class="comment-submit">发送</button>
       </div>
       <div id="comment-list" class="comment-list" style="margin-top:16px;">
         ${renderComments(comments)}
@@ -376,11 +376,31 @@ function renderDetail(detail, comments) {
     </div>
   `;
 
+  // Comment button
+  const commentBtn = document.getElementById('submit-comment-btn');
+  if (commentBtn) {
+    commentBtn.addEventListener('click', () => submitComment(detail.result_id));
+  }
+
   // Enter key for comment
-  const input = document.getElementById('comment-input');
-  if (input) {
-    input.addEventListener('keypress', (e) => {
+  const commentInput = document.getElementById('comment-input');
+  if (commentInput) {
+    commentInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') submitComment(detail.result_id);
+    });
+  }
+
+  // Rate button
+  const rateBtn = document.getElementById('submit-rate-btn');
+  if (rateBtn) {
+    rateBtn.addEventListener('click', () => submitRate(detail.result_id));
+  }
+
+  // Enter key for rating input
+  const scoreInput = document.getElementById('my-score');
+  if (scoreInput) {
+    scoreInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') submitRate(detail.result_id);
     });
   }
 }
@@ -409,6 +429,20 @@ function closeModalOnBackdrop(event) {
   if (event.target === modal) closeModal();
 }
 
+async function refreshDetail(resultId) {
+  try {
+    const [detailRes, commentsRes] = await Promise.all([
+      apiFetch(`/eval/square/${resultId}`),
+      apiFetch(`/eval/square/${resultId}/comments?page=1&page_size=20`),
+    ]);
+    const detail = await detailRes.json();
+    const comments = await commentsRes.json();
+    renderDetail(detail, comments.comments);
+  } catch (err) {
+    console.error('刷新详情失败', err);
+  }
+}
+
 async function submitRate(resultId) {
   const input = document.getElementById('my-score');
   const score = parseInt(input.value, 10);
@@ -416,17 +450,18 @@ async function submitRate(resultId) {
     alert('请输入 0-10 的整数评分');
     return;
   }
-  const btn = input.nextElementSibling;
-  btn.disabled = true;
-  btn.textContent = '提交中...';
+  const btn = document.getElementById('submit-rate-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '提交中...';
+  }
   try {
     const res = await apiFetch(`/eval/square/${resultId}/rate`, {
       method: 'POST',
       body: JSON.stringify({ score }),
     });
-    const data = await res.json();
-    // Refresh detail
-    openJoke(resultId);
+    await res.json();
+    await refreshDetail(resultId);
     // Refresh list background
     grid.innerHTML = '';
     currentPage = 1;
@@ -434,8 +469,10 @@ async function submitRate(resultId) {
   } catch (err) {
     alert('评分失败：' + err.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '提交';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '提交';
+    }
   }
 }
 
@@ -443,9 +480,11 @@ async function submitComment(resultId) {
   const input = document.getElementById('comment-input');
   const content = input.value.trim();
   if (!content) return;
-  const btn = input.nextElementSibling;
-  btn.disabled = true;
-  btn.textContent = '发送中...';
+  const btn = document.getElementById('submit-comment-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '发送中...';
+  }
   try {
     const res = await apiFetch(`/eval/square/${resultId}/comments`, {
       method: 'POST',
@@ -464,8 +503,10 @@ async function submitComment(resultId) {
   } catch (err) {
     alert('点评失败：' + err.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '发送';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '发送';
+    }
   }
 }
 

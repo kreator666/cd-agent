@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>段子广场｜发现好段子</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+:root{
+  --bg:#ffffff;
+  --ink:#343434;
+  --muted:#888b92;
+  --light:#f5f6f8;
+  --line:#eceef2;
+  --line-dark:#dfe2e7;
+  --orange:#ff764a;
+  --green:#18a058;
+  --red:#ff4a4a;
+  --yellow:#f5af19;
+  --icon:#5f6368;
+  --shadow:0 18px 50px rgba(20,26,38,.10);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+  font-size:15px;letter-spacing:.02em;
+}
+.app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+/* Topbar */
+.topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+.title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+.actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+.action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
+.action:hover{background:#f7f8fa;transform:translateY(-1px)}
+.action svg{width:20px;height:20px;stroke:#41454b;stroke-width:2;fill:none;transition:.24s}.action:hover svg{stroke:#ff764a;transform:scale(1.05)}
+
+/* Nav sidebar */
+.nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+.nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+.nav-sidebar a:hover{background:#f0f1f4;}
+.nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+/* Main layout */
+.main{flex:1;min-height:0;padding-left:56px;overflow:hidden;display:flex;flex-direction:column;}
+.square-container{flex:1;overflow-y:auto;padding:24px 28px;}
+
+/* Toolbar */
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.toolbar h2{margin:0;font-size:18px;font-weight:780;color:#232323;}
+.sort-group{display:flex;gap:8px;background:#f5f6f8;padding:4px;border-radius:10px;}
+.sort-btn{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:650;color:#555;transition:.2s;}
+.sort-btn.active{background:#fff;color:var(--orange);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.sort-btn:hover:not(.active){color:#232323;}
+
+/* Joke cards */
+.joke-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));gap:18px;}
+.joke-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:.2s;cursor:pointer;}
+.joke-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.08);transform:translateY(-1px);}
+.joke-card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}
+.joke-title{font-size:14px;font-weight:780;color:#232323;flex:1;}
+.joke-author{font-size:12px;color:var(--muted);margin-top:2px;}
+.joke-model{font-size:12px;color:var(--muted);margin-bottom:10px;}
+.joke-content{color:#444;font-size:14px;line-height:1.8;font-weight:500;max-height:120px;overflow:hidden;position:relative;}
+.joke-content p{margin:0 0 8px;}
+.joke-fade{position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent, #fff);pointer-events:none;}
+.joke-stats{display:flex;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+.stat-chip{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:650;color:#555;background:#f5f6f8;padding:5px 10px;border-radius:20px;}
+.stat-chip.score{background:#fff2ed;color:var(--orange);}
+.stat-chip.author{background:#e8f5e9;color:var(--green);}
+
+/* Empty state */
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
+.empty-state svg{width:64px;height:64px;stroke:var(--line-dark);margin-bottom:16px;}
+.empty-state h3{margin:0 0 8px;font-size:16px;color:#555;}
+.empty-state p{margin:0;font-size:14px;}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:24px;}
+.modal.active{display:flex;}
+.modal-content{background:#fff;border-radius:18px;width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden;}
+.modal-header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+.modal-header h3{margin:0;font-size:16px;font-weight:780;color:#232323;}
+.close-btn{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;transition:.2s;}
+.close-btn:hover{background:#f5f6f8;}
+.close-btn svg{width:20px;height:20px;stroke:#666;stroke-width:2;}
+.modal-body{flex:1;overflow-y:auto;padding:22px;}
+
+.detail-section{margin-bottom:20px;}
+.detail-section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.detail-content{font-size:15px;line-height:1.9;color:#333;white-space:pre-wrap;}
+.detail-meta{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;}
+.detail-meta-item{font-size:13px;color:#555;}
+.detail-meta-item b{color:#232323;}
+
+/* Rating */
+.rating-panel{background:#fafbfc;border-radius:14px;padding:18px;margin-bottom:20px;}
+.rating-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.rating-block{display:flex;flex-direction:column;gap:4px;}
+.rating-label{font-size:12px;color:var(--muted);font-weight:650;}
+.rating-value{font-size:20px;font-weight:780;color:#232323;}
+.rating-value.small{font-size:15px;}
+.rating-value.green{color:var(--green);}
+.rating-value.orange{color:var(--orange);}
+.rating-value.red{color:var(--red);}
+
+.my-rating{display:flex;align-items:center;gap:10px;}
+.score-input{width:64px;padding:8px 10px;border:1px solid var(--line-dark);border-radius:10px;font-size:15px;font-weight:700;text-align:center;outline:none;}
+.score-input:focus{border-color:var(--orange);}
+.submit-rate-btn{padding:8px 16px;background:var(--orange);color:#fff;border-radius:10px;font-size:13px;font-weight:700;transition:.2s;}
+.submit-rate-btn:hover{filter:brightness(1.05);}
+
+/* Comments */
+.comment-list{display:flex;flex-direction:column;gap:14px;margin-bottom:16px;}
+.comment-item{padding:14px;background:#fafbfc;border-radius:12px;}
+.comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.comment-author{font-size:13px;font-weight:700;color:#232323;}
+.comment-time{font-size:12px;color:var(--muted);}
+.comment-text{font-size:14px;line-height:1.7;color:#444;}
+.comment-empty{font-size:14px;color:var(--muted);text-align:center;padding:20px;}
+
+.comment-form{display:flex;gap:10px;}
+.comment-input{flex:1;padding:11px 14px;border:1px solid var(--line-dark);border-radius:12px;font-size:14px;outline:none;}
+.comment-input:focus{border-color:var(--orange);}
+.comment-submit{padding:10px 18px;background:var(--orange);color:#fff;border-radius:12px;font-size:14px;font-weight:700;transition:.2s;}
+.comment-submit:hover{filter:brightness(1.05);}
+.comment-submit:disabled{opacity:.6;cursor:not-allowed;}
+
+.load-more{display:flex;justify-content:center;margin-top:16px;}
+.load-more button{padding:8px 18px;background:#fff;border:1px solid var(--line-dark);border-radius:10px;font-size:13px;font-weight:650;color:#555;transition:.2s;}
+.load-more button:hover{background:#f5f6f8;}
+
+@media (max-width: 768px) {
+  .joke-grid{grid-template-columns:1fr;}
+  .toolbar{flex-direction:column;align-items:flex-start;gap:12px;}
+  .square-container{padding:16px;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div></div>
+    <div class="title">段子广场</div>
+    <div class="actions">
+      <button class="action" onclick="goEval()" title="去评测">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>去评测</span>
+      </button>
+      <button class="action" onclick="logout()" title="退出">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        <span>退出</span>
+      </button>
+    </div>
+  </div>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro-b.html" title="专业版">🎬</a>
+    <a href="/static/eval.html" title="笑果评测">🎯</a>
+    <a href="/static/eval-square.html" class="active" title="段子广场">🏛️</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="square-container">
+      <div class="toolbar">
+        <h2>发现好段子</h2>
+        <div class="sort-group">
+          <button class="sort-btn active" data-sort="newest" onclick="setSort('newest')">最新发布</button>
+          <button class="sort-btn" data-sort="hottest" onclick="setSort('hottest')">综合热度</button>
+        </div>
+      </div>
+      <div id="joke-grid" class="joke-grid"></div>
+      <div class="load-more" id="load-more" style="display:none;">
+        <button onclick="loadMore()">加载更多</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Detail Modal -->
+<div id="detail-modal" class="modal" onclick="closeModalOnBackdrop(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modal-title">段子详情</h3>
+      <button class="close-btn" onclick="closeModal()">
+        <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+requireAuth();
+
+let currentSort = 'newest';
+let currentPage = 1;
+let currentJokeId = null;
+let isLoading = false;
+let hasMore = true;
+
+const grid = document.getElementById('joke-grid');
+const loadMoreBtn = document.getElementById('load-more');
+const modal = document.getElementById('detail-modal');
+const modalBody = document.getElementById('modal-body');
+const modalTitle = document.getElementById('modal-title');
+
+function authorScoreText(rating) {
+  if (!rating) return '未评';
+  const map = { bad: '0分', ok: '5分', top: '8分' };
+  const label = { bad: '拉', ok: '还行', top: '顶' };
+  return `${label[rating] || rating}（${map[rating] || '-'}）`;
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatContent(text) {
+  if (!text) return '';
+  return escapeHtml(text).replace(/\n/g, '<br>');
+}
+
+async function fetchJokes(page = 1, append = false) {
+  if (isLoading) return;
+  isLoading = true;
+  try {
+    const res = await apiFetch(`/eval/square?sort=${currentSort}&page=${page}&page_size=20`);
+    const data = await res.json();
+    if (!append) grid.innerHTML = '';
+
+    if (data.jokes.length === 0 && page === 1) {
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column:1/-1;">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          <h3>广场上还没有段子</h3>
+          <p>去「笑果评测」生成并发布你觉得好的段子吧</p>
+        </div>
+      `;
+      hasMore = false;
+    } else {
+      renderJokes(data.jokes);
+      hasMore = data.jokes.length === data.page_size;
+    }
+    loadMoreBtn.style.display = hasMore ? 'flex' : 'none';
+  } catch (err) {
+    if (page === 1) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><p>加载失败：${escapeHtml(err.message)}</p></div>`;
+    }
+    console.error(err);
+  } finally {
+    isLoading = false;
+  }
+}
+
+function renderJokes(jokes) {
+  for (const joke of jokes) {
+    const el = document.createElement('div');
+    el.className = 'joke-card';
+    el.onclick = () => openJoke(joke.result_id);
+    const avg = joke.average_score != null ? joke.average_score : '-';
+    el.innerHTML = `
+      <div class="joke-card-header">
+        <div>
+          <div class="joke-title">${escapeHtml(joke.section_title)}</div>
+          <div class="joke-author">@${escapeHtml(joke.author_nickname || joke.author_id)}</div>
+        </div>
+      </div>
+      <div class="joke-model">${escapeHtml(joke.model)}</div>
+      <div class="joke-content">
+        ${formatContent(joke.content)}
+        <div class="joke-fade"></div>
+      </div>
+      <div class="joke-stats">
+        <span class="stat-chip author">作者 ${authorScoreText(joke.author_rating)}</span>
+        <span class="stat-chip score">路人 ${avg}分</span>
+        <span class="stat-chip">${joke.rating_count} 人评分</span>
+        <span class="stat-chip">${joke.comment_count} 条点评</span>
+      </div>
+    `;
+    grid.appendChild(el);
+  }
+}
+
+function setSort(sort) {
+  if (currentSort === sort) return;
+  currentSort = sort;
+  currentPage = 1;
+  document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sort === sort);
+  });
+  fetchJokes(1, false);
+}
+
+function loadMore() {
+  if (!hasMore || isLoading) return;
+  currentPage += 1;
+  fetchJokes(currentPage, true);
+}
+
+async function openJoke(resultId) {
+  currentJokeId = resultId;
+  modal.classList.add('active');
+  modalBody.innerHTML = '<div class="empty-state">加载中...</div>';
+  modalTitle.textContent = '段子详情';
+  try {
+    const [detailRes, commentsRes] = await Promise.all([
+      apiFetch(`/eval/square/${resultId}`),
+      apiFetch(`/eval/square/${resultId}/comments?page=1&page_size=20`),
+    ]);
+    const detail = await detailRes.json();
+    const comments = await commentsRes.json();
+    renderDetail(detail, comments.comments);
+  } catch (err) {
+    modalBody.innerHTML = `<div class="empty-state">加载失败：${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderDetail(detail, comments) {
+  const avg = detail.average_score != null ? detail.average_score : '暂无';
+  modalTitle.textContent = detail.section_title;
+  modalBody.innerHTML = `
+    <div class="detail-meta">
+      <div class="detail-meta-item">作者：<b>@${escapeHtml(detail.author_nickname || detail.author_id)}</b></div>
+      <div class="detail-meta-item">模型：<b>${escapeHtml(detail.model)}</b></div>
+      <div class="detail-meta-item">话题：<b>${escapeHtml(detail.inputs.topic || '-')}</b></div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">段子内容</div>
+      <div class="detail-content">${formatContent(detail.content)}</div>
+    </div>
+
+    <div class="rating-panel">
+      <div class="rating-row">
+        <div class="rating-block">
+          <div class="rating-label">作者评分</div>
+          <div class="rating-value small ${detail.author_rating === 'top' ? 'green' : detail.author_rating === 'ok' ? 'orange' : 'red'}">${authorScoreText(detail.author_rating)}</div>
+        </div>
+        <div class="rating-block">
+          <div class="rating-label">路人平均分</div>
+          <div class="rating-value orange">${avg}</div>
+        </div>
+        <div class="rating-block">
+          <div class="rating-label">评分人数</div>
+          <div class="rating-value small">${detail.rating_count}</div>
+        </div>
+        <div class="rating-block">
+          <div class="rating-label">我的评分</div>
+          <div class="my-rating">
+            <input id="my-score" type="number" class="score-input" min="0" max="10" step="1" value="${detail.my_score != null ? detail.my_score : ''}" placeholder="0-10">
+            <button class="submit-rate-btn" onclick="submitRate('${detail.result_id}')">提交</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">点评 (${detail.comment_count})</div>
+      <div class="comment-form">
+        <input id="comment-input" class="comment-input" type="text" placeholder="写下你的点评..." maxlength="2000">
+        <button class="comment-submit" onclick="submitComment('${detail.result_id}')">发送</button>
+      </div>
+      <div id="comment-list" class="comment-list" style="margin-top:16px;">
+        ${renderComments(comments)}
+      </div>
+    </div>
+  `;
+
+  // Enter key for comment
+  const input = document.getElementById('comment-input');
+  if (input) {
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') submitComment(detail.result_id);
+    });
+  }
+}
+
+function renderComments(comments) {
+  if (!comments || comments.length === 0) {
+    return '<div class="comment-empty">暂无点评，快来抢沙发吧</div>';
+  }
+  return comments.map(c => `
+    <div class="comment-item">
+      <div class="comment-header">
+        <span class="comment-author">@${escapeHtml(c.nickname || c.user_id)}</span>
+        <span class="comment-time">${new Date(c.created_at).toLocaleString()}</span>
+      </div>
+      <div class="comment-text">${formatContent(c.content)}</div>
+    </div>
+  `).join('');
+}
+
+function closeModal() {
+  modal.classList.remove('active');
+  currentJokeId = null;
+}
+
+function closeModalOnBackdrop(event) {
+  if (event.target === modal) closeModal();
+}
+
+async function submitRate(resultId) {
+  const input = document.getElementById('my-score');
+  const score = parseInt(input.value, 10);
+  if (Number.isNaN(score) || score < 0 || score > 10) {
+    alert('请输入 0-10 的整数评分');
+    return;
+  }
+  const btn = input.nextElementSibling;
+  btn.disabled = true;
+  btn.textContent = '提交中...';
+  try {
+    const res = await apiFetch(`/eval/square/${resultId}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ score }),
+    });
+    const data = await res.json();
+    // Refresh detail
+    openJoke(resultId);
+    // Refresh list background
+    grid.innerHTML = '';
+    currentPage = 1;
+    fetchJokes(1, false);
+  } catch (err) {
+    alert('评分失败：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '提交';
+  }
+}
+
+async function submitComment(resultId) {
+  const input = document.getElementById('comment-input');
+  const content = input.value.trim();
+  if (!content) return;
+  const btn = input.nextElementSibling;
+  btn.disabled = true;
+  btn.textContent = '发送中...';
+  try {
+    const res = await apiFetch(`/eval/square/${resultId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+    const comment = await res.json();
+    input.value = '';
+    // Refresh comments and detail counts
+    const commentsRes = await apiFetch(`/eval/square/${resultId}/comments?page=1&page_size=20`);
+    const commentsData = await commentsRes.json();
+    document.getElementById('comment-list').innerHTML = renderComments(commentsData.comments);
+    // Refresh list background
+    grid.innerHTML = '';
+    currentPage = 1;
+    fetchJokes(1, false);
+  } catch (err) {
+    alert('点评失败：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '发送';
+  }
+}
+
+function goEval() {
+  window.location.href = '/static/eval.html';
+}
+
+fetchJokes(1, false);
+</script>
+</body>
+</html>

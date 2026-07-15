@@ -10,13 +10,20 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from comedy_agent.api.state import state
 from comedy_agent.auth import get_current_user
 from comedy_agent.core.config import settings
-from comedy_agent.memory.schema import EvalResult, EvalSession
+from comedy_agent.memory.schema import (
+    EvalResult,
+    EvalSession,
+    JokeComment,
+    JokeRating,
+    UserProfile,
+)
 from comedy_agent.models.factory import ModelFactory
 from comedy_agent.skills.loader import load_skill_config
 from comedy_agent.skills.prompt_sections import (
@@ -85,6 +92,7 @@ class EvalResultItem(BaseModel):
     content: str | None
     status: str
     rating: str | None
+    is_published: bool
     model: str
     created_at: str
     completed_at: str | None
@@ -121,6 +129,103 @@ class EvalRateResponse(BaseModel):
     """评分响应。"""
 
     success: bool
+
+
+class PublishResponse(BaseModel):
+    """发布/取消发布响应。"""
+
+    success: bool
+
+
+class PublicRateRequest(BaseModel):
+    """路人评分请求。"""
+
+    score: int = Field(ge=0, le=10, description="路人评分 0-10")
+
+
+class PublicRateResponse(BaseModel):
+    """路人评分响应。"""
+
+    success: bool
+    average_score: float | None = None
+    rating_count: int = 0
+
+
+class CommentRequest(BaseModel):
+    """发表评论请求。"""
+
+    content: str = Field(min_length=1, max_length=2000, description="点评内容")
+
+    @field_validator("content")
+    @classmethod
+    def _strip_content(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) == 0:
+            raise ValueError("点评内容不能为空")
+        return value
+
+
+class CommentItem(BaseModel):
+    """点评项。"""
+
+    comment_id: str
+    user_id: str
+    nickname: str | None
+    content: str
+    created_at: str
+
+
+class CommentListResponse(BaseModel):
+    """点评列表响应。"""
+
+    comments: list[CommentItem]
+    total: int
+
+
+class SquareJokeItem(BaseModel):
+    """广场段子列表项。"""
+
+    result_id: str
+    author_id: str
+    author_nickname: str | None
+    section_title: str
+    content: str
+    model: str
+    author_rating: str | None
+    author_score: float | None
+    average_score: float | None
+    rating_count: int
+    comment_count: int
+    published_at: str
+    hot_score: float
+
+
+class SquareListResponse(BaseModel):
+    """广场列表响应。"""
+
+    jokes: list[SquareJokeItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class SquareJokeDetail(BaseModel):
+    """广场段子详情。"""
+
+    result_id: str
+    author_id: str
+    author_nickname: str | None
+    section_title: str
+    content: str
+    model: str
+    inputs: dict[str, Any]
+    author_rating: str | None
+    author_score: float | None
+    average_score: float | None
+    rating_count: int
+    comment_count: int
+    my_score: int | None
+    published_at: str
 
 
 # --------------------------------------------------------------------------- #
@@ -358,6 +463,7 @@ async def get_eval_session(
                     content=r.content,
                     status=r.status,
                     rating=r.rating,
+                    is_published=r.is_published,
                     model=r.model,
                     created_at=r.created_at.isoformat() if r.created_at else "",
                     completed_at=r.completed_at.isoformat() if r.completed_at else None,
@@ -428,6 +534,370 @@ async def rate_eval_result(
         session.commit()
 
     return EvalRateResponse(success=True)
+
+
+# --------------------------------------------------------------------------- #
+# 广场相关辅助函数
+# --------------------------------------------------------------------------- #
+
+
+def _author_score(rating: str | None) -> float | None:
+    """把作者三档评分映射为 0/5/8。"""
+    mapping = {"bad": 0.0, "ok": 5.0, "top": 8.0}
+    return mapping.get(rating) if rating else None
+
+
+def _author_score_10(rating: str | None) -> float:
+    """把作者三档评分映射为 0-10 制：bad=0, ok=6.25, top=10。"""
+    mapping = {"bad": 0.0, "ok": 6.25, "top": 10.0}
+    return mapping.get(rating, 0.0) if rating else 0.0
+
+
+def _get_nickname(session: Session, user_id: str) -> str | None:
+    """获取用户昵称。"""
+    user = session.query(UserProfile).filter_by(user_id=user_id).first()
+    return user.nickname if user else None
+
+
+def _aggregate_square_fields(session: Session, result_id: str) -> dict[str, Any]:
+    """汇总一个广场段子的路人评分与评论数。"""
+    avg_score = (
+        session.query(func.avg(JokeRating.score))
+        .filter_by(result_id=result_id)
+        .scalar()
+    )
+    rating_count = (
+        session.query(func.count(JokeRating.rating_id))
+        .filter_by(result_id=result_id)
+        .scalar()
+    )
+    comment_count = (
+        session.query(func.count(JokeComment.comment_id))
+        .filter_by(result_id=result_id)
+        .scalar()
+    )
+    return {
+        "average_score": round(avg_score, 2) if avg_score is not None else None,
+        "rating_count": rating_count or 0,
+        "comment_count": comment_count or 0,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 发布/取消发布接口
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/results/{result_id}/publish", response_model=PublishResponse)
+async def publish_eval_result(
+    result_id: str,
+    user_id: str = Depends(get_current_user),
+) -> PublishResponse:
+    """把评测结果发布到广场（仅作者可操作）。"""
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .join(EvalSession)
+            .filter(EvalResult.result_id == result_id, EvalSession.user_id == user_id)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+        if result.status != "done":
+            raise HTTPException(status_code=400, detail="只能发布已生成完成的段子")
+        if result.is_published:
+            raise HTTPException(status_code=400, detail="该段子已经发布")
+
+        result.is_published = True
+        result.published_at = datetime.utcnow()
+        session.commit()
+
+    return PublishResponse(success=True)
+
+
+@router.delete("/results/{result_id}/publish", response_model=PublishResponse)
+async def unpublish_eval_result(
+    result_id: str,
+    user_id: str = Depends(get_current_user),
+) -> PublishResponse:
+    """取消发布广场段子（仅作者可操作）。"""
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .join(EvalSession)
+            .filter(EvalResult.result_id == result_id, EvalSession.user_id == user_id)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+        if not result.is_published:
+            raise HTTPException(status_code=400, detail="该段子未发布")
+
+        result.is_published = False
+        result.published_at = None
+        session.commit()
+
+    return PublishResponse(success=True)
+
+
+# --------------------------------------------------------------------------- #
+# 广场列表/详情接口
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/square", response_model=SquareListResponse)
+async def list_square_jokes(
+    user_id: str = Depends(get_current_user),
+    sort: str = "newest",
+    page: int = 1,
+    page_size: int = 20,
+) -> SquareListResponse:
+    """获取广场已发布段子列表。"""
+    if sort not in ("newest", "hottest"):
+        raise HTTPException(status_code=400, detail="sort 必须是 newest 或 hottest")
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 20
+
+    with _db_session() as session:
+        base_query = (
+            session.query(EvalResult, EvalSession, UserProfile)
+            .join(EvalSession, EvalResult.session_id == EvalSession.session_id)
+            .join(UserProfile, EvalSession.user_id == UserProfile.user_id)
+            .filter(EvalResult.is_published == True)  # noqa: E712
+        )
+
+        if sort == "newest":
+            base_query = base_query.order_by(EvalResult.published_at.desc())
+
+        total = base_query.count()
+        rows = base_query.offset((page - 1) * page_size).limit(page_size).all()
+
+        jokes: list[SquareJokeItem] = []
+        for result, eval_session, author in rows:
+            agg = _aggregate_square_fields(session, result.result_id)
+            author_rating = result.rating
+            author_score = _author_score(author_rating)
+            author_score_10 = _author_score_10(author_rating)
+            avg_public = agg["average_score"] or author_score_10
+            hot_score = (avg_public + author_score_10) / 2 * 10 + agg["comment_count"] * 2
+
+            jokes.append(
+                SquareJokeItem(
+                    result_id=result.result_id,
+                    author_id=author.user_id,
+                    author_nickname=author.nickname,
+                    section_title=result.section_title,
+                    content=result.content or "",
+                    model=result.model,
+                    author_rating=author_rating,
+                    author_score=author_score,
+                    average_score=agg["average_score"],
+                    rating_count=agg["rating_count"],
+                    comment_count=agg["comment_count"],
+                    published_at=result.published_at.isoformat()
+                    if result.published_at
+                    else "",
+                    hot_score=round(hot_score, 2),
+                )
+            )
+
+        if sort == "hottest":
+            jokes.sort(key=lambda x: x.hot_score, reverse=True)
+
+        return SquareListResponse(
+            jokes=jokes,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+
+@router.get("/square/{result_id}", response_model=SquareJokeDetail)
+async def get_square_joke_detail(
+    result_id: str,
+    user_id: str = Depends(get_current_user),
+) -> SquareJokeDetail:
+    """获取广场段子详情。"""
+    with _db_session() as session:
+        row = (
+            session.query(EvalResult, EvalSession, UserProfile)
+            .join(EvalSession, EvalResult.session_id == EvalSession.session_id)
+            .join(UserProfile, EvalSession.user_id == UserProfile.user_id)
+            .filter(
+                EvalResult.result_id == result_id,
+                EvalResult.is_published == True,  # noqa: E712
+            )
+            .first()
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="段子不存在或未发布")
+
+        result, eval_session, author = row
+        agg = _aggregate_square_fields(session, result_id)
+        my_rating = (
+            session.query(JokeRating).filter_by(result_id=result_id, user_id=user_id).first()
+        )
+
+        return SquareJokeDetail(
+            result_id=result.result_id,
+            author_id=author.user_id,
+            author_nickname=author.nickname,
+            section_title=result.section_title,
+            content=result.content or "",
+            model=result.model,
+            inputs={
+                "topic": eval_session.topic,
+                "attitude": eval_session.attitude,
+                "bias": eval_session.bias,
+                "emotion": eval_session.emotion,
+                "duration": eval_session.duration,
+            },
+            author_rating=result.rating,
+            author_score=_author_score(result.rating),
+            average_score=agg["average_score"],
+            rating_count=agg["rating_count"],
+            comment_count=agg["comment_count"],
+            my_score=my_rating.score if my_rating else None,
+            published_at=result.published_at.isoformat() if result.published_at else "",
+        )
+
+
+# --------------------------------------------------------------------------- #
+# 路人评分/点评接口
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/square/{result_id}/rate", response_model=PublicRateResponse)
+async def rate_square_joke(
+    result_id: str,
+    request: PublicRateRequest,
+    user_id: str = Depends(get_current_user),
+) -> PublicRateResponse:
+    """对广场段子进行路人评分（0-10）。"""
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .filter_by(result_id=result_id, is_published=True)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="段子不存在或未发布")
+
+        # 检查是否是作者自己
+        eval_session = (
+            session.query(EvalSession)
+            .filter_by(session_id=result.session_id, user_id=user_id)
+            .first()
+        )
+        if eval_session is not None:
+            raise HTTPException(status_code=400, detail="不能给自己的段子打分")
+
+        rating = session.query(JokeRating).filter_by(
+            result_id=result_id, user_id=user_id
+        ).first()
+        if rating is None:
+            rating = JokeRating(
+                rating_id=uuid.uuid4().hex[:16],
+                result_id=result_id,
+                user_id=user_id,
+                score=request.score,
+            )
+            session.add(rating)
+        else:
+            rating.score = request.score
+            rating.updated_at = datetime.utcnow()
+        session.commit()
+
+        agg = _aggregate_square_fields(session, result_id)
+        return PublicRateResponse(
+            success=True,
+            average_score=agg["average_score"],
+            rating_count=agg["rating_count"],
+        )
+
+
+@router.post("/square/{result_id}/comments", response_model=CommentItem)
+async def post_square_comment(
+    result_id: str,
+    request: CommentRequest,
+    user_id: str = Depends(get_current_user),
+) -> CommentItem:
+    """对广场段子发表评论。"""
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .filter_by(result_id=result_id, is_published=True)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="段子不存在或未发布")
+
+        comment = JokeComment(
+            comment_id=uuid.uuid4().hex[:16],
+            result_id=result_id,
+            user_id=user_id,
+            content=request.content.strip(),
+        )
+        session.add(comment)
+        session.commit()
+
+        nickname = _get_nickname(session, user_id)
+        return CommentItem(
+            comment_id=comment.comment_id,
+            user_id=user_id,
+            nickname=nickname,
+            content=comment.content,
+            created_at=comment.created_at.isoformat() if comment.created_at else "",
+        )
+
+
+@router.get("/square/{result_id}/comments", response_model=CommentListResponse)
+async def list_square_comments(
+    result_id: str,
+    page: int = 1,
+    page_size: int = 20,
+) -> CommentListResponse:
+    """获取广场段子的点评列表（公开，无需登录也可调用）。"""
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 20
+
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .filter_by(result_id=result_id, is_published=True)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="段子不存在或未发布")
+
+        total = session.query(JokeComment).filter_by(result_id=result_id).count()
+        comments = (
+            session.query(JokeComment, UserProfile)
+            .join(UserProfile, JokeComment.user_id == UserProfile.user_id)
+            .filter(JokeComment.result_id == result_id)
+            .order_by(JokeComment.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        return CommentListResponse(
+            comments=[
+                CommentItem(
+                    comment_id=c.comment_id,
+                    user_id=c.user_id,
+                    nickname=u.nickname,
+                    content=c.content,
+                    created_at=c.created_at.isoformat() if c.created_at else "",
+                )
+                for c, u in comments
+            ],
+            total=total,
+        )
 
 
 # --------------------------------------------------------------------------- #

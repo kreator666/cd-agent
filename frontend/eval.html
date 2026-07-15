@@ -121,6 +121,12 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .expand-btn{font-size:13px;font-weight:650;color:var(--orange);padding:6px 10px;border-radius:8px;transition:.2s;margin-top:8px;}
 .expand-btn:hover{background:#fff2ed;}
 
+.publish-btn{font-size:13px;font-weight:650;color:#fff;background:var(--orange);padding:6px 12px;border-radius:8px;transition:.2s;}
+.publish-btn:hover{filter:brightness(1.05);}
+.publish-btn.secondary{color:#555;background:#f5f6f8;}
+.publish-btn.secondary:hover{background:#e8eaed;}
+.published-badge{font-size:12px;font-weight:700;color:var(--green);background:#e8f5e9;padding:4px 10px;border-radius:20px;}
+
 .empty-state{text-align:center;padding:80px 20px;color:#999;}
 .empty-state h3{margin:0 0 10px;font-size:18px;color:#555;}
 
@@ -168,6 +174,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <a href="/static/speed.html" title="极速版">⚡</a>
     <a href="/static/pro-b.html" title="专业版">🎬</a>
     <a href="/static/eval.html" class="active" title="笑果评测">🎯</a>
+    <a href="/static/eval-square.html" title="段子广场">🏛️</a>
     <a href="/static/me.html" title="我的">👤</a>
   </nav>
 
@@ -454,7 +461,11 @@ function renderResultCard(r) {
           <button class="rating-btn ${okActive}" onclick="rateResult('${r.id}', 'ok')">还行</button>
           <button class="rating-btn ${topActive}" onclick="rateResult('${r.id}', 'top')">顶</button>
         </div>
-        ${r.content ? `<button class="copy-btn" onclick="copyResult('${r.id}')">复制</button>` : ''}
+        <div style="display:flex;gap:8px;align-items:center;">
+          ${r.status === 'done' && !r.is_published ? `<button class="publish-btn" onclick="publishResult('${r.id}')">发布到广场</button>` : ''}
+          ${r.is_published ? `<span class="published-badge">已在广场</span><button class="publish-btn secondary" onclick="unpublishResult('${r.id}')">取消发布</button>` : ''}
+          ${r.content ? `<button class="copy-btn" onclick="copyResult('${r.id}')">复制</button>` : ''}
+        </div>
       </div>
     </div>
   `;
@@ -494,6 +505,31 @@ async function copyResult(id) {
     setTimeout(() => btn.textContent = old, 1500);
   } catch {
     alert('复制失败');
+  }
+}
+
+async function publishResult(id) {
+  try {
+    await apiFetch(`/eval/results/${id}/publish`, { method: 'POST' });
+    if (currentSessionId) {
+      const res = await apiFetch(`/eval/sessions/${currentSessionId}`);
+      renderResults(await res.json());
+    }
+  } catch (err) {
+    alert('发布失败：' + err.message);
+  }
+}
+
+async function unpublishResult(id) {
+  if (!confirm('确定要取消发布吗？')) return;
+  try {
+    await apiFetch(`/eval/results/${id}/publish`, { method: 'DELETE' });
+    if (currentSessionId) {
+      const res = await apiFetch(`/eval/sessions/${currentSessionId}`);
+      renderResults(await res.json());
+    }
+  } catch (err) {
+    alert('取消发布失败：' + err.message);
   }
 }
 

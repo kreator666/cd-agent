@@ -751,6 +751,12 @@ class EvalResult(Base):
     rating: Mapped[str | None] = mapped_column(
         String(8), nullable=True, comment="bad / ok / top"
     )
+    is_published: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="是否已发布到广场"
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="发布时间"
+    )
     model: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
@@ -759,3 +765,69 @@ class EvalResult(Base):
 
     # Relationship
     session: Mapped["EvalSession"] = relationship(back_populates="results")
+
+
+# ------------------------------------------------------------------ #
+# JokeRating —— 广场段子的路人评分
+# ------------------------------------------------------------------ #
+class JokeRating(Base):
+    """广场段子路人评分表。"""
+
+    __tablename__ = "joke_ratings"
+
+    rating_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    result_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_results.result_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    score: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="路人评分 0-10"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("result_id", "user_id", name="uq_joke_rating_result_user"),
+    )
+
+
+# ------------------------------------------------------------------ #
+# JokeComment —— 广场段子的文字点评
+# ------------------------------------------------------------------ #
+class JokeComment(Base):
+    """广场段子文字点评表。"""
+
+    __tablename__ = "joke_comments"
+
+    comment_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    result_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_results.result_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, comment="点评内容")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )

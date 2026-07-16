@@ -1,0 +1,22 @@
+# 多平台内容分发工具依赖
+# 安装命令: pip install -r requirements.txt
+
+# 核心依赖
+requests>=2.31.0
+pydantic>=2.0.0
+PyYAML>=6.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# 浏览器自动化（小红书、微信视频号）
+playwright>=1.40.0
+
+# B站投稿
+bilitool>=0.1.3
+
+# 抖音API调用
+requests-toolbelt>=1.0.0
+
+# 工具依赖
+pillow>=10.0.0
+aiohttp>=3.9.0

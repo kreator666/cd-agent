@@ -247,3 +247,113 @@ class TestPublish:
             },
         )
         assert resp.status_code == 400
+
+
+class TestBilibiliLogin:
+    """测试 B站 登录相关接口。"""
+
+    def test_login_qrcode_success(self, client, auth_headers):
+        with patch(
+            "comedy_agent.api.routers.publish.BilibiliAdapter"
+        ) as mock_adapter_cls:
+            mock_adapter = MagicMock()
+            mock_adapter.platform_type = PlatformType.BILIBILI
+            mock_adapter.platform_name = "B站"
+            mock_adapter.login_with_qrcode = MagicMock(
+                return_value=("test_auth_code", "https://test.qrcode.url", "data:image/png;base64,abc")
+            )
+            mock_adapter.verify_qrcode_login = MagicMock(return_value=True)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
+            mock_adapter_cls.return_value = mock_adapter
+
+            resp = client.post(
+                "/publish/bilibili/login-qrcode",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["auth_code"] == "test_auth_code"
+            assert data["qrcode_url"] == "https://test.qrcode.url"
+            assert data["qrcode_image"].startswith("data:image/png;base64,")
+            mock_adapter.verify_qrcode_login.assert_called_once_with("test_auth_code")
+
+    def test_login_poll(self, client, auth_headers):
+        with patch(
+            "comedy_agent.api.routers.publish.BilibiliAdapter"
+        ) as mock_adapter_cls:
+            mock_adapter = MagicMock()
+            mock_adapter.platform_type = PlatformType.BILIBILI
+            mock_adapter.platform_name = "B站"
+            mock_adapter.check_login_status = AsyncMock(return_value=True)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
+            mock_adapter_cls.return_value = mock_adapter
+
+            resp = client.get(
+                "/publish/bilibili/login-poll/test_auth_code",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["logged_in"] is True
+
+    def test_login_cookie_success(self, client, auth_headers, tmp_path):
+        cookie_path = tmp_path / "cookie.json"
+        cookie_path.write_text('{"test": "cookie"}')
+
+        with patch(
+            "comedy_agent.api.routers.publish.BilibiliAdapter"
+        ) as mock_adapter_cls:
+            mock_adapter = MagicMock()
+            mock_adapter.platform_type = PlatformType.BILIBILI
+            mock_adapter.platform_name = "B站"
+            mock_adapter.login_with_cookie_file = MagicMock(return_value=True)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
+            mock_adapter_cls.return_value = mock_adapter
+
+            with open(cookie_path, "rb") as f:
+                resp = client.post(
+                    "/publish/bilibili/login-cookie",
+                    headers=auth_headers,
+                    files={"file": ("cookie.json", f, "application/json")},
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is True
+            assert "成功" in data["message"]
+
+    def test_login_cookie_invalid_extension(self, client, auth_headers, tmp_path):
+        bad_path = tmp_path / "cookie.txt"
+        bad_path.write_text("not json")
+
+        with open(bad_path, "rb") as f:
+            resp = client.post(
+                "/publish/bilibili/login-cookie",
+                headers=auth_headers,
+                files={"file": ("cookie.txt", f, "text/plain")},
+            )
+        assert resp.status_code == 400
+
+    def test_login_cookie_failure(self, client, auth_headers, tmp_path):
+        cookie_path = tmp_path / "cookie.json"
+        cookie_path.write_text('{"test": "cookie"}')
+
+        with patch(
+            "comedy_agent.api.routers.publish.BilibiliAdapter"
+        ) as mock_adapter_cls:
+            mock_adapter = MagicMock()
+            mock_adapter.platform_type = PlatformType.BILIBILI
+            mock_adapter.platform_name = "B站"
+            mock_adapter.login_with_cookie_file = MagicMock(return_value=False)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
+            mock_adapter_cls.return_value = mock_adapter
+
+            with open(cookie_path, "rb") as f:
+                resp = client.post(
+                    "/publish/bilibili/login-cookie",
+                    headers=auth_headers,
+                    files={"file": ("cookie.json", f, "application/json")},
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is False
+            assert "失败" in data["message"]

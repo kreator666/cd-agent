@@ -120,6 +120,29 @@
 
       <div id="login-status" class="status-bar warn" style="display:none;"></div>
 
+      <div id="login-actions" class="form-card" style="display:none; margin-bottom: 20px;">
+        <div class="form-section" style="margin-bottom:0;">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div class="form-label" style="margin-bottom:4px;">B站登录</div>
+              <div class="form-hint" style="margin-top:0;">B站未登录，请选择下方方式完成登录后再发布。</div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="publish-btn" onclick="startQrcodeLogin()" style="padding:8px 16px;">📷 扫码登录</button>
+              <button class="publish-btn secondary" onclick="document.getElementById('cookie-file').click()" style="padding:8px 16px;">📁 上传 cookie.json</button>
+              <input type="file" id="cookie-file" accept=".json" style="display:none;" onchange="uploadCookie(event)">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="qrcode-panel" class="form-card" style="display:none; margin-bottom: 20px; text-align:center;">
+        <div class="form-label" style="margin-bottom:12px;">请使用 B站 App 扫描下方二维码</div>
+        <img id="qrcode-image" src="" alt="B站登录二维码" style="max-width:240px; border-radius:12px; border:1px solid var(--line); margin-bottom:12px;">
+        <div class="form-hint">扫码完成后请等待 3-5 秒，系统会自动检测登录状态。</div>
+        <div style="margin-top:12px; font-size:13px; color:var(--muted);">如果二维码过期，请刷新页面重试。</div>
+      </div>
+
       <div class="form-card">
         <div class="form-section">
           <label class="form-label">1. 选择视频</label>
@@ -193,6 +216,8 @@
 requireAuth();
 
 let selectedVideoPath = null;
+let currentAuthCode = null;
+let pollInterval = null;
 
 function onFileSelected(e) {
   const file = e.target.files[0];
@@ -215,18 +240,95 @@ function setLoginStatus(html, type) {
   bar.style.display = 'flex';
 }
 
+function showLoginActions() {
+  document.getElementById('login-actions').style.display = 'block';
+}
+
+function hideLoginActions() {
+  document.getElementById('login-actions').style.display = 'none';
+}
+
+function showQrcodePanel(imageUrl) {
+  document.getElementById('qrcode-image').src = imageUrl;
+  document.getElementById('qrcode-panel').style.display = 'block';
+}
+
+function hideQrcodePanel() {
+  document.getElementById('qrcode-panel').style.display = 'none';
+}
+
+function startPollLoginStatus() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    try {
+      const res = await apiFetch('/publish/bilibili/login-poll/' + currentAuthCode);
+      const data = await res.json();
+      if (data.logged_in) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        hideLoginActions();
+        hideQrcodePanel();
+        setLoginStatus('✅ B站登录成功，可以直接发布', 'ok');
+      }
+    } catch (err) {
+      console.error('轮询登录状态失败:', err);
+    }
+  }, 3000);
+}
+
 async function checkLoginStatus() {
   try {
     const res = await apiFetch('/publish/login-status');
     const data = await res.json();
     const bilibili = data.find(item => item.platform === 'bilibili');
     if (bilibili && bilibili.logged_in) {
+      hideLoginActions();
       setLoginStatus('✅ B站登录状态正常，可以直接发布', 'ok');
     } else {
-      setLoginStatus('⚠️ B站未登录。请先使用命令行在服务器上完成扫码登录或配置 cookie.json，再返回此页面发布。', 'warn');
+      showLoginActions();
+      setLoginStatus('⚠️ B站未登录，请先完成下方登录操作', 'warn');
     }
   } catch (err) {
     setLoginStatus('❌ 无法获取登录状态：' + err.message, 'error');
+  }
+}
+
+async function startQrcodeLogin() {
+  try {
+    const res = await apiFetch('/publish/bilibili/login-qrcode', { method: 'POST' });
+    const data = await res.json();
+    currentAuthCode = data.auth_code;
+    showQrcodePanel(data.qrcode_image);
+    hideLoginActions();
+    setLoginStatus('⏳ 请使用 B站 App 扫描二维码，等待登录完成...', 'warn');
+    startPollLoginStatus();
+  } catch (err) {
+    alert('生成二维码失败：' + err.message);
+  }
+}
+
+async function uploadCookie(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await apiFetch('/publish/bilibili/login-cookie', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    if (data.success) {
+      hideLoginActions();
+      hideQrcodePanel();
+      setLoginStatus('✅ ' + data.message + '，可以直接发布', 'ok');
+    } else {
+      setLoginStatus('❌ ' + data.message, 'error');
+    }
+  } catch (err) {
+    alert('上传 cookie.json 失败：' + err.message);
   }
 }
 

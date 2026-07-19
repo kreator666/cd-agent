@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import uuid
@@ -77,6 +78,27 @@ class LoginStatusResponse(BaseModel):
     platform: str
     name: str
     logged_in: bool
+
+
+class QrcodeLoginResponse(BaseModel):
+    """B站二维码登录响应。"""
+
+    auth_code: str = Field(description="二维码登录授权码")
+    qrcode_url: str = Field(description="B站 App 扫描的 URL")
+    qrcode_image: str = Field(description="Base64 编码的二维码图片（data:image/png;base64,...）")
+
+
+class QrcodeLoginPollResponse(BaseModel):
+    """B站二维码登录轮询响应。"""
+
+    logged_in: bool = Field(description="是否已登录")
+
+
+class CookieLoginResponse(BaseModel):
+    """B站 cookie.json 登录响应。"""
+
+    success: bool
+    message: str
 
 
 # --------------------------------------------------------------------------- #
@@ -233,3 +255,94 @@ async def check_login_status(
         )
         for pt, logged_in in status_map.items()
     ]
+
+
+# --------------------------------------------------------------------------- #
+# B站登录相关接口
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/bilibili/login-qrcode", response_model=QrcodeLoginResponse)
+async def bilibili_login_qrcode(
+    user_id: str = Depends(get_current_user),
+) -> QrcodeLoginResponse:
+    """生成 B站 二维码登录信息，并在后台启动扫码验证轮询。"""
+    try:
+        adapter = BilibiliAdapter({"login_method": "qr"})
+        auth_code, qrcode_url, qrcode_image = adapter.login_with_qrcode()
+
+        # 在后台线程中阻塞等待用户扫码
+        # 登录成功后 bilitool 会自动把 cookie 写入其全局 config.json
+        asyncio.get_event_loop().run_in_executor(
+            None, adapter.verify_qrcode_login, auth_code
+        )
+
+        logger.info("[%s] B站二维码已生成，auth_code=%s", user_id, auth_code)
+        return QrcodeLoginResponse(
+            auth_code=auth_code,
+            qrcode_url=qrcode_url,
+            qrcode_image=qrcode_image,
+        )
+    except Exception as e:
+        logger.exception("生成 B站 二维码失败")
+        raise HTTPException(status_code=500, detail=f"生成二维码失败: {e}") from e
+
+
+@router.get(
+    "/bilibili/login-poll/{auth_code}",
+    response_model=QrcodeLoginPollResponse,
+)
+async def bilibili_login_poll(
+    auth_code: str,
+    user_id: str = Depends(get_current_user),
+) -> QrcodeLoginPollResponse:
+    """轮询 B站 二维码登录状态。"""
+    try:
+        adapter = BilibiliAdapter({"login_method": "qr"})
+        is_login = await adapter.check_login_status()
+        await adapter.cleanup()
+        return QrcodeLoginPollResponse(logged_in=is_login)
+    except Exception as e:
+        logger.exception("检查 B站 登录状态失败")
+        raise HTTPException(status_code=500, detail=f"检查登录状态失败: {e}") from e
+
+
+@router.post("/bilibili/login-cookie", response_model=CookieLoginResponse)
+async def bilibili_login_cookie(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+) -> CookieLoginResponse:
+    """上传 B站 cookie.json 文件完成登录。"""
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="请上传 cookie.json 文件")
+
+    upload_id = uuid.uuid4().hex
+    upload_dir = _UPLOAD_ROOT / upload_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    dest_path = upload_dir / "cookie.json"
+    try:
+        with dest_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        logger.exception("保存 cookie.json 失败")
+        raise HTTPException(status_code=500, detail=f"保存文件失败: {e}") from e
+    finally:
+        await file.close()
+
+    try:
+        adapter = BilibiliAdapter({"login_method": "qr"})
+        is_login = adapter.login_with_cookie_file(str(dest_path))
+        await adapter.cleanup()
+
+        if is_login:
+            logger.info("[%s] cookie.json 登录成功", user_id)
+            return CookieLoginResponse(success=True, message="B站登录成功")
+        else:
+            logger.warning("[%s] cookie.json 登录失败", user_id)
+            return CookieLoginResponse(
+                success=False, message="cookie.json 登录失败，请检查文件是否有效"
+            )
+    except Exception as e:
+        logger.exception("cookie.json 登录异常")
+        raise HTTPException(status_code=500, detail=f"登录异常: {e}") from e

@@ -139,6 +139,90 @@ class BilibiliAdapter(BasePlatformAdapter):
             logger.error("[B站] 登录异常: %s", e)
             return False
 
+    def login_with_qrcode(self) -> tuple[str, str, str]:
+        """
+        生成B站二维码登录信息。
+
+        Returns:
+            (auth_code, qrcode_url, qrcode_image_base64) 元组
+        """
+        try:
+            from bilitool.login.login_bili import LoginBili
+            login_bili = LoginBili()
+            qrcode_url, auth_code = login_bili.get_tv_qrcode_url_and_auth_code()
+
+            # 生成二维码图片并转为 Base64
+            import base64
+            import io
+            import qrcode
+
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(qrcode_url)
+            qr.make(fit=True)
+
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG")
+            image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            image_data_url = f"data:image/png;base64,{image_base64}"
+
+            logger.info("[B站] 二维码已生成，等待扫码")
+            return auth_code, qrcode_url, image_data_url
+
+        except Exception as e:
+            logger.error("[B站] 生成二维码失败: %s", e)
+            raise
+
+    def verify_qrcode_login(self, auth_code: str) -> bool:
+        """
+        阻塞验证二维码登录结果。
+
+        登录成功后会自动保存 cookie 到 bilitool 的全局 config.json。
+
+        Args:
+            auth_code: 二维码登录的 auth_code
+
+        Returns:
+            bool: 是否登录成功
+        """
+        try:
+            from bilitool.login.login_bili import LoginBili
+            login_bili = LoginBili()
+            login_bili.verify_login(auth_code, export=True)
+
+            # 验证登录状态
+            is_login = self.login_controller.check_bilibili_login()
+            self._is_logged_in = is_login
+            return is_login
+
+        except Exception as e:
+            logger.error("[B站] 二维码登录验证失败: %s", e)
+            return False
+
+    def login_with_cookie_file(self, cookie_path: str) -> bool:
+        """
+        从 cookie.json 文件加载登录态。
+
+        Args:
+            cookie_path: cookie.json 文件路径
+
+        Returns:
+            bool: 是否加载成功
+        """
+        try:
+            self.login_controller.login_bilibili_with_cookie_file(cookie_path)
+            is_login = self.login_controller.check_bilibili_login()
+            self._is_logged_in = is_login
+            return is_login
+        except Exception as e:
+            logger.error("[B站] 加载 cookie 文件失败: %s", e)
+            return False
+
     async def check_login_status(self) -> bool:
         """检查登录状态。"""
         if not self.login_controller:

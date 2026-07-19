@@ -308,7 +308,7 @@ class BilibiliAdapter(BasePlatformAdapter):
             await asyncio.sleep(3)
 
             # 查询最新投稿获取bvid
-            video_list = self.feed_controller.print_video_list_info(size=5, status="published")
+            video_list = self.feed_controller.print_video_list_info(size=5, status_type="published")
 
             # 尝试从结果中解析BV号
             bvid = None
@@ -386,7 +386,7 @@ class BilibiliAdapter(BasePlatformAdapter):
         try:
             return self.feed_controller.print_video_list_info(
                 size=size,
-                status=status
+                status_type=status
             )
         except Exception as e:
             logger.error("[B站] 获取视频列表失败: %s", e)

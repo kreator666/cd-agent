@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一键发布｜多平台内容分发</title>
+  <style>
+  :root{
+    --bg:#ffffff;--ink:#343434;--muted:#888b92;--light:#f5f6f8;--line:#eceef2;--line-dark:#dfe2e7;
+    --orange:#ff764a;--green:#18a058;--red:#ff4a4a;--icon:#5f6368;--shadow:0 18px 50px rgba(20,26,38,.10);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+    font-size:15px;letter-spacing:.02em;
+  }
+  .app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+  button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+  /* Topbar */
+  .topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+  .title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+  .actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+  .action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
+  .action:hover{background:#f7f8fa;transform:translateY(-1px)}
+  .action svg{width:20px;height:20px;stroke:#41454b;stroke-width:2;fill:none;transition:.24s}.action:hover svg{stroke:#ff764a;transform:scale(1.05)}
+
+  /* Nav sidebar */
+  .nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+  .nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+  .nav-sidebar a:hover{background:#f0f1f4;}
+  .nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+  /* Main */
+  .main{flex:1;min-height:0;padding-left:56px;overflow-y:auto;}
+  .main-inner{max-width:720px;margin:0 auto;padding:28px 20px;}
+
+  .page-title{font-size:22px;font-weight:780;color:#232323;margin:0 0 6px;}
+  .page-subtitle{font-size:14px;color:var(--muted);margin:0 0 24px;}
+
+  .form-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.04);}
+  .form-section{margin-bottom:22px;}
+  .form-section:last-child{margin-bottom:0;}
+  .form-label{display:block;font-size:14px;font-weight:700;color:#232323;margin-bottom:8px;}
+  .form-hint{font-size:12px;color:var(--muted);margin-top:4px;}
+  input[type="text"], textarea, select{
+    width:100%;padding:11px 14px;border:1px solid var(--line-dark);border-radius:10px;font-size:15px;font-family:inherit;outline:none;transition:.2s;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus{border-color:var(--orange);}
+  textarea{min-height:110px;resize:vertical;line-height:1.6;}
+  select{background:#fff;}
+
+  .file-box{border:2px dashed var(--line-dark);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:.2s;}
+  .file-box:hover{border-color:var(--orange);background:#fff7f4;}
+  .file-box input{display:none;}
+  .file-box .file-icon{font-size:28px;margin-bottom:8px;}
+  .file-box .file-text{font-size:14px;color:var(--muted);}
+  .file-box .file-name{font-size:14px;font-weight:700;color:#232323;margin-top:8px;}
+
+  .platform-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:12px;}
+  .platform-item{border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:10px;}
+  .platform-item:hover{border-color:#ffd4c5;}
+  .platform-item.selected{border-color:var(--orange);background:#fff7f4;}
+  .platform-item input[type="checkbox"]{width:16px;height:16px;accent-color:var(--orange);}
+  .platform-item .platform-name{font-size:14px;font-weight:700;color:#232323;}
+  .platform-item .platform-desc{font-size:12px;color:var(--muted);}
+
+  .status-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:10px;font-size:14px;margin-bottom:20px;}
+  .status-bar.ok{background:#e8f5e9;color:var(--green);}
+  .status-bar.warn{background:#fff8e1;color:#b78c00;}
+  .status-bar.error{background:#ffebee;color:var(--red);}
+
+  .submit-btn{width:100%;padding:14px 20px;background:var(--orange);color:#fff;border-radius:12px;font-size:16px;font-weight:780;transition:.2s;}
+  .submit-btn:hover{filter:brightness(1.05);transform:translateY(-1px);}
+  .submit-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+  .result-card{margin-top:20px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.04);}
+  .result-title{font-size:16px;font-weight:780;color:#232323;margin:0 0 14px;}
+  .result-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);}
+  .result-item:last-child{border-bottom:none;}
+  .result-platform{font-weight:700;font-size:14px;}
+  .result-status{font-size:13px;font-weight:700;padding:4px 10px;border-radius:20px;}
+  .result-status.success{background:#e8f5e9;color:var(--green);}
+  .result-status.fail{background:#ffebee;color:var(--red);}
+  .result-message{font-size:13px;color:var(--muted);margin-top:4px;}
+  .result-link{font-size:13px;color:var(--orange);text-decoration:none;}
+  .result-link:hover{text-decoration:underline;}
+
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  @media(max-width:768px){.main{padding-left:0;}.nav-sidebar{display:none;}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div></div>
+    <div class="title">一键发布｜多平台内容分发</div>
+    <div class="actions">
+      <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
+    </div>
+  </header>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro-b.html" title="专业版">🎬</a>
+    <a href="/static/eval.html" title="笑果评测">🎯</a>
+    <a href="/static/eval-square.html" title="段子广场">🏛️</a>
+    <a href="/static/publish.html" class="active" title="一键发布">🚀</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="main-inner">
+      <h1 class="page-title">一键发布</h1>
+      <p class="page-subtitle">上传视频，填写信息，自动分发到目标平台</p>
+
+      <div id="login-status" class="status-bar warn" style="display:none;"></div>
+
+      <div class="form-card">
+        <div class="form-section">
+          <label class="form-label">1. 选择视频</label>
+          <div class="file-box" onclick="document.getElementById('video-file').click()">
+            <input type="file" id="video-file" accept="video/*" onchange="onFileSelected(event)">
+            <div class="file-icon">📹</div>
+            <div class="file-text" id="file-placeholder">点击上传视频文件（支持 MP4 / MOV / AVI 等）</div>
+            <div class="file-name" id="file-name" style="display:none;"></div>
+          </div>
+          <p class="form-hint">视频文件会临时保存在服务器，发布完成后可手动清理。</p>
+        </div>
+
+        <div class="form-section">
+          <label class="form-label" for="title">2. 标题</label>
+          <input type="text" id="title" placeholder="给视频起一个吸引人的标题" maxlength="80">
+        </div>
+
+        <div class="form-section">
+          <label class="form-label" for="content">3. 描述</label>
+          <textarea id="content" placeholder="填写视频简介、话题或备注..."></textarea>
+        </div>
+
+        <div class="form-section">
+          <label class="form-label" for="tags">4. 标签</label>
+          <input type="text" id="tags" placeholder="标签用逗号分隔，如：喜剧, 脱口秀, 原创">
+          <p class="form-hint">B站最多支持 10 个标签。</p>
+        </div>
+
+        <div class="form-section">
+          <label class="form-label">5. 目标平台</label>
+          <div class="platform-grid" id="platform-grid">
+            <div class="platform-item selected" data-value="bilibili" onclick="togglePlatform(this)">
+              <input type="checkbox" checked>
+              <div>
+                <div class="platform-name">B站</div>
+                <div class="platform-desc">视频投稿</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section" id="bilibili-options">
+          <label class="form-label" for="category">B站分区（可选）</label>
+          <select id="category">
+            <option value="">默认：生活-日常</option>
+            <option value="知识">知识</option>
+            <option value="科技">科技</option>
+            <option value="游戏">游戏</option>
+            <option value="动画">动画</option>
+            <option value="音乐">音乐</option>
+            <option value="美食">美食</option>
+            <option value="影视">影视</option>
+          </select>
+        </div>
+
+        <button class="submit-btn" id="submit-btn" onclick="submitPublish()">
+          <span id="btn-text">立即发布</span>
+        </button>
+      </div>
+
+      <div id="result-card" class="result-card" style="display:none;">
+        <h3 class="result-title">发布结果</h3>
+        <div id="result-list"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+requireAuth();
+
+let selectedVideoPath = null;
+
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('file-placeholder').style.display = 'none';
+  document.getElementById('file-name').style.display = 'block';
+  document.getElementById('file-name').textContent = file.name;
+}
+
+function togglePlatform(el) {
+  const checkbox = el.querySelector('input[type="checkbox"]');
+  checkbox.checked = !checkbox.checked;
+  el.classList.toggle('selected', checkbox.checked);
+}
+
+function setLoginStatus(html, type) {
+  const bar = document.getElementById('login-status');
+  bar.innerHTML = html;
+  bar.className = 'status-bar ' + type;
+  bar.style.display = 'flex';
+}
+
+async function checkLoginStatus() {
+  try {
+    const res = await apiFetch('/publish/login-status');
+    const data = await res.json();
+    const bilibili = data.find(item => item.platform === 'bilibili');
+    if (bilibili && bilibili.logged_in) {
+      setLoginStatus('✅ B站登录状态正常，可以直接发布', 'ok');
+    } else {
+      setLoginStatus('⚠️ B站未登录。请先使用命令行在服务器上完成扫码登录或配置 cookie.json，再返回此页面发布。', 'warn');
+    }
+  } catch (err) {
+    setLoginStatus('❌ 无法获取登录状态：' + err.message, 'error');
+  }
+}
+
+async function uploadVideo(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await apiFetch('/publish/upload', {
+    method: 'POST',
+    body: formData,
+  });
+  return await res.json();
+}
+
+async function submitPublish() {
+  const fileInput = document.getElementById('video-file');
+  const title = document.getElementById('title').value.trim();
+  const content = document.getElementById('content').value.trim();
+  const tags = document.getElementById('tags').value.trim();
+  const category = document.getElementById('category').value;
+  const submitBtn = document.getElementById('submit-btn');
+  const btnText = document.getElementById('btn-text');
+
+  if (!title) {
+    alert('请输入视频标题');
+    return;
+  }
+  if (!fileInput.files[0] && !selectedVideoPath) {
+    alert('请选择视频文件');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span> 上传中...';
+
+  try {
+    let videoPath = selectedVideoPath;
+    if (fileInput.files[0]) {
+      const uploadRes = await uploadVideo(fileInput.files[0]);
+      videoPath = uploadRes.video_path;
+      selectedVideoPath = videoPath;
+    }
+
+    btnText.innerHTML = '<span class="spinner"></span> 发布中...';
+
+    const selected = document.querySelectorAll('.platform-item.selected');
+    const platforms = Array.from(selected).map(el => el.dataset.value);
+
+    const res = await apiFetch('/publish/', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        content,
+        tags,
+        video_path: videoPath,
+        platforms,
+        category,
+      }),
+    });
+    const data = await res.json();
+    renderResults(data);
+  } catch (err) {
+    alert('发布失败：' + err.message);
+  } finally {
+    submitBtn.disabled = false;
+    btnText.textContent = '立即发布';
+  }
+}
+
+function renderResults(data) {
+  const resultCard = document.getElementById('result-card');
+  const resultList = document.getElementById('result-list');
+  resultList.innerHTML = '';
+
+  if (!data.results || data.results.length === 0) {
+    resultList.innerHTML = '<div class="result-message">没有返回结果</div>';
+  } else {
+    data.results.forEach(item => {
+      const success = item.success;
+      const statusClass = success ? 'success' : 'fail';
+      const statusText = success ? '成功' : '失败';
+      let linkHtml = '';
+      if (item.url) {
+        linkHtml = `<a href="${item.url}" target="_blank" class="result-link">查看链接</a>`;
+      }
+      resultList.innerHTML += `
+        <div class="result-item">
+          <div>
+            <div class="result-platform">${item.name}</div>
+            <div class="result-message">${item.message}</div>
+            ${linkHtml}
+          </div>
+          <span class="result-status ${statusClass}">${statusText}</span>
+        </div>
+      `;
+    });
+  }
+
+  resultCard.style.display = 'block';
+}
+
+checkLoginStatus();
+</script>
+</body>
+</html>

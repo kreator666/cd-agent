@@ -68,7 +68,7 @@ class MultiPlatformPublisher:
 
         try:
             # 发布前检查
-            ok, msg = adapter.pre_publish_check(content)
+            ok, msg = await adapter.pre_publish_check(content)
             if not ok:
                 return PublishResult(
                     platform=platform,
@@ -194,6 +194,6 @@ class MultiPlatformPublisher:
         """清理所有适配器资源。"""
         for adapter in self.adapters.values():
             try:
-                adapter.cleanup()
+                await adapter.cleanup()
             except Exception as e:
                 logger.error("[%s] 资源清理失败: %s", adapter.platform_name, e)

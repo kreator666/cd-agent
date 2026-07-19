@@ -118,7 +118,7 @@ class TestPublishLoginStatus:
             mock_adapter.platform_type = PlatformType.BILIBILI
             mock_adapter.platform_name = "B站"
             mock_adapter.check_login_status = AsyncMock(return_value=False)
-            mock_adapter.cleanup = MagicMock(return_value=None)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
             mock_adapter_cls.return_value = mock_adapter
 
             resp = client.get("/publish/login-status", headers=auth_headers)
@@ -140,7 +140,7 @@ class TestPublish:
             mock_adapter = MagicMock()
             mock_adapter.platform_type = PlatformType.BILIBILI
             mock_adapter.platform_name = "B站"
-            mock_adapter.pre_publish_check = MagicMock(return_value=(True, ""))
+            mock_adapter.pre_publish_check = AsyncMock(return_value=(True, ""))
             mock_adapter.publish = AsyncMock(
                 return_value=PublishResult(
                     platform=PlatformType.BILIBILI,
@@ -148,7 +148,7 @@ class TestPublish:
                     message="登录失败，无法发布",
                 )
             )
-            mock_adapter.cleanup = MagicMock(return_value=None)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
             mock_adapter_cls.return_value = mock_adapter
 
             resp = client.post(
@@ -177,7 +177,7 @@ class TestPublish:
             mock_adapter = MagicMock()
             mock_adapter.platform_type = PlatformType.BILIBILI
             mock_adapter.platform_name = "B站"
-            mock_adapter.pre_publish_check = MagicMock(return_value=(True, ""))
+            mock_adapter.pre_publish_check = AsyncMock(return_value=(True, ""))
             mock_adapter.publish = AsyncMock(
                 return_value=PublishResult(
                     platform=PlatformType.BILIBILI,
@@ -187,7 +187,7 @@ class TestPublish:
                     content_id="BV1234567890",
                 )
             )
-            mock_adapter.cleanup = MagicMock(return_value=None)
+            mock_adapter.cleanup = AsyncMock(return_value=None)
             mock_adapter_cls.return_value = mock_adapter
 
             resp = client.post(

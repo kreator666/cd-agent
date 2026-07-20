@@ -138,9 +138,9 @@ class TestLoadSkillSections:
         assert data["outro"]
         assert len(data["sections"]) == 3
         ids = [s["id"] for s in data["sections"]]
+        assert "sec-1" in ids
         assert "sec-2" in ids
-        assert "sec-4" in ids
-        assert "sec-9" in ids
+        assert "sec-3" in ids
 
     def test_standup(self):
         data = load_skill_sections(Path("skills/standup/SKILL.md"))

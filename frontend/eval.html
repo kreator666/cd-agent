@@ -163,7 +163,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 <div class="app">
   <header class="topbar">
     <div></div>
-    <div class="title">笑果评测｜Prompt 组合评测</div>
+    <div class="title">笑果评测｜四维度生成完整脱口秀</div>
     <div class="actions">
       <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
     </div>
@@ -185,7 +185,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
       <aside class="config-panel">
         <div class="config-header">
           <h2>评测配置</h2>
-          <p>选择章节模板 + 输入四维度，生成所有章节组合的对比结果</p>
+          <p>输入四维度并选择模型，由 standup_focused Skill 生成完整脱口秀</p>
         </div>
         <div class="config-body">
           <div class="config-section">
@@ -193,15 +193,6 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
             <select id="model-select" class="model-select">
               <option value="deepseek-v3">deepseek-v3</option>
             </select>
-          </div>
-
-          <div class="config-section">
-            <h3>章节模板 <span class="badge" id="section-count">0/0</span></h3>
-            <div class="section-list" id="section-list">
-              <div class="section-item">
-                <div class="section-title">加载中...</div>
-              </div>
-            </div>
           </div>
 
           <div class="config-section">
@@ -244,8 +235,8 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
         <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
         <div class="result-body" id="result-body">
           <div class="empty-state">
-            <h3>👈 在左侧配置后开始评测</h3>
-            <p>选择章节模板并输入四维度，系统将生成所选章节的全部非空组合，每个组合搭配四维度进行评测。</p>
+            <h3>👈 在左侧配置后生成</h3>
+            <p>输入四维度并选择模型，系统将调用 standup_focused Skill 生成一段完整脱口秀。</p>
           </div>
         </div>
       </section>
@@ -268,12 +259,8 @@ requireAuth();
 
 let currentSessionId = null;
 let pollTimer = null;
-let sectionsData = [];
-let selectedSectionIds = new Set();
 
 const modelSelect = document.getElementById('model-select');
-const sectionList = document.getElementById('section-list');
-const sectionCount = document.getElementById('section-count');
 const startBtn = document.getElementById('start-btn');
 const historyBtn = document.getElementById('history-btn');
 const resultBody = document.getElementById('result-body');
@@ -281,7 +268,6 @@ const progressFill = document.getElementById('progress-fill');
 
 async function init() {
   await loadModels();
-  await loadSections();
 }
 
 async function loadModels() {
@@ -298,51 +284,7 @@ async function loadModels() {
   }
 }
 
-async function loadSections() {
-  try {
-    const res = await apiFetch('/eval/skills/standup/sections');
-    const data = await res.json();
-    sectionsData = data.sections || [];
-    renderSections();
-  } catch (err) {
-    sectionList.innerHTML = `<div class="section-item"><div class="section-title">加载失败：${escapeHtml(err.message)}</div></div>`;
-  }
-}
-
-function renderSections() {
-  sectionCount.textContent = `${selectedSectionIds.size}/${sectionsData.length}`;
-  if (sectionsData.length === 0) {
-    sectionList.innerHTML = '<div class="section-item"><div class="section-title">无可用章节</div></div>';
-    return;
-  }
-  sectionList.innerHTML = sectionsData.map(sec => {
-    const checked = selectedSectionIds.has(sec.id) ? 'checked' : '';
-    const selectedClass = selectedSectionIds.has(sec.id) ? 'selected' : '';
-    const preview = escapeHtml(sec.body).replace(/\n/g, ' ').substring(0, 80);
-    return `
-      <div class="section-item ${selectedClass}" onclick="toggleSection('${sec.id}')">
-        <input type="checkbox" ${checked} onclick="event.stopPropagation();toggleSection('${sec.id}')">
-        <div class="section-title">${escapeHtml(sec.title)}</div>
-        <div class="section-preview">${preview}...</div>
-      </div>
-    `;
-  }).join('');
-}
-
-function toggleSection(id) {
-  if (selectedSectionIds.has(id)) {
-    selectedSectionIds.delete(id);
-  } else {
-    selectedSectionIds.add(id);
-  }
-  renderSections();
-}
-
 startBtn.addEventListener('click', async () => {
-  if (selectedSectionIds.size === 0) {
-    alert('请至少选择一个章节模板');
-    return;
-  }
   const topic = document.getElementById('input-topic').value.trim();
   const attitude = document.getElementById('input-attitude').value.trim();
   const bias = document.getElementById('input-bias').value.trim();
@@ -354,19 +296,18 @@ startBtn.addEventListener('click', async () => {
 
   startBtn.disabled = true;
   startBtn.textContent = '生成中...';
-  resultBody.innerHTML = renderLoadingCards(Array.from(selectedSectionIds));
+  resultBody.innerHTML = renderLoadingCard();
 
   try {
     const res = await apiFetch('/eval/sessions', {
       method: 'POST',
       body: JSON.stringify({
-        skill_name: 'standup',
+        skill_name: 'standup_focused',
         model: modelSelect.value,
         topic,
         attitude,
         bias: bias || '无',
         emotion,
-        section_ids: Array.from(selectedSectionIds),
       }),
     });
     const data = await res.json();
@@ -379,20 +320,17 @@ startBtn.addEventListener('click', async () => {
   }
 });
 
-function renderLoadingCards(ids) {
-  // 后端会生成所选章节的全部非空组合，这里先展示与选中数量匹配的占位卡片
-  return ids.map((_, idx) => {
-    return `
-      <div class="result-card" data-loading-index="${idx}">
-        <div class="result-card-header">
-          <div class="result-section-title">组合生成中...</div>
-          <span class="result-status pending">生成中</span>
-        </div>
-        <div class="result-model">${escapeHtml(modelSelect.value)}</div>
-        <div class="result-content">等待模型返回结果...</div>
+function renderLoadingCard() {
+  return `
+    <div class="result-card">
+      <div class="result-card-header">
+        <div class="result-section-title">完整段子生成中...</div>
+        <span class="result-status pending">生成中</span>
       </div>
-    `;
-  }).join('');
+      <div class="result-model">${escapeHtml(modelSelect.value)}</div>
+      <div class="result-content">等待模型返回结果...</div>
+    </div>
+  `;
 }
 
 function startPolling() {
@@ -572,9 +510,6 @@ async function loadSession(sessionId) {
   try {
     const res = await apiFetch(`/eval/sessions/${sessionId}`);
     const data = await res.json();
-    // 根据会话结果反选章节
-    selectedSectionIds = new Set(data.results.map(r => r.section_id));
-    renderSections();
     // 回填输入
     document.getElementById('input-topic').value = data.inputs.topic || '';
     document.getElementById('input-attitude').value = data.inputs.attitude || '';

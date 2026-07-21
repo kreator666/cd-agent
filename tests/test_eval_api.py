@@ -19,6 +19,14 @@ def _patched_create_engine(*args, **kwargs):
     return create_engine(*args, **kwargs)
 
 
+def _mock_skill():
+    """构造一个用于测试的 mock Skill。"""
+    skill = MagicMock()
+    skill.name = "standup_focused"
+    skill.invoke.return_value = "这是生成的段子"
+    return skill
+
+
 @pytest.fixture
 def client():
     with patch(
@@ -26,6 +34,7 @@ def client():
     ), patch("comedy_agent.api.server.AgentOrchestrator") as mock_orch_cls:
         mock_orch = MagicMock()
         mock_orch.run.return_value = {"output": "mocked", "messages": []}
+        mock_orch.tools = []  # 让 eval 路由回退到 load_single_skill
         mock_orch_cls.return_value = mock_orch
 
         from comedy_agent.memory.medium_term import SQLMemoryStore
@@ -46,7 +55,7 @@ def client():
 
 
 class TestEvalSections:
-    """章节模板接口测试。"""
+    """章节模板接口测试（保留但前端不再调用）。"""
 
     def test_get_sections(self, client):
         res = client.get("/eval/skills/standup/sections")
@@ -68,24 +77,20 @@ class TestEvalSession:
     """评测会话接口测试。"""
 
     def test_create_session(self, client):
-        with patch("comedy_agent.api.routers.eval.ModelFactory") as mock_factory:
-            mock_llm = MagicMock()
-            mock_llm.invoke.return_value = MagicMock(content="这是生成的段子")
-            mock_factory.get_model_with_fallback.return_value = mock_llm
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            mock_load_skill.return_value = _mock_skill()
 
             res = client.post("/eval/sessions", json={
-                "skill_name": "standup",
+                "skill_name": "standup_focused",
                 "model": "deepseek-v3",
                 "topic": "骨折",
                 "attitude": "自嘲",
                 "bias": "无",
                 "emotion": "荒诞",
-                "section_ids": ["sec-1", "sec-2"],
             })
             assert res.status_code == 200, res.text
             data = res.json()
-            # 2 个章节会产生 3 种非空组合：a、b、ab
-            assert data["total"] == 3
+            assert data["total"] == 1
             assert data["status"] == "running"
             assert "session_id" in data
 
@@ -94,24 +99,18 @@ class TestEvalSession:
             res2 = client.get(f"/eval/sessions/{session_id}")
             assert res2.status_code == 200, res2.text
             detail = res2.json()
-            assert detail["total"] == 3
-            assert len(detail["results"]) == 3
-            # 验证存在组合结果
-            combo_result = next(
-                (r for r in detail["results"] if r["combo_sections"] and len(r["combo_sections"]) > 1),
-                None,
-            )
-            assert combo_result is not None
+            assert detail["total"] == 1
+            assert len(detail["results"]) == 1
+            assert detail["results"][0]["section_id"] == "full"
 
-    def test_create_session_no_sections(self, client):
+    def test_create_session_missing_input(self, client):
         res = client.post("/eval/sessions", json={
-            "skill_name": "standup",
+            "skill_name": "standup_focused",
             "model": "deepseek-v3",
-            "topic": "骨折",
-            "attitude": "自嘲",
+            "topic": "",
+            "attitude": "",
             "bias": "无",
-            "emotion": "荒诞",
-            "section_ids": [],
+            "emotion": "",
         })
         assert res.status_code == 400
 
@@ -124,19 +123,16 @@ class TestEvalRate:
     """评分接口测试。"""
 
     def test_rate_result(self, client):
-        with patch("comedy_agent.api.routers.eval.ModelFactory") as mock_factory:
-            mock_llm = MagicMock()
-            mock_llm.invoke.return_value = MagicMock(content="这是生成的段子")
-            mock_factory.get_model_with_fallback.return_value = mock_llm
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            mock_load_skill.return_value = _mock_skill()
 
             res = client.post("/eval/sessions", json={
-                "skill_name": "standup",
+                "skill_name": "standup_focused",
                 "model": "deepseek-v3",
                 "topic": "骨折",
                 "attitude": "自嘲",
                 "bias": "无",
                 "emotion": "荒诞",
-                "section_ids": ["sec-1"],
             })
             session_id = res.json()["session_id"]
 
@@ -160,19 +156,16 @@ class TestEvalList:
     """会话列表接口测试。"""
 
     def test_list_sessions(self, client):
-        with patch("comedy_agent.api.routers.eval.ModelFactory") as mock_factory:
-            mock_llm = MagicMock()
-            mock_llm.invoke.return_value = MagicMock(content="这是生成的段子")
-            mock_factory.get_model_with_fallback.return_value = mock_llm
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            mock_load_skill.return_value = _mock_skill()
 
             client.post("/eval/sessions", json={
-                "skill_name": "standup",
+                "skill_name": "standup_focused",
                 "model": "deepseek-v3",
                 "topic": "骨折",
                 "attitude": "自嘲",
                 "bias": "无",
                 "emotion": "荒诞",
-                "section_ids": ["sec-1"],
             })
 
             res = client.get("/eval/sessions")

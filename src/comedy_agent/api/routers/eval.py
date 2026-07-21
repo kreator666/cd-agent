@@ -1,4 +1,4 @@
-"""笑果评测 API —— 章节模板组合 + 四维度输入 + 评分。"""
+"""笑果评测 API —— 四维度输入 + Skill 生成 + 评分。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -24,12 +23,8 @@ from comedy_agent.memory.schema import (
     JokeRating,
     UserProfile,
 )
-from comedy_agent.models.factory import ModelFactory
-from comedy_agent.skills.loader import load_skill_config
+from comedy_agent.skills.loader import load_skill_config, load_single_skill
 from comedy_agent.skills.prompt_sections import (
-    build_system_prompt,
-    build_user_input,
-    generate_combinations,
     parse_sections,
     section_id_from_title,
 )
@@ -63,14 +58,13 @@ class SkillSectionsResponse(BaseModel):
 class EvalCreateRequest(BaseModel):
     """创建评测会话请求。"""
 
-    skill_name: str = Field(default="standup", description="Skill 名称")
+    skill_name: str = Field(default="standup_focused", description="Skill 名称")
     model: str = Field(default="deepseek-v3", description="模型名称")
     topic: str = Field(description="话题")
     attitude: str = Field(description="态度")
     bias: str = Field(description="偏见")
     emotion: str = Field(description="情绪")
     duration: int = Field(default=3, description="时长（分钟）")
-    section_ids: list[str] = Field(description="选中的章节 ID 列表")
 
 
 class EvalCreateResponse(BaseModel):
@@ -283,44 +277,6 @@ async def get_skill_sections(
 
 
 # --------------------------------------------------------------------------- #
-# 组合辅助函数
-# --------------------------------------------------------------------------- #
-
-
-def _build_section_combos(
-    selected_sections: list[tuple[str, str]],
-) -> list[dict[str, Any]]:
-    """把选中的章节列表生成所有非空排列组合。
-
-    四维度（话题/态度/偏见/情绪）作为固定输入，与每个章节组合搭配。
-    返回列表中每项包含：combo_id、combo_title、combo_sections、sections、section_body。
-    """
-    combos = generate_combinations(selected_sections)
-    result: list[dict[str, Any]] = []
-    for combo_tuple, combo_id in combos:
-        combo_list = list(combo_tuple)
-        section_names = [
-            title.lstrip("# ").split("、")[0] for title, _ in combo_list
-        ]
-        combo_title = " + ".join(section_names)
-        result.append(
-            {
-                "combo_id": combo_id,
-                "combo_title": combo_title,
-                "combo_sections": [
-                    {"id": section_id_from_title(title), "title": title}
-                    for title, _ in combo_list
-                ],
-                "sections": combo_list,
-                "section_body": "\n\n--------------------------------------------------\n\n".join(
-                    f"{title}\n\n{body}" for title, body in combo_list
-                ),
-            }
-        )
-    return result
-
-
-# --------------------------------------------------------------------------- #
 # 评测会话接口
 # --------------------------------------------------------------------------- #
 
@@ -332,26 +288,8 @@ async def create_eval_session(
     user_id: str = Depends(get_current_user),
 ) -> EvalCreateResponse:
     """创建评测会话并后台生成结果。"""
-    if not request.section_ids:
-        raise HTTPException(status_code=400, detail="请至少选择一个章节模板")
-
-    skill_dir = Path(settings.skills_dir) / request.skill_name
-    config = load_skill_config(skill_dir)
-    if config is None:
-        raise HTTPException(
-            status_code=404, detail=f"Skill '{request.skill_name}' 不存在"
-        )
-
-    intro, middle, outro = parse_sections(config.system_prompt)
-    selected_sections = [
-        (title, body)
-        for title, body in middle
-        if section_id_from_title(title) in request.section_ids
-    ]
-    if not selected_sections:
-        raise HTTPException(status_code=400, detail="选中的章节 ID 无效")
-
-    combos = _build_section_combos(selected_sections)
+    if not request.topic or not request.attitude or not request.emotion:
+        raise HTTPException(status_code=400, detail="请填写话题、态度和情绪")
 
     session_id = uuid.uuid4().hex[:16]
     now = datetime.utcnow()
@@ -368,26 +306,25 @@ async def create_eval_session(
             emotion=request.emotion,
             duration=request.duration,
             status="running",
-            total=len(combos),
+            total=1,
             created_at=now,
             updated_at=now,
         )
         session.add(eval_session)
 
-        for combo in combos:
-            result = EvalResult(
-                result_id=uuid.uuid4().hex[:16],
-                session_id=session_id,
-                section_id=combo["combo_id"],
-                section_title=f"组合：{combo['combo_title']}",
-                section_body=combo["section_body"],
-                combo_id=combo["combo_id"],
-                combo_sections=combo["combo_sections"],
-                status="pending",
-                model=request.model,
-                created_at=now,
-            )
-            session.add(result)
+        result = EvalResult(
+            result_id=uuid.uuid4().hex[:16],
+            session_id=session_id,
+            section_id="full",
+            section_title=request.topic,
+            section_body="",
+            combo_id=None,
+            combo_sections=[],
+            status="pending",
+            model=request.model,
+            created_at=now,
+        )
+        session.add(result)
         session.commit()
 
     background_tasks.add_task(
@@ -401,13 +338,12 @@ async def create_eval_session(
         bias=request.bias,
         emotion=request.emotion,
         duration=request.duration,
-        section_ids=request.section_ids,
     )
 
     return EvalCreateResponse(
         session_id=session_id,
         status="running",
-        total=len(combos),
+        total=1,
     )
 
 
@@ -915,55 +851,61 @@ def _run_eval_generation(
     bias: str,
     emotion: str,
     duration: int,
-    section_ids: list[str],
 ) -> None:
-    """后台执行生成任务。"""
+    """后台执行生成任务：直接调用指定 Skill 生成完整段子。"""
     try:
-        skill_dir = Path(settings.skills_dir) / skill_name
-        config = load_skill_config(skill_dir)
-        if config is None:
+        with _db_session() as session:
+            result = (
+                session.query(EvalResult)
+                .filter_by(session_id=session_id, section_id="full")
+                .first()
+            )
+            if result is None:
+                return
+            result.status = "running"
+            session.commit()
+
+        # 优先使用 orchestrator 中已注册的 Skill（已注入 retriever/memory）
+        skill = None
+        if state.orch is not None:
+            for tool in getattr(state.orch, "tools", []) or []:
+                if getattr(tool, "name", None) == skill_name:
+                    skill = tool
+                    break
+
+        if skill is None:
+            skill = load_single_skill(Path(settings.skills_dir) / skill_name)
+
+        if skill is None:
             raise ValueError(f"Skill '{skill_name}' 不存在")
 
-        intro, middle, outro = parse_sections(config.system_prompt)
-        selected_sections = [
-            (title, body)
-            for title, body in middle
-            if section_id_from_title(title) in section_ids
-        ]
-        combos = _build_section_combos(selected_sections)
+        if model:
+            skill.model_name = model
 
-        user_input = build_user_input(
-            f"话题：{topic} 态度：{attitude} 偏见：{bias} 情绪：{emotion} 时长：{duration}分钟",
-            config.prompt_template,
-            default_duration=duration,
-            extra_defaults={
-                "section_goal": "创作一段完整的脱口秀段子",
-                "completed_sections": "无",
-            },
+        content = skill.invoke(
+            {
+                "topic": topic,
+                "attitude": attitude,
+                "bias": bias or "无",
+                "emotion": emotion,
+                "duration": duration,
+                "user_id": user_id,
+                "debug": False,
+            }
         )
 
         with _db_session() as session:
-            eval_session = (
-                session.query(EvalSession)
-                .filter_by(session_id=session_id, user_id=user_id)
+            result = (
+                session.query(EvalResult)
+                .filter_by(session_id=session_id, section_id="full")
                 .first()
             )
-            if eval_session is None:
-                return
+            if result is not None:
+                result.content = content
+                result.status = "done"
+                result.completed_at = datetime.utcnow()
+                session.commit()
 
-        for combo in combos:
-            _generate_one(
-                session_id=session_id,
-                user_id=user_id,
-                section_id=combo["combo_id"],
-                intro=intro,
-                sections=combo["sections"],
-                outro=outro,
-                user_input=user_input,
-                model=model,
-            )
-
-        with _db_session() as session:
             eval_session = (
                 session.query(EvalSession)
                 .filter_by(session_id=session_id, user_id=user_id)
@@ -977,6 +919,17 @@ def _run_eval_generation(
     except Exception as exc:  # noqa: BLE001
         logger.exception("评测会话 %s 生成失败", session_id)
         with _db_session() as session:
+            result = (
+                session.query(EvalResult)
+                .filter_by(session_id=session_id, section_id="full")
+                .first()
+            )
+            if result is not None:
+                result.status = "failed"
+                result.error = f"{type(exc).__name__}: {exc}"
+                result.completed_at = datetime.utcnow()
+                session.commit()
+
             eval_session = (
                 session.query(EvalSession)
                 .filter_by(session_id=session_id, user_id=user_id)
@@ -985,66 +938,4 @@ def _run_eval_generation(
             if eval_session is not None:
                 eval_session.status = "failed"
                 eval_session.updated_at = datetime.utcnow()
-                session.commit()
-
-
-def _generate_one(
-    session_id: str,
-    user_id: str,
-    section_id: str,
-    intro: str,
-    sections: list[tuple[str, str]],
-    outro: str,
-    user_input: str,
-    model: str,
-) -> None:
-    """生成单个结果并写入数据库。"""
-    with _db_session() as session:
-        result = (
-            session.query(EvalResult)
-            .filter_by(session_id=session_id, section_id=section_id)
-            .first()
-        )
-        if result is None:
-            return
-        result.status = "running"
-        session.commit()
-
-    try:
-        system_prompt = build_system_prompt(intro, sections, outro)
-        llm = ModelFactory.get_model_with_fallback(name=model)
-
-        # 转义花括号，避免被 LangChain 当作模板变量
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt.replace("{", "{{").replace("}", "}}")),
-            ("human", user_input.replace("{", "{{").replace("}", "}}")),
-        ])
-        chain = prompt | llm
-        output = chain.invoke({})
-        content = str(output.content) if hasattr(output, "content") else str(output)
-
-        with _db_session() as session:
-            result = (
-                session.query(EvalResult)
-                .filter_by(session_id=session_id, section_id=section_id)
-                .first()
-            )
-            if result is not None:
-                result.content = content
-                result.status = "done"
-                result.completed_at = datetime.utcnow()
-                session.commit()
-
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("评测结果生成失败: session=%s section=%s", session_id, section_id)
-        with _db_session() as session:
-            result = (
-                session.query(EvalResult)
-                .filter_by(session_id=session_id, section_id=section_id)
-                .first()
-            )
-            if result is not None:
-                result.status = "failed"
-                result.error = f"{type(exc).__name__}: {exc}"
-                result.completed_at = datetime.utcnow()
                 session.commit()

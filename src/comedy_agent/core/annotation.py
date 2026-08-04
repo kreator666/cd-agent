@@ -20,17 +20,28 @@ from comedy_agent.models.factory import ModelFactory
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ANNOTATION_PROMPT = """你是一位喜剧标注专家。请分析下面这段脱口秀文本，提取关键创作要素。
+DEFAULT_ANNOTATION_PROMPT = """你是一位喜剧标注专家。请分析下面这段脱口秀文本，提取关键创作要素并给出多维度质量评分。
 
 要求：
 1. setup：铺垫部分，引发共鸣或建立预期的内容。
 2. punchline：笑点/反转部分。
 3. callback：是否有 callback（后文呼应前文的细节）。
-4. tags：3-5 个关键词标签。
-5. topic：核心话题（10 字以内）。
-6. style：风格，如自嘲/观察/讽刺/吐槽/荒诞。
-7. structure_type：结构类型，如 script/one_liner/story。
-8. humor_score：幽默程度 1-10。
+4. callback_to：callback 呼应的对象（可选）。
+5. tags：3-5 个关键词标签。
+6. topic：核心话题（10 字以内）。
+7. style：风格，如自嘲/观察/讽刺/吐槽/荒诞。
+8. structure_type：结构类型，如 script/one_liner/story。
+9. 维度评分（1-10，参考顶流脱口秀水准，严格打分）：
+   - humor_score：整体幽默程度
+   - setup_quality：铺垫建立预期质量
+   - punchline_quality：笑点/反转质量
+   - pacing：节奏紧凑度（笑点密度、停顿感）
+   - colloquial_score：口语化/舞台感
+   - resonance：观众共鸣感
+   - surprise：意外感/预期违背
+   - observation：观察角度独特性
+   - structure_integrity：结构完整性
+   - performance_readiness：可直接上演度
 
 文本：
 {text}
@@ -54,12 +65,19 @@ class AnnotatedExample(BaseModel):
     style: str = Field(default="", description="风格")
     kind: str = Field(default="standup", description="喜剧种类")
     structure_type: str = Field(default="script", description="结构类型")
-    humor_score: float = Field(
-        default=5.0,
-        ge=1.0,
-        le=10.0,
-        description="幽默评分 1-10",
-    )
+
+    # 多维质量评分（1-10）
+    humor_score: float = Field(default=5.0, ge=1.0, le=10.0, description="整体幽默程度")
+    setup_quality: float = Field(default=5.0, ge=1.0, le=10.0, description="铺垫建立预期质量")
+    punchline_quality: float = Field(default=5.0, ge=1.0, le=10.0, description="笑点/反转质量")
+    pacing: float = Field(default=5.0, ge=1.0, le=10.0, description="节奏紧凑度")
+    colloquial_score: float = Field(default=5.0, ge=1.0, le=10.0, description="口语化/舞台感")
+    resonance: float = Field(default=5.0, ge=1.0, le=10.0, description="观众共鸣感")
+    surprise: float = Field(default=5.0, ge=1.0, le=10.0, description="意外感/预期违背")
+    observation: float = Field(default=5.0, ge=1.0, le=10.0, description="观察角度独特性")
+    structure_integrity: float = Field(default=5.0, ge=1.0, le=10.0, description="结构完整性")
+    performance_readiness: float = Field(default=5.0, ge=1.0, le=10.0, description="可直接上演度")
+
     source: str = Field(default="", description="来源文件/作品")
     embedding_text: str = Field(default="", description="用于向量检索的拼接文本")
 
@@ -80,6 +98,10 @@ def build_embedding_text(example: AnnotatedExample) -> str:
         f"标签：{'/'.join(example.tags)}",
         f"铺垫：{example.setup}",
         f"笑点：{example.punchline}",
+        f"评分：幽默{example.humor_score} 铺垫{example.setup_quality} 笑点{example.punchline_quality} "
+        f"节奏{example.pacing} 口语{example.colloquial_score} 共鸣{example.resonance} "
+        f"意外{example.surprise} 观察{example.observation} 结构{example.structure_integrity} "
+        f"可演{example.performance_readiness}",
         f"文本：{example.content}",
     ]
     return "\n".join(parts)

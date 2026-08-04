@@ -47,6 +47,16 @@ def main() -> int:
     parser.add_argument("--style", default=None, help="默认风格")
     parser.add_argument("--model", default=None, help="标注模型名称")
     parser.add_argument(
+        "--ingest",
+        action="store_true",
+        help="标注完成后直接写入向量库",
+    )
+    parser.add_argument(
+        "--collection",
+        default=None,
+        help="写入向量库的目标集合名称（默认 comedy_knowledge）",
+    )
+    parser.add_argument(
         "--schema",
         action="store_true",
         help="仅生成 data/annotation_schema.json 并退出",
@@ -61,6 +71,10 @@ def main() -> int:
         )
         print(f"Schema 已保存到 {schema_path}")
         return 0
+
+    if args.ingest and not args.input:
+        print("--ingest 模式需要 --input", file=sys.stderr)
+        return 1
 
     if not args.input or not args.output:
         print("--input 和 --output 为必填项", file=sys.stderr)
@@ -81,6 +95,12 @@ def main() -> int:
     )
     save_annotations(examples, Path(args.output))
     print(f"标注完成，输出 {len(examples)} 条示例到 {args.output}")
+
+    if args.ingest:
+        from comedy_agent.core.example_retriever import ingest_annotations
+
+        ids = ingest_annotations(examples, collection_name=args.collection)
+        print(f"已写入 {len(ids)} 条到向量库集合 '{args.collection or 'comedy_knowledge'}'")
     return 0
 
 

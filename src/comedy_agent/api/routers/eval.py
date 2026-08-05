@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -220,6 +221,26 @@ class SquareJokeDetail(BaseModel):
     comment_count: int
     my_score: int | None
     published_at: str
+
+
+class CoachRequest(BaseModel):
+    """段子打磨请求。"""
+
+    iterations: int = Field(default=3, ge=1, le=5, description="最大迭代轮数 1-5")
+    min_score: float = Field(default=8.0, ge=1.0, le=10.0, description="提前终止阈值")
+    top_k: int = Field(default=5, ge=1, le=20, description="参考顶流文稿数量")
+    save_product: bool = Field(default=True, description="是否保存最终成品到用户作品库")
+
+
+class CoachResponse(BaseModel):
+    """段子打磨响应。"""
+
+    success: bool
+    result_id: str
+    final_script: str = Field(default="", description="最终成品段子")
+    stopped_reason: str = Field(default="", description="结束原因")
+    iterations: list[dict[str, Any]] = Field(default_factory=list, description="每轮评分记录")
+    saved_script_id: str | None = Field(default=None, description="保存到作品库的 script_id")
 
 
 # --------------------------------------------------------------------------- #
@@ -574,6 +595,81 @@ async def unpublish_eval_result(
         session.commit()
 
     return PublishResponse(success=True)
+
+
+@router.post("/results/{result_id}/coach", response_model=CoachResponse)
+async def coach_eval_result(
+    result_id: str,
+    request: CoachRequest,
+    user_id: str = Depends(get_current_user),
+) -> CoachResponse:
+    """对评测结果调用 script_coach Skill 进行打磨优化。
+
+    仅作者可操作，最终作品保存到用户作品库，不会混入顶流文稿库。
+    """
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .join(EvalSession)
+            .filter(EvalResult.result_id == result_id, EvalSession.user_id == user_id)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+        if result.status != "done":
+            raise HTTPException(status_code=400, detail="只能打磨已生成完成的段子")
+        if not result.content:
+            raise HTTPException(status_code=400, detail="段子内容为空，无法打磨")
+
+        eval_session = result.session
+
+    # 风格映射：优先 attitude，否则 emotion，否则日常观察
+    available_styles = {"自嘲", "社会讽刺", "职场", "黑色幽默", "吐槽", "日常观察"}
+    style = eval_session.attitude if eval_session.attitude in available_styles else ""
+    if not style:
+        style = eval_session.emotion if eval_session.emotion in available_styles else "日常观察"
+
+    # 加载 script_coach Skill
+    skill = load_single_skill(Path(settings.skills_dir) / "script_coach")
+    if skill is None:
+        raise HTTPException(status_code=500, detail="script_coach Skill 未加载")
+
+    if state.orch is not None and getattr(skill, "memory", None) is None:
+        # 如果 Skill 没有记忆注入，尝试从 orchestrator 获取 memory
+        skill.memory = getattr(state.orch, "memory", None)
+
+    try:
+        output = skill.invoke(
+            {
+                "script": result.content,
+                "topic": eval_session.topic,
+                "style": style,
+                "target_duration": eval_session.duration,
+                "iterations": request.iterations,
+                "min_score": request.min_score,
+                "top_k": request.top_k,
+                "save_product": request.save_product,
+                "user_id": user_id,
+            }
+        )
+    except Exception as exc:
+        logger.exception("打磨段子失败 result_id=%s", result_id)
+        raise HTTPException(status_code=500, detail=f"打磨失败: {exc}") from exc
+
+    try:
+        coach_result = json.loads(output)
+    except json.JSONDecodeError as exc:
+        logger.error("打磨结果 JSON 解析失败: %s", output[:200])
+        raise HTTPException(status_code=500, detail="打磨结果解析失败") from exc
+
+    return CoachResponse(
+        success=True,
+        result_id=result_id,
+        final_script=coach_result.get("final_script", ""),
+        stopped_reason=coach_result.get("stopped_reason", ""),
+        iterations=coach_result.get("iterations", []),
+        saved_script_id=coach_result.get("saved_script_id"),
+    )
 
 
 # --------------------------------------------------------------------------- #

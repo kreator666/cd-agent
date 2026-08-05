@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -172,6 +173,73 @@ class TestEvalList:
             assert res.status_code == 200
             data = res.json()
             assert len(data["sessions"]) >= 1
+
+
+def _mock_coach_skill():
+    """构造一个用于测试的 mock script_coach Skill。"""
+    skill = MagicMock()
+    skill.name = "script_coach"
+    skill.memory = None
+    skill.invoke.return_value = json.dumps({
+        "final_script": "优化后的段子",
+        "stopped_reason": "达到 min_score 阈值 8.0",
+        "iterations": [
+            {
+                "round": 1,
+                "script": "原始段子",
+                "overall_score": 8.5,
+                "dimension_scores": {"humor_score": 8.5},
+                "gap_to_top": "已接近顶流",
+                "weaknesses": [],
+                "improvement_plan": "无需改写",
+                "references": [],
+            }
+        ],
+        "saved_script_id": "script_abc",
+    })
+    return skill
+
+
+class TestEvalCoach:
+    """段子打磨接口测试。"""
+
+    def test_coach_result(self, client):
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            # 第一次加载 standup_focused 用于生成，第二次加载 script_coach 用于打磨
+            def side_effect(skill_dir):
+                if "script_coach" in str(skill_dir):
+                    return _mock_coach_skill()
+                return _mock_skill()
+
+            mock_load_skill.side_effect = side_effect
+
+            res = client.post("/eval/sessions", json={
+                "skill_name": "standup_focused",
+                "model": "deepseek-v3",
+                "topic": "骨折",
+                "attitude": "自嘲",
+                "bias": "无",
+                "emotion": "荒诞",
+            })
+            session_id = res.json()["session_id"]
+
+            detail = client.get(f"/eval/sessions/{session_id}").json()
+            result_id = detail["results"][0]["id"]
+
+            coach_res = client.post(f"/eval/results/{result_id}/coach", json={
+                "iterations": 3,
+                "min_score": 8.0,
+            })
+            assert coach_res.status_code == 200, coach_res.text
+            data = coach_res.json()
+            assert data["success"] is True
+            assert data["final_script"] == "优化后的段子"
+            assert data["saved_script_id"] == "script_abc"
+            assert len(data["iterations"]) == 1
+
+    def test_coach_result_not_found(self, client):
+        coach_res = client.post("/eval/results/notexist/coach", json={})
+        assert coach_res.status_code == 404
 
 
 if __name__ == "__main__":

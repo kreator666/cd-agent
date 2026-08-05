@@ -127,6 +127,24 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .publish-btn.secondary:hover{background:#e8eaed;}
 .published-badge{font-size:12px;font-weight:700;color:var(--green);background:#e8f5e9;padding:4px 10px;border-radius:20px;}
 
+.coach-modal-box{width:640px;max-width:90vw;}
+.coach-config{display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;margin:16px 0;}
+.coach-field{display:flex;flex-direction:column;gap:6px;}
+.coach-field label{font-size:13px;font-weight:650;color:#555;}
+.coach-field input{padding:9px 12px;border:1px solid var(--line-dark);border-radius:10px;font-size:14px;outline:none;}
+.coach-field input:focus{border-color:var(--orange);}
+#coach-result{margin-top:18px;}
+.coach-section{margin-bottom:18px;}
+.coach-section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.coach-final{background:#f5f6f8;border-radius:12px;padding:16px;line-height:1.9;white-space:pre-wrap;}
+.coach-round{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+.coach-round-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.coach-round-title{font-size:14px;font-weight:700;color:#232323;}
+.coach-score{font-size:14px;font-weight:700;color:var(--orange);}
+.coach-weaknesses{margin:10px 0;padding-left:18px;}
+.coach-weaknesses li{font-size:13px;color:#444;margin-bottom:4px;}
+.coach-plan{font-size:13px;color:#555;background:#fff7f4;border-radius:8px;padding:10px;}
+
 .empty-state{text-align:center;padding:80px 20px;color:#999;}
 .empty-state h3{margin:0 0 10px;font-size:18px;color:#555;}
 
@@ -250,6 +268,32 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <button class="close-modal" onclick="closeHistory()">✕</button>
     <h3>历史评测会话</h3>
     <div class="history-list" id="history-list"></div>
+  </div>
+</div>
+
+<!-- Coach modal -->
+<div class="modal-overlay" id="coach-modal">
+  <div class="modal-box coach-modal-box">
+    <button class="close-modal" onclick="closeCoachModal()">✕</button>
+    <h3>🎯 段子打磨</h3>
+    <div id="coach-body">
+      <div class="coach-config">
+        <div class="coach-field">
+          <label>最大迭代轮数</label>
+          <input type="number" id="coach-iterations" min="1" max="5" value="3">
+        </div>
+        <div class="coach-field">
+          <label>提前终止阈值</label>
+          <input type="number" id="coach-min-score" min="1" max="10" step="0.1" value="8.0">
+        </div>
+        <div class="coach-field">
+          <label>参考文稿数</label>
+          <input type="number" id="coach-top-k" min="1" max="20" value="5">
+        </div>
+      </div>
+      <button class="start-btn" id="coach-start-btn" onclick="submitCoach()">开始打磨</button>
+      <div id="coach-result" style="display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -402,6 +446,7 @@ function renderResultCard(r) {
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           ${r.status === 'done' && !r.is_published ? `<button class="publish-btn" onclick="publishResult('${r.id}')">发布到广场</button>` : ''}
+          ${r.status === 'done' ? `<button class="publish-btn secondary" onclick="openCoachModal('${r.id}')">打磨</button>` : ''}
           ${r.is_published ? `<span class="published-badge">已在广场</span><button class="publish-btn secondary" onclick="unpublishResult('${r.id}')">取消发布</button>` : ''}
           ${r.content ? `<button class="copy-btn" onclick="copyResult('${r.id}')">复制</button>` : ''}
         </div>
@@ -469,6 +514,110 @@ async function unpublishResult(id) {
     }
   } catch (err) {
     alert('取消发布失败：' + err.message);
+  }
+}
+
+let currentCoachResultId = null;
+
+function openCoachModal(resultId) {
+  currentCoachResultId = resultId;
+  document.getElementById('coach-modal').classList.add('active');
+  document.getElementById('coach-result').style.display = 'none';
+  document.getElementById('coach-result').innerHTML = '';
+  document.getElementById('coach-start-btn').style.display = 'block';
+  document.getElementById('coach-start-btn').disabled = false;
+  document.getElementById('coach-start-btn').textContent = '开始打磨';
+}
+
+function closeCoachModal() {
+  document.getElementById('coach-modal').classList.remove('active');
+  currentCoachResultId = null;
+}
+
+async function submitCoach() {
+  if (!currentCoachResultId) return;
+  const btn = document.getElementById('coach-start-btn');
+  const iterations = parseInt(document.getElementById('coach-iterations').value, 10);
+  const minScore = parseFloat(document.getElementById('coach-min-score').value);
+  const topK = parseInt(document.getElementById('coach-top-k').value, 10);
+
+  if (Number.isNaN(iterations) || iterations < 1 || iterations > 5) {
+    alert('迭代轮数需在 1-5 之间');
+    return;
+  }
+  if (Number.isNaN(minScore) || minScore < 1 || minScore > 10) {
+    alert('阈值需在 1-10 之间');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '打磨中...';
+  try {
+    const res = await apiFetch(`/eval/results/${currentCoachResultId}/coach`, {
+      method: 'POST',
+      body: JSON.stringify({ iterations, min_score: minScore, top_k: topK }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error('打磨未成功');
+    }
+    renderCoachResult(data);
+  } catch (err) {
+    alert('打磨失败：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '开始打磨';
+  }
+}
+
+function renderCoachResult(data) {
+  const container = document.getElementById('coach-result');
+  const finalScript = escapeHtml(data.final_script || '').replace(/\n/g, '<br>');
+  const rounds = (data.iterations || []).map((it, idx) => {
+    const weaknesses = (it.weaknesses || []).map(w => `<li>${escapeHtml(w)}</li>`).join('');
+    const dims = it.dimension_scores ? Object.entries(it.dimension_scores).map(([k, v]) => `${k}: ${v}`).join(' / ') : '';
+    return `
+      <div class="coach-round">
+        <div class="coach-round-header">
+          <div class="coach-round-title">第 ${it.round || idx + 1} 轮</div>
+          <div class="coach-score">综合 ${it.overall_score || '-'}/10</div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${escapeHtml(dims)}</div>
+        <div class="coach-plan">差距：${escapeHtml(it.gap_to_top || '-')}</div>
+        ${weaknesses ? `<ul class="coach-weaknesses">${weaknesses}</ul>` : ''}
+        ${it.improvement_plan ? `<div class="coach-plan">改写方向：${escapeHtml(it.improvement_plan)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="coach-section">
+      <div class="coach-section-title">最终成品</div>
+      <div class="coach-final" id="coach-final-script">${finalScript}</div>
+      <button class="copy-btn" style="margin-top:10px;" onclick="copyCoachResult()">复制成品</button>
+    </div>
+    <div class="coach-section">
+      <div class="coach-section-title">打磨记录 · ${escapeHtml(data.stopped_reason || '')}</div>
+      ${rounds}
+    </div>
+  `;
+  container.style.display = 'block';
+}
+
+async function copyCoachResult() {
+  const el = document.getElementById('coach-final-script');
+  if (!el) return;
+  const text = el.innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = el.nextElementSibling;
+    if (btn) {
+      const old = btn.textContent;
+      btn.textContent = '已复制';
+      setTimeout(() => btn.textContent = old, 1500);
+    }
+  } catch {
+    alert('复制失败');
   }
 }
 

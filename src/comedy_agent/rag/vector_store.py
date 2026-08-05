@@ -207,7 +207,8 @@ def _sanitize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
         if isinstance(v, (str, int, float, bool)):
             clean[k] = v
         elif isinstance(v, list) and all(isinstance(x, (str, int, float, bool)) for x in v):
-            clean[k] = v
+            # ChromaDB 不接受空列表，转换为空字符串
+            clean[k] = v if v else ""
         elif v is None:
             clean[k] = ""
         else:

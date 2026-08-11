@@ -209,7 +209,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
           <div class="config-section">
             <h3>模型 <span class="badge">单模型</span></h3>
             <select id="model-select" class="model-select">
-              <option value="deepseek-v3">deepseek-v3</option>
+              <option value="deepseek-v4-flash">deepseek-v4-flash</option>
             </select>
           </div>
 
@@ -320,8 +320,8 @@ async function loadModels() {
     const data = await res.json();
     const models = data.models || [];
     modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
-    if (!models.includes('deepseek-v3')) {
-      modelSelect.innerHTML = '<option value="deepseek-v3">deepseek-v3</option>' + modelSelect.innerHTML;
+    if (!models.includes('deepseek-v4-flash')) {
+      modelSelect.innerHTML = '<option value="deepseek-v4-flash">deepseek-v4-flash</option>' + modelSelect.innerHTML;
     }
   } catch (err) {
     console.error('加载模型失败', err);
@@ -590,18 +590,28 @@ function renderCoachResult(data) {
     `;
   }).join('');
 
+  const recordsId = 'coach-records';
   container.innerHTML = `
     <div class="coach-section">
       <div class="coach-section-title">最终成品</div>
       <div class="coach-final" id="coach-final-script">${finalScript}</div>
       <button class="copy-btn" style="margin-top:10px;" onclick="copyCoachResult()">复制成品</button>
     </div>
-    <div class="coach-section">
-      <div class="coach-section-title">打磨记录 · ${escapeHtml(data.stopped_reason || '')}</div>
-      ${rounds}
+    <div class="coach-section" style="margin-top:16px;">
+      <button class="copy-btn" style="background:transparent;border:1px solid var(--muted);color:var(--muted);" onclick="toggleCoachRecords()">查看打磨记录 · ${escapeHtml(data.stopped_reason || '')}</button>
+      <div id="${recordsId}" style="display:none;margin-top:10px;">
+        ${rounds}
+      </div>
     </div>
   `;
   container.style.display = 'block';
+}
+
+function toggleCoachRecords() {
+  const el = document.getElementById('coach-records');
+  if (!el) return;
+  const visible = el.style.display === 'block';
+  el.style.display = visible ? 'none' : 'block';
 }
 
 async function copyCoachResult() {

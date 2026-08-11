@@ -1,6 +1,5 @@
 """全局配置管理。"""
 
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -46,10 +45,11 @@ class Settings(BaseSettings):
     )
 
     # 默认模型
-    default_model: str = Field(default="gpt-4o", alias="DEFAULT_MODEL")
+    default_model: str = Field(default="deepseek-v4-flash", alias="DEFAULT_MODEL")
     default_embedding_model: str = Field(
         default="text-embedding-3-large", alias="DEFAULT_EMBEDDING_MODEL"
     )
+
 
     # 向量数据库
     vector_db_path: str = Field(default="./chroma_data", alias="VECTOR_DB_PATH")
@@ -68,8 +68,8 @@ class Settings(BaseSettings):
     rate_limit_read_window: int = Field(default=60, alias="RATE_LIMIT_READ_WINDOW")
 
     # 模型分层配置（任务类型绑定模型）
-    creative_model: str = Field(default="claude-3-5-sonnet", alias="CREATIVE_MODEL")
-    analytical_model: str = Field(default="gpt-4o", alias="ANALYTICAL_MODEL")
+    creative_model: str = Field(default="deepseek-v4-flash", alias="CREATIVE_MODEL")
+    analytical_model: str = Field(default="deepseek-v4-flash", alias="ANALYTICAL_MODEL")
     fast_model: str = Field(default="gpt-4o-mini", alias="FAST_MODEL")
 
     # Fallback 备用模型链（逗号分隔）

@@ -358,6 +358,7 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
         section_index = info.get("section_index", 0)
         section_label = f"第 {section_index + 1} 段"
         suggestions = info.get("suggestions", "")
+        suggested_revision = info.get("suggested_revision", "")
         content = (
             f"{info['message']}\n\n{section_text}"
             if section_text
@@ -365,33 +366,36 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
         )
         if suggestions:
             content = f"{content}\n\n💡 改进建议：\n{suggestions}"
-        return _build_guide_response(
-            session_id=session_id,
-            content=content,
-            workflow_state="human_review",
-            current_role="写手阿文",
-            next_role="用户",
-            next_actions=[
-                {"label": "✅ 通过", "action": "approve", "value": "通过"},
-                {"label": "✏️ 修改", "action": "modify", "value": "修改"},
-                {"label": "✨ 润色", "action": "polish", "value": "润色"},
-                {"label": "💡 给出建议", "action": "suggest", "value": "给出建议"},
-            ],
-            steps=[
-                {
-                    "type": "guide",
-                    "content": content,
-                    "current_role": "写手阿文",
-                    "todo_board": [],
-                    "next_actions": [
-                        {"label": "通过", "action": "approve", "value": "通过"},
-                        {"label": "修改", "action": "modify", "value": "修改"},
-                        {"label": "润色", "action": "polish", "value": "润色"},
-                        {"label": "给出建议", "action": "suggest", "value": "给出建议"},
-                    ],
-                }
-            ],
-            artifacts=[
+        if suggested_revision:
+            content = f"{content}\n\n✏️ 建议修改版：\n{suggested_revision}"
+
+        next_actions = [
+            {"label": "✅ 通过", "action": "approve", "value": "通过"},
+            {"label": "✏️ 修改", "action": "modify", "value": "修改"},
+            {"label": "✨ 润色", "action": "polish", "value": "润色"},
+            {"label": "💡 给出建议", "action": "suggest", "value": "给出建议"},
+        ]
+        if suggested_revision:
+            next_actions.insert(
+                2,
+                {"label": "📥 采纳建议版", "action": "adopt_revision", "value": "采纳建议版"},
+            )
+
+        step_actions = [
+            {"label": "通过", "action": "approve", "value": "通过"},
+            {"label": "修改", "action": "modify", "value": "修改"},
+            {"label": "润色", "action": "polish", "value": "润色"},
+            {"label": "给出建议", "action": "suggest", "value": "给出建议"},
+        ]
+        if suggested_revision:
+            step_actions.insert(
+                2,
+                {"label": "采纳建议版", "action": "adopt_revision", "value": "采纳建议版"},
+            )
+
+        artifacts = []
+        if section_text:
+            artifacts.append(
                 Artifact(
                     id=f"{session_id}-section-{section_index}",
                     type="section",
@@ -399,9 +403,35 @@ def _build_response(raw: dict | ComedyState, session_id: str) -> ProChatV4Respon
                     content=section_text,
                     created_by="writer",
                 )
-            ]
-            if section_text
-            else None,
+            )
+        if suggested_revision:
+            artifacts.append(
+                Artifact(
+                    id=f"{session_id}-section-{section_index}-revision",
+                    type="suggested_revision",
+                    title=f"{section_label}（建议修改版）",
+                    content=suggested_revision,
+                    created_by="coach",
+                )
+            )
+
+        return _build_guide_response(
+            session_id=session_id,
+            content=content,
+            workflow_state="human_review",
+            current_role="写手阿文",
+            next_role="用户",
+            next_actions=next_actions,
+            steps=[
+                {
+                    "type": "guide",
+                    "content": content,
+                    "current_role": "写手阿文",
+                    "todo_board": [],
+                    "next_actions": step_actions,
+                }
+            ],
+            artifacts=artifacts or None,
             skill_meta=raw.get("skill_meta") if isinstance(raw, dict) else None,
         )
 

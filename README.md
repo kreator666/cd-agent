@@ -95,9 +95,10 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | Anthropic API Key | `sk-ant-xxx` |
 | `DASHSCOPE_API_KEY` | 阿里云通义千问 Key | `sk-xxx` |
 | `MOONSHOT_API_KEY` | Moonshot / Kimi API Key | `sk-kimi-xxx` |
-| `DEFAULT_MODEL` | 默认模型 | `gpt-4o` |
-| `CREATIVE_MODEL` | 创意任务模型 | `claude-3-5-sonnet` |
-| `ANALYTICAL_MODEL` | 分析任务模型 | `gpt-4o` |
+| `WJ_API_KEY` | 万界数据 API Key | `xxx` |
+| `DEFAULT_MODEL` | 默认模型 | `deepseek-v4-flash` |
+| `CREATIVE_MODEL` | 创意任务模型 | `deepseek-v4-flash` |
+| `ANALYTICAL_MODEL` | 分析任务模型 | `deepseek-v4-flash` |
 | `FAST_MODEL` | 快速响应模型 | `gpt-4o-mini` |
 | `CREATIVE_FALLBACK_MODELS` | 创意任务备用模型链 | `gpt-4o,qwen-max` |
 | `ANALYTICAL_FALLBACK_MODELS` | 分析任务备用模型链 | `qwen-max,gpt-4o-mini` |

@@ -88,6 +88,33 @@ def process_feedback_node(state: ComedyState) -> dict:
             "phase": "suggesting",
         }
 
+    # 采纳建议版：直接用 suggest_node 生成的建议修改版替换当前段落
+    if feedback == "采纳建议版":
+        revision = (state.suggested_revision or "").strip()
+        if not revision:
+            logger.warning("process_feedback: adopt_revision requested but no suggested_revision available")
+            return {
+                "current_section": state.current_section,
+                "feedback": "",
+                "suggestions": None,
+                "suggested_revision": None,
+                "phase": "human_review",
+            }
+        sections = list(state.sections)
+        if state.current_section < len(sections):
+            sections[state.current_section] = revision
+        else:
+            sections.append(revision)
+        logger.debug("process_feedback: adopt suggested revision for section %d", state.current_section)
+        return {
+            "sections": sections,
+            "current_section": state.current_section,
+            "feedback": "",
+            "suggestions": None,
+            "suggested_revision": None,
+            "phase": "human_review",
+        }
+
     # 重写/重新规划类反馈
     if any(kw in feedback for kw in ("重写", "replan", "重新规划", "大纲不对")):
         logger.debug("process_feedback: replan")

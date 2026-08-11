@@ -60,7 +60,7 @@ class EvalCreateRequest(BaseModel):
     """创建评测会话请求。"""
 
     skill_name: str = Field(default="standup_focused", description="Skill 名称")
-    model: str = Field(default="deepseek-v3", description="模型名称")
+    model: str = Field(default="deepseek-v4-flash", description="模型名称")
     topic: str = Field(description="话题")
     attitude: str = Field(description="态度")
     bias: str = Field(description="偏见")
@@ -633,6 +633,10 @@ async def coach_eval_result(
     skill = load_single_skill(Path(settings.skills_dir) / "script_coach")
     if skill is None:
         raise HTTPException(status_code=500, detail="script_coach Skill 未加载")
+
+    # 打磨与生成使用同一模型，与当前生成段子模型保持一致
+    if result.model:
+        skill.model_name = result.model
 
     if state.orch is not None and getattr(skill, "memory", None) is None:
         # 如果 Skill 没有记忆注入，尝试从 orchestrator 获取 memory

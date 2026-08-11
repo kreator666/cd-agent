@@ -268,6 +268,49 @@ class ScriptCoachSkill(ComedySkill):
             )
         return "\n\n".join(lines)
 
+    @staticmethod
+    def _invoke_structured(
+        llm: Any,
+        schema: type[BaseModel],
+        system_prompt: str,
+        user_prompt: str,
+        default: BaseModel,
+    ) -> BaseModel:
+        """优先使用 with_structured_output，失败时回退到 JSON 文本解析。
+
+        部分模型/地区对 structured output 返回 403，使用普通 ChatCompletion
+        并要求模型输出 JSON，可在多数场景下降级恢复。
+        """
+        try:
+            structured_llm = llm.with_structured_output(schema)
+            return structured_llm.invoke(
+                [("system", system_prompt), ("human", user_prompt)]
+            )
+        except Exception as e:
+            logger.warning("结构化输出失败，尝试 JSON 文本解析: %s", e)
+
+        # Fallback：使用普通 ChatCompletion 并要求模型输出 JSON
+        json_system = (
+            system_prompt + "\n\n请严格按 JSON 格式输出，不要附加任何解释或 markdown 代码块。"
+        )
+        json_user = user_prompt + "\n\n请直接输出符合上述 Schema 的 JSON 对象。"
+        try:
+            response = llm.invoke([("system", json_system), ("human", json_user)])
+            text = str(getattr(response, "content", response)).strip()
+            # 去除可能的 markdown 代码围栏
+            if text.startswith("```"):
+                text = (
+                    text.removeprefix("```json")
+                    .removeprefix("```")
+                    .removesuffix("```")
+                    .strip()
+                )
+            data = json.loads(text)
+            return schema(**data)
+        except Exception as e:
+            logger.warning("JSON 文本解析也失败，使用默认: %s", e)
+            return default
+
     def _evaluate_round(
         self,
         round_num: int,
@@ -305,14 +348,13 @@ class ScriptCoachSkill(ComedySkill):
         )
 
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
-        structured_llm = llm.with_structured_output(DimensionScores)
-        try:
-            scores: DimensionScores = structured_llm.invoke(
-                [("system", system_prompt), ("human", user_prompt)]
-            )
-        except Exception as e:
-            logger.warning("结构化评分失败，使用默认评分: %s", e)
-            scores = DimensionScores()
+        scores = self._invoke_structured(
+            llm,
+            DimensionScores,
+            system_prompt,
+            user_prompt,
+            DimensionScores(),
+        )
 
         # 用另一个结构化调用生成诊断与改进建议
         diagnosis = self._diagnose_round(
@@ -359,19 +401,18 @@ class ScriptCoachSkill(ComedySkill):
         )
 
         llm = ModelFactory.get_model_with_fallback(name=self.model_name, task_type=self.task_type)
-        structured_llm = llm.with_structured_output(DiagnosisOutput)
-        try:
-            result: DiagnosisOutput = structured_llm.invoke(
-                [("system", system_prompt), ("human", user_prompt)]
-            )
-        except Exception as e:
-            logger.warning("结构化诊断失败，使用兜底建议: %s", e)
-            return {
-                "gap_to_top": "（诊断生成失败）",
-                "weaknesses": ["请检查铺垫是否过长", "笑点是否足够意外", "口语化是否自然"],
-                "improvement_plan": "优化铺垫节奏，增强笑点意外感，让表达更口语化。",
-            }
-        return result.model_dump()
+        diagnosis_result = self._invoke_structured(
+            llm,
+            DiagnosisOutput,
+            system_prompt,
+            user_prompt,
+            DiagnosisOutput(
+                gap_to_top="（诊断生成失败）",
+                weaknesses=["请检查铺垫是否过长", "笑点是否足够意外", "口语化是否自然"],
+                improvement_plan="优化铺垫节奏，增强笑点意外感，让表达更口语化。",
+            ),
+        )
+        return diagnosis_result.model_dump()
 
     def _rewrite_script(
         self,
@@ -385,11 +426,12 @@ class ScriptCoachSkill(ComedySkill):
         """根据改进建议生成下一版段子。"""
         system_prompt = (
             "你是一位顶尖脱口秀编剧。请根据教练给出的评分、差距和改进建议，"
-            "对当前段子进行改写。要求：\n"
+            "对当前段子进行大刀阔斧的改写。要求：\n"
             "1. 保留原话题和核心观点；\n"
-            "2. 保留原文中优秀的句子；\n"
-            "3. 针对 weakneses 逐项改进；\n"
-            "4. 输出必须是连续、干净的纯文本段子正文，不要分析、不要格式标签。"
+            "2. 保留原文中最精彩的 1-2 个句子，其余允许彻底重写；\n"
+            "3. 针对 weaknesses 逐项改进，必须做出肉眼可见的变化，禁止只做同义词替换或调整语序；\n"
+            "4. 至少完成 3 处明显改动：口语化重构、节奏压缩、笑点升级、加入具象画面或反转；\n"
+            "5. 输出必须是连续、干净的纯文本段子正文，不要分析、不要格式标签、不要分段标题。"
         )
         user_prompt = (
             f"【话题】{topic}\n"

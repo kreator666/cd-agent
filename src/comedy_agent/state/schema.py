@@ -84,6 +84,10 @@ class ComedyState(BaseModel):
         default=None,
         description="本次请求指定的模型",
     )
+    model_used: str | None = Field(
+        default=None,
+        description="实际生成段落时使用的模型名称（当 model 为空时由 write_node 写入）",
+    )
     messages: Annotated[list[AnyMessage], add_messages] = Field(
         default_factory=list,
         description="LangChain 消息链",
@@ -143,6 +147,10 @@ class ComedyState(BaseModel):
     suggestions: str | None = Field(
         default=None,
         description="AI 对用户段落的改进建议",
+    )
+    suggested_revision: str | None = Field(
+        default=None,
+        description="根据建议重写的段落建议版",
     )
     manual_section_mode: bool = Field(
         default=False,

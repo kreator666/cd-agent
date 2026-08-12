@@ -237,6 +237,24 @@
         </div>
         <button class="btn" onclick="saveModelConfig()">保存配置</button>
       </div>
+
+      <div class="page-title" style="margin-top:1.5rem;">💰 微信打赏设置</div>
+      <div class="card" style="max-width:600px;">
+        <div style="margin-bottom:1rem;">
+          <label>微信收款二维码</label>
+          <div id="tipping-qr-preview" style="margin-bottom:10px;display:none;">
+            <img id="tipping-qr-img" src="" alt="收款二维码" style="max-width:200px;max-height:200px;border:1px solid var(--line-dark);border-radius:10px;">
+          </div>
+          <input type="file" id="tipping-qr-file" accept="image/*" style="font-size:.875rem;background:#fff;padding:8px;">
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">支持 jpg/png/gif/webp，建议 ≤ 2MB</div>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <label>打赏文案</label>
+          <textarea id="tipping-copy" rows="3" placeholder="觉得这段子好笑？扫二维码请作者喝杯咖啡 ☕" style="width:100%;padding:10px 12px;border:1.5px solid var(--line-dark);border-radius:10px;font-size:14px;font-family:inherit;outline:none;resize:vertical;"></textarea>
+        </div>
+        <button class="btn" onclick="saveTippingConfig()">保存打赏设置</button>
+        <div id="tipping-save-result" style="margin-top:.5rem;font-size:.875rem;font-weight:600;"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -286,6 +304,58 @@
             alert('模型配置已保存');
         } catch (err) {
             alert('保存失败：' + err.message);
+        }
+    }
+
+    async function loadTippingConfig() {
+        try {
+            const res = await apiFetch('/me/tipping-config');
+            const data = await res.json();
+            const qrPreview = document.getElementById('tipping-qr-preview');
+            const qrImg = document.getElementById('tipping-qr-img');
+            if (data.qr_url) {
+                qrImg.src = data.qr_url;
+                qrPreview.style.display = 'block';
+            } else {
+                qrPreview.style.display = 'none';
+            }
+            document.getElementById('tipping-copy').value = data.tipping_copy || '';
+        } catch (err) {
+            console.error('加载打赏配置失败', err);
+        }
+    }
+
+    async function saveTippingConfig() {
+        const resultDiv = document.getElementById('tipping-save-result');
+        const fileInput = document.getElementById('tipping-qr-file');
+        const copyText = document.getElementById('tipping-copy').value;
+        const formData = new FormData();
+        formData.append('tipping_copy', copyText);
+        if (fileInput.files && fileInput.files[0]) {
+            formData.append('file', fileInput.files[0]);
+        }
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/me/tipping-config', {
+                method: 'POST',
+                headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+                body: formData,
+            });
+            if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '保存失败'); }
+            const data = await res.json();
+            const qrPreview = document.getElementById('tipping-qr-preview');
+            const qrImg = document.getElementById('tipping-qr-img');
+            if (data.qr_url) {
+                qrImg.src = data.qr_url + '?t=' + Date.now();
+                qrPreview.style.display = 'block';
+            }
+            fileInput.value = '';
+            resultDiv.textContent = '打赏设置已保存';
+            resultDiv.style.color = '#18a058';
+            setTimeout(() => { resultDiv.textContent = ''; }, 3000);
+        } catch (err) {
+            resultDiv.textContent = '保存失败：' + err.message;
+            resultDiv.style.color = '#ff4a4a';
         }
     }
 
@@ -436,6 +506,7 @@
     (async () => {
         await loadModels();
         await loadModelConfig();
+        await loadTippingConfig();
     })();
     loadTokenBalance();
 

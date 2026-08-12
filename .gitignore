@@ -58,3 +58,4 @@ uvicorn.pid
 .DS_Store
 Thumbs.db
 frontend/avatars/
+frontend/qr_codes/

@@ -66,10 +66,19 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .joke-content{color:#444;font-size:14px;line-height:1.8;font-weight:500;max-height:120px;overflow:hidden;position:relative;}
 .joke-content p{margin:0 0 8px;}
 .joke-fade{position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent, #fff);pointer-events:none;}
-.joke-stats{display:flex;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+.joke-stats{display:flex;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);align-items:center;}
 .stat-chip{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:650;color:#555;background:#f5f6f8;padding:5px 10px;border-radius:20px;}
 .stat-chip.score{background:#fff2ed;color:var(--orange);}
 .stat-chip.author{background:#e8f5e9;color:var(--green);}
+.tip-btn{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#ff764a,#ff9f50);padding:6px 12px;border-radius:20px;margin-left:auto;box-shadow:0 2px 6px rgba(255,118,74,.25);transition:.2s;}
+.tip-btn:hover{filter:brightness(1.05);transform:translateY(-1px);}
+
+/* Tipping section in detail */
+.tipping-section{background:linear-gradient(135deg,#fff8f0,#fff2ed);border:1px solid #ffd8c4;border-radius:14px;padding:18px;margin-bottom:20px;text-align:center;}
+.tipping-title{font-size:15px;font-weight:780;color:#d4572b;margin-bottom:8px;}
+.tipping-copy{font-size:14px;color:#8b5a3c;margin-bottom:12px;line-height:1.6;}
+.tipping-qr{max-width:220px;max-height:220px;border:4px solid #fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);}
+.tipping-hint{font-size:12px;color:var(--muted);margin-top:10px;}
 
 /* Empty state */
 .empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
@@ -269,6 +278,7 @@ function renderJokes(jokes) {
     el.className = 'joke-card';
     el.onclick = () => openJoke(joke.result_id);
     const avg = joke.average_score != null ? joke.average_score : '-';
+    const hasQr = !!joke.author_wechat_pay_qr_url;
     el.innerHTML = `
       <div class="joke-card-header">
         <div>
@@ -286,6 +296,7 @@ function renderJokes(jokes) {
         <span class="stat-chip score">路人 ${avg}分</span>
         <span class="stat-chip">${joke.rating_count} 人评分</span>
         <span class="stat-chip">${joke.comment_count} 条点评</span>
+        ${hasQr ? `<span class="tip-btn" title="打赏作者" onclick="event.stopPropagation();openJoke('${joke.result_id}')">💰 打赏</span>` : ''}
       </div>
     `;
     grid.appendChild(el);
@@ -328,6 +339,17 @@ async function openJoke(resultId) {
 
 function renderDetail(detail, comments) {
   const avg = detail.average_score != null ? detail.average_score : '暂无';
+  const hasQr = !!detail.author_wechat_pay_qr_url;
+  const tippingCopy = detail.author_tipping_copy || '觉得这段子好笑？扫二维码请作者喝杯咖啡 ☕';
+  const tippingHtml = hasQr ? `
+    <div class="tipping-section">
+      <div class="tipping-title">💰 打赏作者</div>
+      <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
+      <img class="tipping-qr" src="${escapeHtml(detail.author_wechat_pay_qr_url)}" alt="微信收款二维码">
+      <div class="tipping-hint">打开微信扫一扫，支持原创段子</div>
+    </div>
+  ` : '';
+
   modalTitle.textContent = detail.section_title;
   modalBody.innerHTML = `
     <div class="detail-meta">
@@ -340,6 +362,8 @@ function renderDetail(detail, comments) {
       <div class="detail-section-title">段子内容</div>
       <div class="detail-content">${formatContent(detail.content)}</div>
     </div>
+
+    ${tippingHtml}
 
     <div class="rating-panel">
       <div class="rating-row">

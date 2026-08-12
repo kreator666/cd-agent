@@ -361,3 +361,44 @@ class TestSquareList:
         assert resp.status_code == 200
         data = resp.json()
         assert data["jokes"][0]["result_id"] == result_id
+
+
+class TestTipping:
+    """微信打赏功能测试。"""
+
+    def test_square_list_and_detail_include_tipping_fields(self, client):
+        """配置打赏后，广场列表和详情应返回二维码 URL 和文案。"""
+        result_id = _create_done_result("author", content=" tipped joke")
+        # 配置作者的打赏信息
+        db: Session = state.memory._store._new_session()
+        author = db.query(UserProfile).filter_by(user_id="author").first()
+        author.wechat_pay_qr_url = "/static/qr_codes/author.png"
+        author.tipping_copy = "请作者喝咖啡 ☕"
+        db.commit()
+        db.close()
+
+        client.post(f"/eval/results/{result_id}/publish")
+
+        resp = client.get("/eval/square?sort=newest")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["jokes"]) == 1
+        assert data["jokes"][0]["author_wechat_pay_qr_url"] == "/static/qr_codes/author.png"
+        assert data["jokes"][0]["author_tipping_copy"] == "请作者喝咖啡 ☕"
+
+        resp = client.get(f"/eval/square/{result_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["author_wechat_pay_qr_url"] == "/static/qr_codes/author.png"
+        assert data["author_tipping_copy"] == "请作者喝咖啡 ☕"
+
+    def test_square_fields_null_without_tipping_config(self, client):
+        """未配置打赏时，字段为 null。"""
+        result_id = _create_done_result("author", content="no tipping")
+        client.post(f"/eval/results/{result_id}/publish")
+
+        resp = client.get("/eval/square?sort=newest")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["jokes"][0]["author_wechat_pay_qr_url"] is None
+        assert data["jokes"][0]["author_tipping_copy"] is None

@@ -193,6 +193,8 @@ class SquareJokeItem(BaseModel):
     comment_count: int
     published_at: str
     hot_score: float
+    author_wechat_pay_qr_url: str | None = Field(default=None, description="作者微信收款二维码 URL")
+    author_tipping_copy: str | None = Field(default=None, description="作者打赏文案")
 
 
 class SquareListResponse(BaseModel):
@@ -221,6 +223,8 @@ class SquareJokeDetail(BaseModel):
     comment_count: int
     my_score: int | None
     published_at: str
+    author_wechat_pay_qr_url: str | None = Field(default=None, description="作者微信收款二维码 URL")
+    author_tipping_copy: str | None = Field(default=None, description="作者打赏文案")
 
 
 class CoachRequest(BaseModel):
@@ -736,6 +740,8 @@ async def list_square_jokes(
                     if result.published_at
                     else "",
                     hot_score=round(hot_score, 2),
+                    author_wechat_pay_qr_url=author.wechat_pay_qr_url,
+                    author_tipping_copy=author.tipping_copy,
                 )
             )
 
@@ -797,6 +803,8 @@ async def get_square_joke_detail(
             comment_count=agg["comment_count"],
             my_score=my_rating.score if my_rating else None,
             published_at=result.published_at.isoformat() if result.published_at else "",
+            author_wechat_pay_qr_url=author.wechat_pay_qr_url,
+            author_tipping_copy=author.tipping_copy,
         )
 
 

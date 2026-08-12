@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
@@ -248,7 +248,79 @@ async def upload_avatar(
     return AvatarResponse(avatar_url=avatar_url)
 
 
-@router.get("/me", response_model=UserDetailResponse)
+class TippingConfigResponse(BaseModel):
+    """微信打赏配置响应。"""
+
+    qr_url: str | None = Field(default=None, description="微信收款二维码访问 URL")
+    tipping_copy: str | None = Field(default=None, description="打赏文案")
+
+
+_MAX_QR_SIZE = 2 * 1024 * 1024  # 2 MB
+
+
+@router.get("/me/tipping-config", response_model=TippingConfigResponse)
+async def get_tipping_config(
+    user_id: str = Depends(get_current_user),
+) -> TippingConfigResponse:
+    """获取当前用户的微信打赏配置。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return TippingConfigResponse(
+        qr_url=user.wechat_pay_qr_url,
+        tipping_copy=user.tipping_copy,
+    )
+
+
+@router.post("/me/tipping-config", response_model=TippingConfigResponse)
+async def update_tipping_config(
+    tipping_copy: str = Form("", description="打赏文案"),
+    file: UploadFile | None = File(None, description="微信收款二维码图片（可选，不传则保留已有）"),
+    user_id: str = Depends(get_current_user),
+) -> TippingConfigResponse:
+    """更新当前用户的微信打赏配置。
+
+    - 上传新的二维码图片会覆盖旧文件并更新 URL；
+    - 不传图片时只更新文案，保留已有二维码；
+    - 传空文案可清空文案，但二维码不会被删除。
+    """
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    qr_url: str | None = None
+    if file is not None:
+        content_type = file.content_type or ""
+        if not content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="只允许上传图片文件")
+        suffix = Path(file.filename or "qr.png").suffix.lower()
+        if suffix not in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}:
+            suffix = ".png"
+
+        content = await file.read()
+        if len(content) > _MAX_QR_SIZE:
+            raise HTTPException(status_code=400, detail="二维码图片大小不能超过 2MB")
+
+        frontend_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "frontend"
+        qr_dir = frontend_dir / "qr_codes"
+        qr_dir.mkdir(parents=True, exist_ok=True)
+        save_name = f"{user_id}{suffix}"
+        save_path = qr_dir / save_name
+        save_path.write_bytes(content)
+        qr_url = f"/static/qr_codes/{save_name}"
+
+    user = state.memory.update_user_profile(
+        user_id=user_id,
+        wechat_pay_qr_url=qr_url,
+        tipping_copy=tipping_copy if tipping_copy is not None else "",
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return TippingConfigResponse(
+        qr_url=user.wechat_pay_qr_url,
+        tipping_copy=user.tipping_copy,
+    )
 async def me(user_id: str = Depends(get_current_user)) -> UserDetailResponse:
     """获取当前登录用户信息（含粉丝数、关注数）。"""
     if state.memory is None:

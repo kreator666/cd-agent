@@ -34,6 +34,12 @@ class UserProfile(Base):
     bio: Mapped[str | None] = mapped_column(Text, nullable=True, comment="个人简介")
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, comment="兴趣标签")
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="头像 URL")
+    wechat_pay_qr_url: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="微信收款二维码 URL"
+    )
+    tipping_copy: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="打赏文案"
+    )
     is_verified: Mapped[bool] = mapped_column(
         default=False, nullable=False, comment="是否认证大V"
     )

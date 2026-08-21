@@ -79,6 +79,13 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 .tipping-copy{font-size:14px;color:#8b5a3c;margin-bottom:12px;line-height:1.6;}
 .tipping-qr{max-width:220px;max-height:220px;border:4px solid #fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);}
 .tipping-hint{font-size:12px;color:var(--muted);margin-top:10px;}
+.tipping-tabs{display:flex;justify-content:center;gap:8px;margin-bottom:14px;}
+.tipping-tab{padding:8px 16px;border-radius:20px;font-size:13px;font-weight:700;background:#fff;border:1px solid #ffd8c4;color:#d4572b;cursor:pointer;transition:.2s;}
+.tipping-tab.active{background:#ff764a;color:#fff;border-color:#ff764a;}
+.tipping-address{display:flex;align-items:center;gap:8px;justify-content:center;margin:12px 0;padding:10px 14px;background:#fff;border:1px dashed #ffd8c4;border-radius:10px;}
+.tipping-address code{font-family:monospace;font-size:13px;color:#333;word-break:break-all;}
+.copy-address-btn{padding:6px 12px;background:#fff2ed;border:1px solid #ffd8c4;border-radius:8px;font-size:12px;font-weight:700;color:#d4572b;cursor:pointer;transition:.2s;}
+.copy-address-btn:hover{background:#ff764a;color:#fff;border-color:#ff764a;}
 
 /* Empty state */
 .empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
@@ -277,7 +284,7 @@ function renderJokes(jokes) {
     el.className = 'joke-card';
     el.onclick = () => openJoke(joke.result_id);
     const avg = joke.average_score != null ? joke.average_score : '-';
-    const hasQr = !!joke.author_wechat_pay_qr_url;
+    const hasTip = !!(joke.author_wechat_pay_qr_url || joke.author_usdt_address);
     el.innerHTML = `
       <div class="joke-card-header">
         <div>
@@ -295,7 +302,7 @@ function renderJokes(jokes) {
         <span class="stat-chip score">路人 ${avg}分</span>
         <span class="stat-chip">${joke.rating_count} 人评分</span>
         <span class="stat-chip">${joke.comment_count} 条点评</span>
-        ${hasQr ? `<span class="tip-btn" title="打赏作者" onclick="event.stopPropagation();openJoke('${joke.result_id}')">💰 打赏</span>` : ''}
+        ${hasTip ? `<span class="tip-btn" title="打赏作者" onclick="event.stopPropagation();openJoke('${joke.result_id}')">💰 打赏</span>` : ''}
       </div>
     `;
     grid.appendChild(el);
@@ -339,15 +346,39 @@ async function openJoke(resultId) {
 function renderDetail(detail, comments) {
   const avg = detail.average_score != null ? detail.average_score : '暂无';
   const hasQr = !!detail.author_wechat_pay_qr_url;
-  const tippingCopy = detail.author_tipping_copy || '觉得这段子好笑？扫二维码请作者喝杯咖啡 ☕';
-  const tippingHtml = hasQr ? `
-    <div class="tipping-section">
-      <div class="tipping-title">💰 打赏作者</div>
-      <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
-      <img class="tipping-qr" src="${escapeHtml(detail.author_wechat_pay_qr_url)}" alt="微信收款二维码">
-      <div class="tipping-hint">打开微信扫一扫，支持原创段子</div>
-    </div>
-  ` : '';
+  const hasUsdt = !!detail.author_usdt_address;
+  const tippingCopy = detail.author_tipping_copy || '觉得这段子好笑？支持一下原创段子 ☕';
+
+  let tippingHtml = '';
+  if (hasQr || hasUsdt) {
+    const wechatTab = hasQr ? `<button class="tipping-tab active" data-tab="wechat" onclick="switchTipTab('wechat')">微信打赏</button>` : '';
+    const usdtTab = hasUsdt ? `<button class="tipping-tab${hasQr ? '' : ' active'}" data-tab="usdt" onclick="switchTipTab('usdt')">USDT 打赏</button>` : '';
+    const wechatPanel = hasQr ? `
+      <div class="tipping-panel" data-panel="wechat" style="${hasUsdt ? '' : 'display:block;'}">
+        <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
+        <img class="tipping-qr" src="${escapeHtml(detail.author_wechat_pay_qr_url)}" alt="微信收款二维码">
+        <div class="tipping-hint">打开微信扫一扫，支持原创段子</div>
+      </div>
+    ` : '';
+    const usdtPanel = hasUsdt ? `
+      <div class="tipping-panel" data-panel="usdt" style="${hasQr ? 'display:none;' : 'display:block;'}">
+        <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
+        <img class="tipping-qr" src="/tipping/usdt-qr/${encodeURIComponent(detail.author_id)}" alt="USDT 收款二维码">
+        <div class="tipping-address">
+          <code>${escapeHtml(detail.author_usdt_address)}</code>
+          <button class="copy-address-btn" onclick="copyUsdtAddress(this)">复制地址</button>
+        </div>
+        <div class="tipping-hint">打开钱包扫一扫，或复制地址转账（ERC-20 USDT）</div>
+      </div>
+    ` : '';
+    tippingHtml = `
+      <div class="tipping-section">
+        <div class="tipping-title">💰 打赏作者</div>
+        <div class="tipping-tabs">${wechatTab}${usdtTab}</div>
+        ${wechatPanel}${usdtPanel}
+      </div>
+    `;
+  }
 
   modalTitle.textContent = detail.section_title;
   modalBody.innerHTML = `
@@ -426,6 +457,28 @@ function renderDetail(detail, comments) {
     scoreInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') submitRate(detail.result_id);
     });
+  }
+}
+
+function switchTipTab(tab) {
+  const section = document.querySelector('.tipping-section');
+  if (!section) return;
+  section.querySelectorAll('.tipping-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  section.querySelectorAll('.tipping-panel').forEach(panel => {
+    panel.style.display = panel.dataset.panel === tab ? 'block' : 'none';
+  });
+}
+
+async function copyUsdtAddress(btn) {
+  const code = btn.parentElement.querySelector('code');
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code.textContent);
+    const old = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => btn.textContent = old, 1500);
+  } catch {
+    alert('复制失败');
   }
 }
 

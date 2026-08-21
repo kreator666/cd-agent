@@ -24,6 +24,7 @@ class UserProfileData(BaseModel):
     avatar_url: str | None = Field(default=None, description="头像 URL")
     wechat_pay_qr_url: str | None = Field(default=None, description="微信收款二维码 URL")
     tipping_copy: str | None = Field(default=None, description="打赏文案")
+    usdt_address: str | None = Field(default=None, description="USDT 以太坊收款地址")
     is_verified: bool = Field(default=False, description="是否认证大V")
     knowledge_shared: bool = Field(default=False, description="知识库是否共享给其他用户")
     follower_count: int = Field(default=0, description="粉丝数")

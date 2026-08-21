@@ -40,6 +40,9 @@ class UserProfile(Base):
     tipping_copy: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="打赏文案"
     )
+    usdt_address: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="USDT 以太坊收款地址"
+    )
     is_verified: Mapped[bool] = mapped_column(
         default=False, nullable=False, comment="是否认证大V"
     )

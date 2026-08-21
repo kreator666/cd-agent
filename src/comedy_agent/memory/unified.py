@@ -85,10 +85,11 @@ class UnifiedMemory(MemoryStore):
         tags: list[str] | None = None, avatar_url: str | None = None,
         is_verified: bool | None = None, knowledge_shared: bool | None = None,
         wechat_pay_qr_url: str | None = None, tipping_copy: str | None = None,
+        usdt_address: str | None = None,
     ) -> UserProfileData | None:
         return self._store.update_user_profile(
             user_id, nickname, bio, tags, avatar_url, is_verified, knowledge_shared,
-            wechat_pay_qr_url, tipping_copy,
+            wechat_pay_qr_url, tipping_copy, usdt_address,
         )
 
     def save_conversation(

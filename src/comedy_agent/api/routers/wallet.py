@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
+import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+import qrcode
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
@@ -253,9 +256,15 @@ class TippingConfigResponse(BaseModel):
 
     qr_url: str | None = Field(default=None, description="微信收款二维码访问 URL")
     tipping_copy: str | None = Field(default=None, description="打赏文案")
+    usdt_address: str | None = Field(default=None, description="USDT 以太坊收款地址")
 
 
 _MAX_QR_SIZE = 2 * 1024 * 1024  # 2 MB
+
+
+def _validate_usdt_address(address: str) -> bool:
+    """校验以太坊地址格式：0x 前缀 + 40 位十六进制。"""
+    return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", address))
 
 
 @router.get("/me/tipping-config", response_model=TippingConfigResponse)
@@ -271,23 +280,29 @@ async def get_tipping_config(
     return TippingConfigResponse(
         qr_url=user.wechat_pay_qr_url,
         tipping_copy=user.tipping_copy,
+        usdt_address=user.usdt_address,
     )
 
 
 @router.post("/me/tipping-config", response_model=TippingConfigResponse)
 async def update_tipping_config(
     tipping_copy: str = Form("", description="打赏文案"),
+    usdt_address: str = Form("", description="USDT 以太坊收款地址，以 0x 开头共 42 字符"),
     file: UploadFile | None = File(None, description="微信收款二维码图片（可选，不传则保留已有）"),
     user_id: str = Depends(get_current_user),
 ) -> TippingConfigResponse:
-    """更新当前用户的微信打赏配置。
+    """更新当前用户的打赏配置。
 
     - 上传新的二维码图片会覆盖旧文件并更新 URL；
     - 不传图片时只更新文案，保留已有二维码；
-    - 传空文案可清空文案，但二维码不会被删除。
+    - 传空文案可清空文案，但二维码不会被删除；
+    - usdt_address 传空字符串可清空地址。
     """
     if state.memory is None:
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    if usdt_address and not _validate_usdt_address(usdt_address):
+        raise HTTPException(status_code=400, detail="USDT 地址格式不正确，应为 0x 开头的 42 位以太坊地址")
 
     qr_url: str | None = None
     if file is not None:
@@ -314,13 +329,38 @@ async def update_tipping_config(
         user_id=user_id,
         wechat_pay_qr_url=qr_url,
         tipping_copy=tipping_copy if tipping_copy is not None else "",
+        usdt_address=usdt_address if usdt_address is not None else "",
     )
     if user is None:
         raise HTTPException(status_code=404, detail="用户不存在")
     return TippingConfigResponse(
         qr_url=user.wechat_pay_qr_url,
         tipping_copy=user.tipping_copy,
+        usdt_address=user.usdt_address,
     )
+
+
+@router.get("/tipping/usdt-qr/{user_id}")
+async def get_usdt_qr(user_id: str) -> Response:
+    """根据用户 ID 生成 USDT 收款地址二维码图片。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None or not user.usdt_address:
+        raise HTTPException(status_code=404, detail="用户未设置 USDT 收款地址")
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(user.usdt_address)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return Response(content=buffer.getvalue(), media_type="image/png")
 async def me(user_id: str = Depends(get_current_user)) -> UserDetailResponse:
     """获取当前登录用户信息（含粉丝数、关注数）。"""
     if state.memory is None:

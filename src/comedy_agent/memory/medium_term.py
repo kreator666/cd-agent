@@ -232,6 +232,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
+                usdt_address=user.usdt_address,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -259,6 +260,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
+                usdt_address=user.usdt_address,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -286,6 +288,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
+                usdt_address=user.usdt_address,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -298,6 +301,7 @@ class SQLMemoryStore(MemoryStore):
         tags: list[str] | None = None, avatar_url: str | None = None,
         is_verified: bool | None = None, knowledge_shared: bool | None = None,
         wechat_pay_qr_url: str | None = None, tipping_copy: str | None = None,
+        usdt_address: str | None = None,
     ) -> UserProfileData | None:
         """更新用户画像信息。"""
         with self._new_session() as session:
@@ -316,6 +320,8 @@ class SQLMemoryStore(MemoryStore):
                 user.wechat_pay_qr_url = wechat_pay_qr_url
             if tipping_copy is not None:
                 user.tipping_copy = tipping_copy
+            if usdt_address is not None:
+                user.usdt_address = usdt_address
             if is_verified is not None:
                 user.is_verified = is_verified
             if knowledge_shared is not None:
@@ -342,6 +348,7 @@ class SQLMemoryStore(MemoryStore):
                 avatar_url=user.avatar_url,
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
+                usdt_address=user.usdt_address,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,

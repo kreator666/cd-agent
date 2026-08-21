@@ -237,7 +237,7 @@
         <button class="btn" onclick="saveModelConfig()">保存配置</button>
       </div>
 
-      <div class="page-title" style="margin-top:1.5rem;">💰 微信打赏设置</div>
+      <div class="page-title" style="margin-top:1.5rem;">💰 打赏设置</div>
       <div class="card" style="max-width:600px;">
         <div style="margin-bottom:1rem;">
           <label>微信收款二维码</label>
@@ -246,6 +246,11 @@
           </div>
           <input type="file" id="tipping-qr-file" accept="image/*" style="font-size:.875rem;background:#fff;padding:8px;">
           <div style="font-size:12px;color:var(--muted);margin-top:4px;">支持 jpg/png/gif/webp，建议 ≤ 2MB</div>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <label>USDT 收款地址（ERC-20 / 以太坊地址）</label>
+          <input type="text" id="usdt-address" placeholder="0x..." style="width:100%;padding:10px 12px;border:1.5px solid var(--line-dark);border-radius:10px;font-size:14px;font-family:inherit;outline:none;background:var(--light);">
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">填写后广场详情页会展示该地址的付款二维码</div>
         </div>
         <div style="margin-bottom:1rem;">
           <label>打赏文案</label>
@@ -318,18 +323,30 @@
             } else {
                 qrPreview.style.display = 'none';
             }
+            document.getElementById('usdt-address').value = data.usdt_address || '';
             document.getElementById('tipping-copy').value = data.tipping_copy || '';
         } catch (err) {
             console.error('加载打赏配置失败', err);
         }
     }
 
+    function validateUsdtAddress(address) {
+        return /^0x[a-fA-F0-9]{40}$/.test(address);
+    }
+
     async function saveTippingConfig() {
         const resultDiv = document.getElementById('tipping-save-result');
         const fileInput = document.getElementById('tipping-qr-file');
         const copyText = document.getElementById('tipping-copy').value;
+        const usdtAddress = document.getElementById('usdt-address').value.trim();
+        if (usdtAddress && !validateUsdtAddress(usdtAddress)) {
+            resultDiv.textContent = 'USDT 地址格式不正确，应为 0x 开头的 42 位以太坊地址';
+            resultDiv.style.color = '#ff4a4a';
+            return;
+        }
         const formData = new FormData();
         formData.append('tipping_copy', copyText);
+        formData.append('usdt_address', usdtAddress);
         if (fileInput.files && fileInput.files[0]) {
             formData.append('file', fileInput.files[0]);
         }

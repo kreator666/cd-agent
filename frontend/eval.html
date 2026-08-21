@@ -58,6 +58,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
 
 .model-select{width:100%;padding:10px 12px;border:1px solid var(--line-dark);border-radius:10px;font-size:14px;background:#fff;outline:none;}
 .model-select:focus{border-color:var(--orange);}
+.template-direction{margin-top:10px;padding:12px 14px;background:#fff7f4;border:1px solid #ffd4c5;border-radius:10px;font-size:13px;color:#555;line-height:1.6;}
 
 .section-list{display:flex;flex-direction:column;gap:8px;}
 .section-item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.2s;}
@@ -213,6 +214,14 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
           </div>
 
           <div class="config-section">
+            <h3>主题模板</h3>
+            <select id="dim-template" class="model-select">
+              <option value="">选择主题模板（自动填充四维度）</option>
+            </select>
+            <p id="template-direction" class="template-direction" style="display:none;"></p>
+          </div>
+
+          <div class="config-section">
             <h3>四维度输入</h3>
             <div class="dim-card">
               <div class="dim-row">
@@ -308,8 +317,131 @@ const startBtn = document.getElementById('start-btn');
 const historyBtn = document.getElementById('history-btn');
 const resultBody = document.getElementById('result-body');
 const progressFill = document.getElementById('progress-fill');
+const dimTemplateSelect = document.getElementById('dim-template');
+const templateDirectionEl = document.getElementById('template-direction');
+
+const DIM_TEMPLATES = [
+  { title: "当代社交", group: "main",
+    topic: "成年人无效社交、线上热闹线下社恐",
+    attitude: "不勉强合群，独处不是孤僻，是电量回收",
+    bias: "大家默认“不爱社交=性格差、不合群、情商低”",
+    emotion: "疲惫、松弛、释然、轻微叛逆",
+    direction: "别人以为我天天独处是孤独，其实我是终于不用演戏了，社交对我来说不是娱乐，是加班。" },
+  { title: "手机依赖", group: "main",
+    topic: "现代人离不开手机、睡前刷手机成瘾",
+    attitude: "不是沉迷网络，是现实生活太无聊，手机是唯一避风港",
+    bias: "长辈和大众觉得“玩手机=堕落、浪费时间”",
+    emotion: "无奈、自嘲、清醒、摆烂",
+    direction: "没人玩手机是为了好玩，都是为了逃避思考，放下手机面对生活，比熬夜刷手机还焦虑。" },
+  { title: "身材与容貌焦虑", group: "main",
+    topic: "身材内卷、容貌评判、网红审美绑架",
+    attitude: "普通长相和微胖身材，才是人间常态，无需讨好大众审美",
+    bias: "瘦=自律、好看=优秀、圆润=不自律",
+    emotion: "不服气、释然、调侃、治愈",
+    direction: "别人对身材的要求越来越高，我对自己的要求越来越简单，活着舒服，比看着好看重要一万倍。" },
+  { title: "职场内卷", group: "main",
+    topic: "无效加班、职场内卷、假性努力",
+    attitude: "不内卷不是躺平，是拒绝无意义内耗，高效摸鱼认真生活",
+    bias: "加班=敬业、准时下班=摸鱼、不内卷=不上进",
+    emotion: "憋屈、清醒、讽刺、解压",
+    direction: "现在职场拼的不是能力，是谁更能熬，熬到最后没业绩，只熬出了黑眼圈和颈椎病。" },
+  { title: "催婚催生", group: "main",
+    topic: "长辈催婚、大龄单身焦虑、婚恋绑架",
+    attitude: "单身不是缺陷，婚姻不是人生必答题，只是一种生活选择",
+    bias: "年纪大不结婚=失败、单身=没人要、晚婚=挑剔",
+    emotion: "无奈、反感、坦然、怼人爽感",
+    direction: "长辈总说结婚就安稳了，可我看着身边结婚的，个个都比我忙、比我烦，安稳在哪我没看见。" },
+  { title: "碎片化学习焦虑", group: "main",
+    topic: "跟风学习、短视频知识焦虑、伪自律",
+    attitude: "不用时刻精进，普通人允许自己平庸、允许偶尔摆烂",
+    bias: "不学习=荒废人生、休息=浪费时间、必须持续进步",
+    emotion: "疲惫、清醒、自嘲、松弛",
+    direction: "每天刷十个干货视频，依旧过不好这一生，原来焦虑不是因为不努力，是被“必须努力”绑架了。" },
+  { title: "朋友圈人设", group: "main",
+    topic: "朋友圈装体面、人设包装、刻意精致",
+    attitude: "真实粗糙的生活，比完美人设更可爱、更踏实",
+    bias: "朋友圈精致=过得好、不发圈=过得差、低调=落魄",
+    emotion: "讽刺、通透、释然、搞笑",
+    direction: "别人朋友圈是精致人生，我的朋友圈是间歇性营业，大部分时间都在认真凑活过日子。" },
+  { title: "消费主义陷阱", group: "main",
+    topic: "网红种草、冲动消费、精致穷",
+    attitude: "按需消费不丢人，省钱不是抠门，是人间清醒",
+    bias: "舍得花钱=会生活、省钱=小气、不跟风消费=落伍",
+    emotion: "清醒、吐槽、释然、接地气",
+    direction: "商家总教我们取悦自己，却没告诉我们，取悦自己最好的方式是存钱，不是乱花钱。" },
+  { title: "熟人攀比", group: "main",
+    topic: "亲戚攀比、同龄人焦虑、圈层对比",
+    attitude: "人生节奏不同，不用对标别人的人生，专注自己的生活即可",
+    bias: "同龄人优秀=自己落后、别人升职结婚=自己失败",
+    emotion: "烦躁、释怀、调侃、通透",
+    direction: "不用羡慕同龄人风生水起，每个人的花期不一样，有的人开花早，有的人一直在长根，比如我。" },
+  { title: "熬夜与养生", group: "main",
+    topic: "年轻人朋克养生、熬夜愧疚、自救式养生",
+    attitude: "不用极致自律，偶尔透支、偶尔养生，是普通人的常态",
+    bias: "熬夜=不爱惜身体、不早睡=自制力差、养生必须极致规律",
+    emotion: "自嘲、无奈、可爱、松弛",
+    direction: "我养生主打一个对冲，熬夜是我的放纵，喝枸杞是我的忏悔，收支刚好平衡。" },
+  { title: "善良与心软", group: "advanced",
+    topic: "好人难做、心软被欺负",
+    attitude: "善良需要带锋芒",
+    bias: "温柔=好拿捏",
+    emotion: "清醒、委屈、飒爽",
+    direction: "善良是选择，但不是被拿捏的理由，心软可以，但要有底线。" },
+  { title: "懂事型人格", group: "advanced",
+    topic: "习惯性懂事、讨好型人格",
+    attitude: "懂事不是优点，是自我消耗",
+    bias: "听话懂事=成熟",
+    emotion: "心疼自己、释然",
+    direction: "懂事到让所有人满意，却忘了自己也可以不被喜欢。" },
+  { title: "怀旧与当下", group: "advanced",
+    topic: "总怀念过去、抵触当下",
+    attitude: "当下也是未来的回忆，不用过度怀旧",
+    bias: "以前更好、现在更糟糕",
+    emotion: "治愈、通透",
+    direction: "现在嫌弃的日子，以后也会成为回不去的好时光。" },
+  { title: "高情商绑架", group: "advanced",
+    topic: "职场生活被要求高情商",
+    attitude: "真诚大于圆滑，不客套不是低情商",
+    bias: "不会客套=情商低",
+    emotion: "反感、清醒、吐槽",
+    direction: "真正的情商不是让所有人舒服，是让自己舒服还不伤人。" },
+  { title: "平凡普通", group: "advanced",
+    topic: "接受自己平庸",
+    attitude: "平凡不是失败，是大多数人的常态",
+    bias: "普通人=没出息",
+    emotion: "坦然、治愈、反焦虑",
+    direction: "不是所有人都要出类拔萃，认真做一个快乐的普通人就已经很了不起。" }
+];
+
+function initTemplateSelector() {
+  const mainTemplates = DIM_TEMPLATES.filter(t => t.group === "main");
+  const advancedTemplates = DIM_TEMPLATES.filter(t => t.group === "advanced");
+  let html = '<option value="">选择主题模板（自动填充四维度）</option>';
+  html += mainTemplates.map((t, idx) => `<option value="${idx}">${t.title}</option>`).join('');
+  html += '<optgroup label="进阶备用">';
+  html += advancedTemplates.map((t, idx) => `<option value="${mainTemplates.length + idx}">${t.title}</option>`).join('');
+  html += '</optgroup>';
+  dimTemplateSelect.innerHTML = html;
+
+  dimTemplateSelect.addEventListener('change', () => {
+    const idx = parseInt(dimTemplateSelect.value, 10);
+    if (Number.isNaN(idx) || idx < 0 || idx >= DIM_TEMPLATES.length) {
+      templateDirectionEl.style.display = 'none';
+      templateDirectionEl.textContent = '';
+      return;
+    }
+    const t = DIM_TEMPLATES[idx];
+    document.getElementById('input-topic').value = t.topic;
+    document.getElementById('input-attitude').value = t.attitude;
+    document.getElementById('input-bias').value = t.bias;
+    document.getElementById('input-emotion').value = t.emotion;
+    templateDirectionEl.textContent = `创作方向：${t.direction}`;
+    templateDirectionEl.style.display = 'block';
+  });
+}
 
 async function init() {
+  initTemplateSelector();
   await loadModels();
 }
 
@@ -318,9 +450,14 @@ async function loadModels() {
     const res = await apiFetch('/models');
     const data = await res.json();
     const models = data.models || [];
+    const fallback = data.recommended || data.default || (models[0] || 'deepseek-v4-flash');
     modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
     if (!models.includes('deepseek-v4-flash')) {
       modelSelect.innerHTML = '<option value="deepseek-v4-flash">deepseek-v4-flash</option>' + modelSelect.innerHTML;
+    }
+    const defaultModel = models.includes('kimi-k2.6') ? 'kimi-k2.6' : fallback;
+    if (modelSelect.querySelector(`option[value="${defaultModel}"]`)) {
+      modelSelect.value = defaultModel;
     }
   } catch (err) {
     console.error('加载模型失败', err);

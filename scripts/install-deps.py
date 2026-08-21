@@ -38,6 +38,7 @@ CORE_DEPS = [
     "sqlalchemy>=2.0.0",
     "alembic>=1.13.0",
     "langsmith>=0.1.0",
+    "qrcode[pil]>=7.0",
 ]
 
 # 开发依赖（可选）

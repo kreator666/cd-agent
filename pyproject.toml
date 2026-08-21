@@ -55,6 +55,8 @@ dependencies = [
     # 素材搜索
     "duckduckgo-search>=5.0.0",
     "jieba>=0.42.0",
+    # 二维码生成
+    "qrcode[pil]>=7.0",
 ]
 
 [project.optional-dependencies]

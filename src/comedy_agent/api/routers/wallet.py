@@ -417,7 +417,7 @@ async def get_wallet_address(
     )
 
 
-@router.post("/me/wallet-address/sign-message", response_model=WalletSignMessageResponse)
+@router.get("/me/wallet-address/sign-message", response_model=WalletSignMessageResponse)
 async def get_wallet_sign_message_endpoint(
     address: str,
     user_id: str = Depends(get_current_user),

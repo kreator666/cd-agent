@@ -275,16 +275,17 @@
 
         <div id="wallet-bind-form">
           <div style="margin-bottom:1rem;">
-            <label>钱包地址（Base / Ethereum）</label>
-            <input type="text" id="wallet-address-input" placeholder="0x..." style="width:100%;padding:10px 12px;border:1.5px solid var(--line-dark);border-radius:10px;font-size:14px;font-family:inherit;outline:none;background:var(--light);">
-            <div style="font-size:12px;color:var(--muted);margin-top:4px;">该地址将同时作为你的付款地址与收款地址</div>
+            <div id="wallet-connect-preview" style="display:none;margin-bottom:1rem;padding:12px;background:#f6ffed;border:1px solid #b7eb8f;border-radius:10px;">
+              <div style="font-size:12px;color:#389e0d;font-weight:650;margin-bottom:6px;">检测到钱包地址</div>
+              <div id="wallet-connect-address" style="font-family:monospace;font-size:13px;word-break:break-all;color:#444;"></div>
+            </div>
+            <div id="wallet-sign-preview" style="display:none;margin-bottom:1rem;padding:12px;background:#fff7e6;border:1px solid #ffd591;border-radius:10px;">
+              <div style="font-size:12px;color:#d48806;font-weight:650;margin-bottom:6px;">请使用钱包签名以下内容</div>
+              <div id="wallet-sign-content" style="font-size:13px;color:#444;line-height:1.6;word-break:break-all;"></div>
+            </div>
+            <button class="btn" onclick="bindWallet()" id="wallet-bind-btn">连接钱包并绑定</button>
+            <div id="wallet-bind-result" style="margin-top:.5rem;font-size:.875rem;font-weight:600;"></div>
           </div>
-          <div id="wallet-sign-preview" style="display:none;margin-bottom:1rem;padding:12px;background:#fff7e6;border:1px solid #ffd591;border-radius:10px;">
-            <div style="font-size:12px;color:#d48806;font-weight:650;margin-bottom:6px;">请使用钱包签名以下内容</div>
-            <div id="wallet-sign-content" style="font-size:13px;color:#444;line-height:1.6;word-break:break-all;"></div>
-          </div>
-          <button class="btn" onclick="bindWallet()" id="wallet-bind-btn">连接钱包并绑定</button>
-          <div id="wallet-bind-result" style="margin-top:.5rem;font-size:.875rem;font-weight:600;"></div>
         </div>
       </div>
 
@@ -921,8 +922,9 @@
     function showWalletBindForm() {
         document.getElementById('wallet-bound-section').style.display = 'none';
         document.getElementById('wallet-bind-form').style.display = 'block';
-        document.getElementById('wallet-address-input').value = '';
+        document.getElementById('wallet-connect-preview').style.display = 'none';
         document.getElementById('wallet-sign-preview').style.display = 'none';
+        document.getElementById('wallet-bind-result').textContent = '';
     }
 
     function validateWalletAddress(address) {
@@ -931,15 +933,7 @@
 
     async function bindWallet() {
         const resultDiv = document.getElementById('wallet-bind-result');
-        const addressInput = document.getElementById('wallet-address-input');
-        const address = addressInput.value.trim();
         const btn = document.getElementById('wallet-bind-btn');
-
-        if (!validateWalletAddress(address)) {
-            resultDiv.textContent = '请输入有效的以太坊地址';
-            resultDiv.style.color = '#ff4a4a';
-            return;
-        }
 
         if (!window.ethereum) {
             resultDiv.textContent = '未检测到钱包插件（MetaMask / Rabby / OKX），请先安装';
@@ -949,28 +943,35 @@
 
         try {
             btn.disabled = true;
-            btn.textContent = '请求签名中...';
+            btn.textContent = '请求连接钱包...';
             resultDiv.textContent = '';
 
-            // 1. 从后端获取 EIP-712 签名消息
+            // 1. 直接连接钱包获取地址
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            const address = accounts[0];
+            if (!validateWalletAddress(address)) {
+                throw new Error('钱包返回的地址格式不正确');
+            }
+
+            document.getElementById('wallet-connect-preview').style.display = 'block';
+            document.getElementById('wallet-connect-address').textContent = address;
+
+            // 2. 从后端获取 EIP-712 签名消息
+            btn.textContent = '请求签名消息...';
             const signRes = await apiFetch(`/me/wallet-address/sign-message?address=${encodeURIComponent(address)}`);
             const signData = await signRes.json();
 
-            // 2. 展示签名提示
+            // 3. 展示签名提示
             document.getElementById('wallet-sign-preview').style.display = 'block';
             document.getElementById('wallet-sign-content').textContent = signData.content;
 
-            // 3. 调用钱包 signTypedData_v4
-            const from = (await window.ethereum.request({ method: 'eth_requestAccounts' }))[0];
-            if (from.toLowerCase() !== address.toLowerCase()) {
-                throw new Error('当前钱包选中地址与输入地址不一致');
-            }
+            // 4. 调用钱包 signTypedData_v4
             const signature = await window.ethereum.request({
                 method: 'eth_signTypedData_v4',
-                params: [from, JSON.stringify(signData.typed_data)],
+                params: [address, JSON.stringify(signData.typed_data)],
             });
 
-            // 4. 提交绑定
+            // 5. 提交绑定
             btn.textContent = '绑定中...';
             await apiFetch('/me/wallet-address', {
                 method: 'POST',
@@ -984,6 +985,7 @@
 
             resultDiv.textContent = '钱包绑定成功';
             resultDiv.style.color = '#18a058';
+            document.getElementById('wallet-bind-form').style.display = 'none';
             loadWalletAddress();
         } catch (err) {
             resultDiv.textContent = '绑定失败：' + (err.message || err);

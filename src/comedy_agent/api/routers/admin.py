@@ -11,7 +11,7 @@ from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from datetime import datetime
 
-from comedy_agent.memory.models import BannedWordData, EarningRecordData, IPStyleData, WithdrawalRequestData
+from comedy_agent.memory.models import BannedWordData, CryptoTipOrderData, EarningRecordData, IPStyleData, WithdrawalRequestData
 
 router = APIRouter(tags=["admin"])
 
@@ -436,3 +436,109 @@ async def admin_mark_withdrawal_paid(
         created_at=updated.created_at.isoformat() if updated.created_at else None,
         processed_at=updated.processed_at.isoformat() if updated.processed_at else None,
     )
+
+
+
+# ------------------------------------------------------------------ #
+# 加密货币打赏订单审核
+# ------------------------------------------------------------------ #
+class CryptoTipOrderAdminItem(BaseModel):
+    """管理员视角加密货币打赏订单项。"""
+
+    order_id: str = Field(description="本地订单 ID")
+    anyway_order_id: str | None = Field(default=None, description="Anyway 订单 ID")
+    merchant_reference: str | None = Field(default=None, description="Merchant reference")
+    result_id: str = Field(description="广场段子 result_id")
+    payer_user_id: str = Field(description="打赏读者用户 ID")
+    payer_wallet: str = Field(description="付款钱包地址")
+    author_user_id: str = Field(description="被打赏作者用户 ID")
+    author_wallet: str = Field(description="收款钱包地址")
+    amount_cents: int = Field(description="金额（最小货币单位）")
+    currency: str = Field(description="币种")
+    status: str = Field(description="状态")
+    tx_hash: str | None = Field(default=None, description="链上交易 hash")
+    verified_at: str | None = Field(default=None, description="校验时间")
+    created_at: str | None = Field(default=None, description="创建时间")
+
+
+class CryptoTipOrderListResponse(BaseModel):
+    """加密货币打赏订单列表响应。"""
+
+    orders: list[CryptoTipOrderAdminItem] = Field(description="订单列表")
+    count: int = Field(description="总数")
+
+
+@router.get("/admin/crypto-tip-orders", response_model=CryptoTipOrderListResponse)
+async def admin_list_crypto_tip_orders(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    _admin: str = Depends(require_admin),
+) -> CryptoTipOrderListResponse:
+    """获取加密货币打赏订单列表（支持按状态过滤）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    records = state.memory.list_crypto_tip_orders(status=status, limit=limit, offset=offset)
+    items = [
+        CryptoTipOrderAdminItem(
+            order_id=r.order_id,
+            anyway_order_id=r.anyway_order_id,
+            merchant_reference=r.merchant_reference,
+            result_id=r.result_id,
+            payer_user_id=r.payer_user_id,
+            payer_wallet=r.payer_wallet,
+            author_user_id=r.author_user_id,
+            author_wallet=r.author_wallet,
+            amount_cents=r.amount_cents,
+            currency=r.currency,
+            status=r.status,
+            tx_hash=r.tx_hash,
+            verified_at=r.verified_at.isoformat() if r.verified_at else None,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+        )
+        for r in records
+    ]
+    return CryptoTipOrderListResponse(orders=items, count=len(items))
+
+
+@router.post("/admin/crypto-tip-orders/{order_id}/verify")
+async def admin_verify_crypto_tip_order(
+    order_id: str,
+    tx_hash: str | None = None,
+    _admin: str = Depends(require_admin),
+) -> dict[str, Any]:
+    """手动触发链上校验并入账。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    from comedy_agent.services.crypto_chain import verify_tip_payment
+
+    record = state.memory.get_crypto_tip_order(order_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    tx = tx_hash or record.tx_hash
+    if not tx:
+        raise HTTPException(status_code=400, detail="缺少链上交易 hash")
+
+    verification = verify_tip_payment(
+        tx_hash=tx,
+        expected_author_wallet=record.author_wallet,
+        expected_payer_wallet=record.payer_wallet,
+        expected_amount=record.amount_cents,
+        currency=record.currency,
+    )
+    if not verification["success"]:
+        raise HTTPException(status_code=400, detail=verification.get("error") or "链上校验失败")
+
+    updated = state.memory.update_crypto_tip_order(
+        order_id=record.order_id,
+        tx_hash=tx,
+        status="paid",
+        verified_at=datetime.utcnow(),
+        paid_at=datetime.utcnow(),
+        metadata_json={"chain_verification": verification},
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="入账更新失败")
+    return {"order_id": order_id, "status": "paid", "verification": verification}

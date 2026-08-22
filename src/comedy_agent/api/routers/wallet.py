@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import re
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,12 @@ from pydantic import BaseModel, Field
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.core.config import settings
+from comedy_agent.services.crypto_wallet import (
+    build_wallet_sign_message,
+    get_wallet_sign_content,
+    validate_ethereum_address,
+    verify_wallet_signature,
+)
 
 router = APIRouter(tags=["wallet"])
 
@@ -361,6 +369,112 @@ async def get_usdt_qr(user_id: str) -> Response:
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     return Response(content=buffer.getvalue(), media_type="image/png")
+
+
+# --------------------------------------------------------------------------- #
+# 加密货币钱包绑定
+# --------------------------------------------------------------------------- #
+class WalletAddressResponse(BaseModel):
+    """钱包地址绑定状态响应。"""
+
+    wallet_address: str | None = Field(default=None, description="已绑定钱包地址")
+    wallet_chain: str = Field(default="base", description="链标识")
+    wallet_signed_at: str | None = Field(default=None, description="绑定时间")
+
+
+class WalletSignMessageResponse(BaseModel):
+    """钱包签名消息响应。"""
+
+    address: str = Field(description="待绑定地址")
+    content: str = Field(description="展示给用户的签名提示内容")
+    nonce: str = Field(description="签名随机串")
+    typed_data: dict[str, Any] = Field(description="完整 EIP-712 消息，可直接交给钱包 signTypedData")
+
+
+class BindWalletRequest(BaseModel):
+    """绑定钱包地址请求。"""
+
+    address: str = Field(description="钱包地址")
+    signature: str = Field(description="EIP-712 签名 hex")
+    nonce: str = Field(default="", description="签名随机串")
+    chain: str = Field(default="base", description="链标识：base / ethereum")
+
+
+@router.get("/me/wallet-address", response_model=WalletAddressResponse)
+async def get_wallet_address(
+    user_id: str = Depends(get_current_user),
+) -> WalletAddressResponse:
+    """获取当前用户绑定的加密货币钱包地址。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    user = state.memory.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return WalletAddressResponse(
+        wallet_address=user.wallet_address,
+        wallet_chain=user.wallet_chain,
+        wallet_signed_at=user.wallet_signed_at.isoformat() if user.wallet_signed_at else None,
+    )
+
+
+@router.post("/me/wallet-address/sign-message", response_model=WalletSignMessageResponse)
+async def get_wallet_sign_message_endpoint(
+    address: str,
+    user_id: str = Depends(get_current_user),
+) -> WalletSignMessageResponse:
+    """为指定地址生成 EIP-712 签名消息。
+
+    前端调用钱包 signTypedData 后，将 address、signature、nonce 提交到 POST /me/wallet-address。
+    """
+    if not validate_ethereum_address(address):
+        raise HTTPException(status_code=400, detail="钱包地址格式不正确")
+    content = get_wallet_sign_content(address)
+    nonce = uuid.uuid4().hex[:16]
+    typed_data = build_wallet_sign_message(address, content, nonce)
+    return WalletSignMessageResponse(
+        address=address,
+        content=content,
+        nonce=nonce,
+        typed_data=typed_data,
+    )
+
+
+@router.post("/me/wallet-address", response_model=WalletAddressResponse)
+async def bind_wallet_address(
+    request: BindWalletRequest,
+    user_id: str = Depends(get_current_user),
+) -> WalletAddressResponse:
+    """绑定加密货币钱包地址，需提交 EIP-712 签名进行所有权校验。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    if not validate_ethereum_address(request.address):
+        raise HTTPException(status_code=400, detail="钱包地址格式不正确")
+
+    if request.chain not in {"base", "ethereum"}:
+        raise HTTPException(status_code=400, detail="不支持的链")
+
+    content = get_wallet_sign_content(request.address)
+    if not verify_wallet_signature(request.address, content, request.nonce, request.signature):
+        raise HTTPException(status_code=400, detail="签名验证失败，请使用对应地址签名")
+
+    user = state.memory.update_user_profile(
+        user_id,
+        wallet_address=request.address.lower(),
+        wallet_signature=request.signature,
+        wallet_signed_at=datetime.now(timezone.utc),
+        wallet_chain=request.chain,
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return WalletAddressResponse(
+        wallet_address=user.wallet_address,
+        wallet_chain=user.wallet_chain,
+        wallet_signed_at=user.wallet_signed_at.isoformat() if user.wallet_signed_at else None,
+    )
+
+
+@router.get("/me", response_model=UserDetailResponse)
 async def me(user_id: str = Depends(get_current_user)) -> UserDetailResponse:
     """获取当前登录用户信息（含粉丝数、关注数）。"""
     if state.memory is None:

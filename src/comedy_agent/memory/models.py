@@ -25,6 +25,10 @@ class UserProfileData(BaseModel):
     wechat_pay_qr_url: str | None = Field(default=None, description="微信收款二维码 URL")
     tipping_copy: str | None = Field(default=None, description="打赏文案")
     usdt_address: str | None = Field(default=None, description="USDT 以太坊收款地址")
+    wallet_address: str | None = Field(default=None, description="加密货币打赏钱包地址")
+    wallet_signature: str | None = Field(default=None, description="钱包地址 EIP-712 绑定签名")
+    wallet_signed_at: datetime | None = Field(default=None, description="钱包地址绑定时间")
+    wallet_chain: str = Field(default="base", description="钱包所在链：base / ethereum")
     is_verified: bool = Field(default=False, description="是否认证大V")
     knowledge_shared: bool = Field(default=False, description="知识库是否共享给其他用户")
     follower_count: int = Field(default=0, description="粉丝数")
@@ -300,6 +304,27 @@ class WithdrawalRequestData(BaseModel):
     payout_account: str | None = Field(default=None, description="收款账号")
     processed_at: datetime | None = Field(default=None, description="处理时间")
     created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+class CryptoTipOrderData(BaseModel):
+    """加密货币打赏订单数据。"""
+
+    order_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    anyway_order_id: str | None = Field(default=None, description="Anyway 订单 ID")
+    merchant_reference: str | None = Field(default=None, description="关联用的 merchant reference")
+    result_id: str = Field(description="被打赏的广场段子 result_id")
+    payer_user_id: str = Field(description="打赏读者用户 ID")
+    payer_wallet: str = Field(description="读者付款钱包地址")
+    author_user_id: str = Field(description="被打赏作者用户 ID")
+    author_wallet: str = Field(description="作者收款钱包地址")
+    amount_cents: int = Field(description="金额（最小货币单位）")
+    currency: str = Field(default="USDC", description="币种")
+    tx_hash: str | None = Field(default=None, description="链上交易 hash")
+    status: str = Field(default="pending", description="pending / paid / failed / refunded")
+    verified_at: datetime | None = Field(default=None, description="链上校验通过时间")
+    metadata_json: dict[str, Any] | None = Field(default=None, description="Anyway 订单与链上 receipt 元数据")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    paid_at: datetime | None = Field(default=None, description="支付成功时间")
 
 
 # ------------------------------------------------------------------ #

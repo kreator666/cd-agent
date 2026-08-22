@@ -57,6 +57,9 @@ dependencies = [
     "jieba>=0.42.0",
     # 二维码生成
     "qrcode[pil]>=7.0",
+    # 加密货币打赏（钱包签名与链上校验）
+    "web3>=6.0.0",
+    "eth-account>=0.11.0",
 ]
 
 [project.optional-dependencies]

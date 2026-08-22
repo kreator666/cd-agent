@@ -81,6 +81,7 @@
             <div class="tab" onclick="switchTab('verify')">认证审核</div>
             <div class="tab" onclick="switchTab('knowledge')">知识库共享</div>
             <div class="tab" onclick="switchTab('withdrawals')">提现审核</div>
+            <div class="tab" onclick="switchTab('crypto')">Crypto 打赏</div>
         </div>
 
         <div class="tab-panel active" id="panel-skills">
@@ -155,6 +156,22 @@
                 <table class="table">
                     <thead><tr><th>申请ID</th><th>用户ID</th><th>金额</th><th>收款方式</th><th>收款账号</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
                     <tbody id="withdrawal-list"><tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-crypto">
+            <div class="section">
+                <h3>Crypto 打赏订单</h3>
+                <div style="margin-bottom:0.75rem;">
+                    <button class="btn" onclick="loadCryptoTipOrders('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:0.5rem;">待支付</button>
+                    <button class="btn" onclick="loadCryptoTipOrders('paid')" style="background:#f6ffed;color:#389e0d;border:1px solid #b7eb8f;margin-right:0.5rem;">已到账</button>
+                    <button class="btn" onclick="loadCryptoTipOrders('failed')" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;margin-right:0.5rem;">已失败</button>
+                    <button class="btn" onclick="loadCryptoTipOrders()" style="background:#f5f5f5;color:#666;border:1px solid #d9d9d9;">全部</button>
+                </div>
+                <table class="table">
+                    <thead><tr><th>订单ID</th><th>段子ID</th><th>付款人</th><th>付款地址</th><th>收款人</th><th>收款地址</th><th>金额</th><th>币种</th><th>状态</th><th>交易</th><th>操作</th></tr></thead>
+                    <tbody id="crypto-orders-admin-list"><tr><td colspan="11" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -440,6 +457,53 @@
             }
         }
 
+        function formatCryptoAdminAmount(units, currency) {
+            if (units == null) return '--';
+            if (currency === 'ETH') return parseFloat((units / 1e18).toFixed(6)) + ' ETH';
+            return '$' + (units / 1e6).toFixed(2);
+        }
+
+        async function loadCryptoTipOrders(status) {
+            const tbody = document.getElementById('crypto-orders-admin-list');
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;">加载中...</td></tr>';
+            try {
+                const url = status ? `/admin/crypto-tip-orders?status=${status}` : '/admin/crypto-tip-orders';
+                const res = await apiFetch(url);
+                const data = await res.json();
+                const items = data.orders || [];
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                const statusMap = { pending: '⏳ 待支付', paid: '✅ 已到账', failed: '❌ 已失败', refunded: '↩️ 已退款' };
+                items.forEach(o => {
+                    const tr = document.createElement('tr');
+                    const txLink = o.tx_hash ? `<a href="https://basescan.org/tx/${escapeHtml(o.tx_hash)}" target="_blank" style="color:#1890ff;">查看</a>` : '--';
+                    let actions = '';
+                    if (o.status === 'pending') {
+                        actions = `<button class="btn btn-primary" onclick="verifyCryptoTipOrder('${o.order_id}')">链上校验</button>`;
+                    }
+                    tr.innerHTML = `<td style="font-size:12px;word-break:break-all;">${escapeHtml(o.order_id)}</td><td style="font-size:12px;word-break:break-all;">${escapeHtml(o.result_id)}</td><td>${escapeHtml(o.payer_user_id)}</td><td style="font-size:12px;word-break:break-all;">${escapeHtml(o.payer_wallet)}</td><td>${escapeHtml(o.author_user_id)}</td><td style="font-size:12px;word-break:break-all;">${escapeHtml(o.author_wallet)}</td><td>${formatCryptoAdminAmount(o.amount_cents, o.currency)}</td><td>${escapeHtml(o.currency)}</td><td>${statusMap[o.status] || o.status}</td><td>${txLink}</td><td>${actions}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function verifyCryptoTipOrder(orderId) {
+            const txHash = prompt('请输入链上交易 hash（留空则使用订单已有 tx_hash）：');
+            if (txHash === null) return;
+            try {
+                const params = txHash ? `?tx_hash=${encodeURIComponent(txHash)}` : '';
+                await apiFetch(`/admin/crypto-tip-orders/${orderId}/verify${params}`, { method: 'POST' });
+                loadCryptoTipOrders('pending');
+            } catch (err) {
+                alert('校验失败: ' + err.message);
+            }
+        }
+
         loadOverview();
         loadPendingSkills();
         loadAdminIPStyles();
@@ -447,6 +511,7 @@
         loadVerifications('pending');
         loadKnowledgeShareUsers();
         loadWithdrawals('pending');
+        loadCryptoTipOrders('pending');
     </script>
 </body>
 </html>

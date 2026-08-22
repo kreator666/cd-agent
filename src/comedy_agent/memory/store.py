@@ -13,6 +13,7 @@ from typing import Any
 from comedy_agent.memory.models import (
     BannedWordData,
     ConversationData,
+    CryptoTipOrderData,
     DocumentData,
     EarningRecordData,
     FeedbackEventData,
@@ -680,6 +681,57 @@ class MemoryStore(ABC):
         Returns:
             dict: 包含 total_cents, withdrawn_cents, pending_cents, currency。
         """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 加密货币打赏订单
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def create_crypto_tip_order(self, order: "CryptoTipOrderData") -> "CryptoTipOrderData":
+        """创建加密货币打赏订单。"""
+        ...
+
+    @abstractmethod
+    def get_crypto_tip_order(self, order_id: str) -> "CryptoTipOrderData | None":
+        """根据 order_id 获取加密货币打赏订单。"""
+        ...
+
+    @abstractmethod
+    def get_crypto_tip_order_by_merchant_reference(
+        self, merchant_reference: str
+    ) -> "CryptoTipOrderData | None":
+        """根据 merchant_reference 获取加密货币打赏订单。"""
+        ...
+
+    @abstractmethod
+    def update_crypto_tip_order(
+        self,
+        order_id: str,
+        anyway_order_id: str | None = None,
+        tx_hash: str | None = None,
+        status: str | None = None,
+        verified_at: datetime | None = None,
+        metadata_json: dict[str, Any] | None = None,
+        paid_at: datetime | None = None,
+    ) -> "CryptoTipOrderData | None":
+        """更新加密货币打赏订单。"""
+        ...
+
+    @abstractmethod
+    def list_crypto_tip_orders(
+        self,
+        payer_user_id: str | None = None,
+        author_user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> "list[CryptoTipOrderData]":
+        """列出加密货币打赏订单。"""
+        ...
+
+    @abstractmethod
+    def get_crypto_tip_stats(self, user_id: str) -> dict[str, Any]:
+        """获取用户加密货币打赏统计。"""
         ...
 
     # ------------------------------------------------------------------ #

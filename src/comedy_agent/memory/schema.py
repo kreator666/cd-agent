@@ -43,6 +43,18 @@ class UserProfile(Base):
     usdt_address: Mapped[str | None] = mapped_column(
         String(64), nullable=True, comment="USDT 以太坊收款地址"
     )
+    wallet_address: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="加密货币打赏钱包地址"
+    )
+    wallet_signature: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="钱包地址 EIP-712 绑定签名"
+    )
+    wallet_signed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="钱包地址绑定时间"
+    )
+    wallet_chain: Mapped[str] = mapped_column(
+        String(16), default="base", nullable=False, comment="钱包所在链：base / ethereum"
+    )
     is_verified: Mapped[bool] = mapped_column(
         default=False, nullable=False, comment="是否认证大V"
     )
@@ -720,6 +732,62 @@ class WithdrawalRequest(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+# ------------------------------------------------------------------ #
+# CryptoTipOrder —— 加密货币打赏订单
+# ------------------------------------------------------------------ #
+class CryptoTipOrder(Base):
+    """加密货币打赏订单表。"""
+
+    __tablename__ = "crypto_tip_orders"
+
+    order_id: Mapped[str] = mapped_column(
+        String(32), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    anyway_order_id: Mapped[str | None] = mapped_column(
+        String(64), index=True, nullable=True, comment="Anyway 订单 ID"
+    )
+    merchant_reference: Mapped[str | None] = mapped_column(
+        String(64), index=True, nullable=True, comment="关联用的 merchant reference"
+    )
+    result_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="被打赏的广场段子 result_id"
+    )
+    payer_user_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="打赏读者用户 ID"
+    )
+    payer_wallet: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="读者付款钱包地址"
+    )
+    author_user_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="被打赏作者用户 ID"
+    )
+    author_wallet: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="作者收款钱包地址"
+    )
+    amount_cents: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="金额（最小货币单位）"
+    )
+    currency: Mapped[str] = mapped_column(
+        String(8), default="USDC", nullable=False, comment="币种"
+    )
+    tx_hash: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, comment="链上交易 hash"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / paid / failed / refunded"
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="链上校验通过时间"
+    )
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="Anyway 订单与链上 receipt 元数据"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 # ------------------------------------------------------------------ #

@@ -15,8 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.core.config import settings
-from comedy_agent.memory.models import EarningRecordData
+from comedy_agent.memory.models import CryptoTipOrderData, EarningRecordData
 from comedy_agent.services.anyway_client import AnywayClient
+from comedy_agent.services.crypto_chain import verify_tip_payment
+
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -120,15 +123,29 @@ async def anyway_webhook(request: Request) -> str:
     return ""
 
 
-def _find_tip_record(order: dict[str, Any]) -> Any | None:
-    """根据 order 查找本地 tip_record。"""
+def _find_anyway_record(order: dict[str, Any]) -> tuple[str, Any | None]:
+    """根据 order 查找本地记录。
+
+    Returns:
+        (record_type, record): record_type 为 "tip" 或 "crypto"；未找到返回 (None, None)。
+    """
     if state.memory is None:
-        return None
+        return None, None
 
     merchant_reference = order.get("merchantReference")
     if not merchant_reference:
-        return None
-    return state.memory.get_tip_record_by_merchant_reference(merchant_reference)
+        return None, None
+
+    if merchant_reference.startswith("cto_"):
+        record = state.memory.get_crypto_tip_order_by_merchant_reference(merchant_reference)
+        if record is not None:
+            return "crypto", record
+
+    record = state.memory.get_tip_record_by_merchant_reference(merchant_reference)
+    if record is not None:
+        return "tip", record
+
+    return None, None
 
 
 async def _handle_order_paid(order: dict[str, Any], webhook_id: str | None) -> None:
@@ -136,9 +153,15 @@ async def _handle_order_paid(order: dict[str, Any], webhook_id: str | None) -> N
     if state.memory is None:
         return
 
-    record = _find_tip_record(order)
+    record_type, record = _find_anyway_record(order)
     if record is None:
-        logger.warning("未找到与 order 关联的 tip_record: %s", order.get("merchantReference"))
+        logger.warning("未找到与 order 关联的本地记录: %s", order.get("merchantReference"))
+        return
+
+    order_id = order.get("orderId")
+
+    if record_type == "crypto":
+        await _handle_crypto_order_paid(record, order, webhook_id)
         return
 
     # 幂等：已处理则跳过
@@ -146,7 +169,6 @@ async def _handle_order_paid(order: dict[str, Any], webhook_id: str | None) -> N
         logger.info("tip_record %s 已处理，跳过", record.tip_id)
         return
 
-    order_id = order.get("orderId")
     amount_cents = order.get("amountCents") or record.amount_cents
     fee_cents = int(amount_cents * settings.anyway_fee_percent / 100)
     net_amount_cents = amount_cents - fee_cents
@@ -176,14 +198,79 @@ async def _handle_order_paid(order: dict[str, Any], webhook_id: str | None) -> N
     logger.info("记录 Anyway 打赏收益: tip_id=%s amount=%s", record.tip_id, net_amount_cents)
 
 
+async def _handle_crypto_order_paid(
+    record: CryptoTipOrderData, order: dict[str, Any], webhook_id: str | None
+) -> None:
+    """处理加密货币打赏 order.paid 事件。"""
+    if record.status == "paid":
+        logger.info("crypto_tip_order %s 已处理，跳过", record.order_id)
+        return
+
+    tx_hash = order.get("transactionHash") or order.get("txHash")
+    metadata = dict(record.metadata_json or {})
+    metadata["anyway_order_id"] = order.get("orderId")
+    metadata["webhook_id"] = webhook_id
+    metadata["anyway_order"] = order
+
+    if not tx_hash:
+        # Anyway 未返回交易 hash，等待用户手动提交交易 hash
+        state.memory.update_crypto_tip_order(
+            record.order_id,
+            anyway_order_id=order.get("orderId"),
+            metadata_json=metadata,
+        )
+        logger.info("crypto_tip_order %s 待手动提交交易 hash", record.order_id)
+        return
+
+    verification = verify_tip_payment(
+        tx_hash=tx_hash,
+        expected_author_wallet=record.author_wallet,
+        expected_payer_wallet=record.payer_wallet,
+        expected_amount=record.amount_cents,
+        currency=record.currency,
+    )
+    if verification["success"]:
+        state.memory.update_crypto_tip_order(
+            record.order_id,
+            anyway_order_id=order.get("orderId"),
+            tx_hash=tx_hash,
+            status="paid",
+            verified_at=datetime.now(timezone.utc),
+            paid_at=datetime.now(timezone.utc),
+            metadata_json={**metadata, "chain_verification": verification},
+        )
+        logger.info("crypto_tip_order %s 链上校验通过并入账", record.order_id)
+    else:
+        state.memory.update_crypto_tip_order(
+            record.order_id,
+            anyway_order_id=order.get("orderId"),
+            tx_hash=tx_hash,
+            metadata_json={**metadata, "chain_verification": verification},
+        )
+        logger.warning("crypto_tip_order %s 链上校验失败: %s", record.order_id, verification.get("error"))
+
+
 async def _handle_order_failed(order: dict[str, Any], webhook_id: str | None) -> None:
     """处理 order.failed 事件。"""
-    record = _find_tip_record(order)
+    if state.memory is None:
+        return
+
+    record_type, record = _find_anyway_record(order)
     if record is None:
         return
 
     metadata = dict(record.metadata_json or {})
     metadata["webhook_id"] = webhook_id
+
+    if record_type == "crypto":
+        state.memory.update_crypto_tip_order(
+            record.order_id,
+            status="failed",
+            metadata_json=metadata,
+        )
+        logger.info("标记 Crypto 打赏失败: order_id=%s", record.order_id)
+        return
+
     state.memory.update_tip_record_status(
         record.tip_id,
         status="failed",

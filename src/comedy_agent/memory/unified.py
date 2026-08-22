@@ -15,6 +15,7 @@ from comedy_agent.memory.medium_term import SQLMemoryStore
 from comedy_agent.memory.models import (
     BannedWordData,
     ConversationData,
+    CryptoTipOrderData,
     DocumentData,
     EarningRecordData,
     FeedbackEventData,
@@ -89,10 +90,15 @@ class UnifiedMemory(MemoryStore):
         is_verified: bool | None = None, knowledge_shared: bool | None = None,
         wechat_pay_qr_url: str | None = None, tipping_copy: str | None = None,
         usdt_address: str | None = None,
+        wallet_address: str | None = None,
+        wallet_signature: str | None = None,
+        wallet_signed_at: datetime | None = None,
+        wallet_chain: str | None = None,
     ) -> UserProfileData | None:
         return self._store.update_user_profile(
             user_id, nickname, bio, tags, avatar_url, is_verified, knowledge_shared,
             wechat_pay_qr_url, tipping_copy, usdt_address,
+            wallet_address, wallet_signature, wallet_signed_at, wallet_chain,
         )
 
     def save_conversation(
@@ -415,6 +421,49 @@ class UnifiedMemory(MemoryStore):
 
     def get_author_earnings(self, user_id: str) -> dict[str, Any]:
         return self._store.get_author_earnings(user_id)
+
+    # ------------------------------------------------------------------ #
+    # 加密货币打赏订单
+    # ------------------------------------------------------------------ #
+    def create_crypto_tip_order(self, order: CryptoTipOrderData) -> CryptoTipOrderData:
+        return self._store.create_crypto_tip_order(order)
+
+    def get_crypto_tip_order(self, order_id: str) -> CryptoTipOrderData | None:
+        return self._store.get_crypto_tip_order(order_id)
+
+    def get_crypto_tip_order_by_merchant_reference(
+        self, merchant_reference: str
+    ) -> CryptoTipOrderData | None:
+        return self._store.get_crypto_tip_order_by_merchant_reference(merchant_reference)
+
+    def update_crypto_tip_order(
+        self,
+        order_id: str,
+        anyway_order_id: str | None = None,
+        tx_hash: str | None = None,
+        status: str | None = None,
+        verified_at: datetime | None = None,
+        metadata_json: dict[str, Any] | None = None,
+        paid_at: datetime | None = None,
+    ) -> CryptoTipOrderData | None:
+        return self._store.update_crypto_tip_order(
+            order_id, anyway_order_id, tx_hash, status, verified_at, metadata_json, paid_at
+        )
+
+    def list_crypto_tip_orders(
+        self,
+        payer_user_id: str | None = None,
+        author_user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[CryptoTipOrderData]:
+        return self._store.list_crypto_tip_orders(
+            payer_user_id, author_user_id, status, limit, offset
+        )
+
+    def get_crypto_tip_stats(self, user_id: str) -> dict[str, Any]:
+        return self._store.get_crypto_tip_stats(user_id)
 
     # ------------------------------------------------------------------ #
     # 敏感词

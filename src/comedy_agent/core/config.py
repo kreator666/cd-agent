@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     anyway_min_tip_cents: int = Field(default=100, alias="ANYWAY_MIN_TIP_CENTS")
     anyway_max_tip_cents: int = Field(default=1000000, alias="ANYWAY_MAX_TIP_CENTS")
 
+    # 加密货币打赏（Base 链校验）
+    base_rpc_url: str = Field(default="https://mainnet.base.org", alias="BASE_RPC_URL")
+    tip_token_contract: str = Field(default="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", alias="TIP_TOKEN_CONTRACT")
+    tip_token_decimals: int = Field(default=6, alias="TIP_TOKEN_DECIMALS")
+    tip_chain_confirmations: int = Field(default=12, alias="TIP_CHAIN_CONFIRMATIONS")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

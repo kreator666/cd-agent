@@ -348,14 +348,16 @@ function renderDetail(detail, comments) {
   const hasQr = !!detail.author_wechat_pay_qr_url;
   const hasUsdt = !!detail.author_usdt_address;
   const hasAnyway = true;
+  const hasCrypto = !!detail.author_wallet_address;
   const tippingCopy = detail.author_tipping_copy || '觉得这段子好笑？支持一下原创段子 ☕';
 
   let tippingHtml = '';
-  const activeTab = hasQr ? 'wechat' : (hasUsdt ? 'usdt' : 'anyway');
-  if (hasQr || hasUsdt || hasAnyway) {
+  const activeTab = hasQr ? 'wechat' : (hasUsdt ? 'usdt' : (hasCrypto ? 'crypto' : 'anyway'));
+  if (hasQr || hasUsdt || hasAnyway || hasCrypto) {
     const wechatTab = hasQr ? `<button class="tipping-tab${activeTab === 'wechat' ? ' active' : ''}" data-tab="wechat" onclick="switchTipTab('wechat')">微信打赏</button>` : '';
     const usdtTab = hasUsdt ? `<button class="tipping-tab${activeTab === 'usdt' ? ' active' : ''}" data-tab="usdt" onclick="switchTipTab('usdt')">USDT 打赏</button>` : '';
     const anywayTab = `<button class="tipping-tab${activeTab === 'anyway' ? ' active' : ''}" data-tab="anyway" onclick="switchTipTab('anyway')">Anyway 打赏</button>`;
+    const cryptoTab = hasCrypto ? `<button class="tipping-tab${activeTab === 'crypto' ? ' active' : ''}" data-tab="crypto" onclick="switchTipTab('crypto')">Crypto 打赏</button>` : '';
     const wechatPanel = hasQr ? `
       <div class="tipping-panel" data-panel="wechat" style="${activeTab === 'wechat' ? 'display:block;' : 'display:none;'}">
         <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
@@ -385,11 +387,25 @@ function renderDetail(detail, comments) {
         <div class="tipping-hint">支持信用卡 / 借记卡 / 稳定币，平台代收后结算给作者</div>
       </div>
     `;
+    const cryptoPanel = hasCrypto ? `
+      <div class="tipping-panel" data-panel="crypto" style="${activeTab === 'crypto' ? 'display:block;' : 'display:none;'}">
+        <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
+        <div class="tipping-address" style="justify-content:center;flex-wrap:wrap;gap:8px;">
+          <select id="crypto-tip-currency" style="padding:8px 10px;border:1px solid var(--line-dark);border-radius:8px;font-size:14px;font-weight:700;">
+            <option value="USDC">USDC</option>
+            <option value="ETH">ETH</option>
+          </select>
+          <input id="crypto-tip-amount" type="number" step="0.01" min="0.01" placeholder="如 1.00" style="width:100px;padding:8px 10px;border:1px solid var(--line-dark);border-radius:8px;font-size:14px;font-weight:700;">
+          <button class="copy-address-btn" onclick="createCryptoTip('${detail.result_id}')" style="padding:8px 16px;">生成支付链接</button>
+        </div>
+        <div id="crypto-tip-result" style="margin-top:10px;font-size:13px;color:#666;"></div>
+      </div>
+    ` : '';
     tippingHtml = `
       <div class="tipping-section">
         <div class="tipping-title">💰 打赏作者</div>
-        <div class="tipping-tabs">${wechatTab}${usdtTab}${anywayTab}</div>
-        ${wechatPanel}${usdtPanel}${anywayPanel}
+        <div class="tipping-tabs">${wechatTab}${usdtTab}${cryptoTab}${anywayTab}</div>
+        ${wechatPanel}${usdtPanel}${cryptoPanel}${anywayPanel}
       </div>
     `;
   }
@@ -517,6 +533,77 @@ async function createAnywayTip(resultId) {
     }
   } catch (err) {
     alert('打赏创建失败：' + err.message);
+  }
+}
+
+function cryptoAmountUnits(currency, dollars) {
+  if (currency === 'ETH') {
+    return Math.round(dollars * 1e18);
+  }
+  return Math.round(dollars * 1e6);
+}
+
+async function createCryptoTip(resultId) {
+  const currency = document.getElementById('crypto-tip-currency').value;
+  const amountInput = document.getElementById('crypto-tip-amount');
+  const resultDiv = document.getElementById('crypto-tip-result');
+  const dollars = parseFloat(amountInput.value);
+  if (Number.isNaN(dollars) || dollars <= 0) {
+    resultDiv.textContent = '请输入有效的打赏金额';
+    resultDiv.style.color = '#ff4a4a';
+    return;
+  }
+  const amountUnits = cryptoAmountUnits(currency, dollars);
+  try {
+    const res = await apiFetch('/tips/crypto/intent', {
+      method: 'POST',
+      body: JSON.stringify({ result_id: resultId, amount_cents: amountUnits, currency: currency }),
+    });
+    const data = await res.json();
+    if (data.payment_url) {
+      resultDiv.innerHTML = `
+        <div>作者收款地址：<code>${escapeHtml(data.author_wallet)}</code></div>
+        <div style="margin-top:6px;">请使用已绑定钱包 <code>${escapeHtml(data.payer_wallet)}</code> 完成支付</div>
+        <div style="margin-top:8px;">
+          <a href="${escapeHtml(data.payment_url)}" target="_blank" style="color:#ff764a;font-weight:700;">点击跳转 Anyway 收银台</a>
+        </div>
+        <div style="margin-top:10px;padding:10px;background:#f5f6f8;border-radius:8px;">
+          <div style="font-weight:700;margin-bottom:6px;">支付后提交交易 hash</div>
+          <input id="crypto-tip-txhash" type="text" placeholder="0x..." style="width:100%;padding:8px;border:1px solid var(--line-dark);border-radius:6px;margin-bottom:6px;">
+          <button class="copy-address-btn" onclick="confirmCryptoTip('${data.order_id}')" style="padding:6px 12px;">提交确认</button>
+          <div id="crypto-confirm-result" style="margin-top:6px;"></div>
+        </div>
+      `;
+    } else {
+      resultDiv.textContent = '创建支付链接失败，请稍后重试';
+      resultDiv.style.color = '#ff4a4a';
+    }
+  } catch (err) {
+    resultDiv.textContent = '打赏创建失败：' + err.message;
+    resultDiv.style.color = '#ff4a4a';
+  }
+}
+
+async function confirmCryptoTip(orderId) {
+  const txHashInput = document.getElementById('crypto-tip-txhash');
+  const resultDiv = document.getElementById('crypto-confirm-result');
+  const txHash = txHashInput.value.trim();
+  if (!/^0x[a-fA-F0-9]+$/.test(txHash)) {
+    resultDiv.textContent = '请输入有效的交易 hash';
+    resultDiv.style.color = '#ff4a4a';
+    return;
+  }
+  try {
+    const res = await apiFetch('/tips/crypto/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ order_id: orderId, tx_hash: txHash }),
+    });
+    const data = await res.json();
+    resultDiv.textContent = '✅ 已确认入账，状态：' + data.status;
+    resultDiv.style.color = '#18a058';
+  } catch (err) {
+    resultDiv.textContent = '确认失败：' + err.message;
+    resultDiv.style.color = '#ff4a4a';
   }
 }
 

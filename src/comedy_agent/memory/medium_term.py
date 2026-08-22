@@ -21,6 +21,7 @@ from comedy_agent.core.config import settings
 from comedy_agent.memory.models import (
     BannedWordData,
     ConversationData,
+    CryptoTipOrderData,
     DocumentData,
     EarningRecordData,
     FeedbackEventData,
@@ -42,6 +43,7 @@ from comedy_agent.memory.models import (
 from comedy_agent.memory.schema import (
     Base,
     BannedWord,
+    CryptoTipOrder,
     EarningRecord,
     EvalResult,
     EvalSession,
@@ -240,6 +242,10 @@ class SQLMemoryStore(MemoryStore):
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
                 usdt_address=user.usdt_address,
+                wallet_address=user.wallet_address,
+                wallet_signature=user.wallet_signature,
+                wallet_signed_at=user.wallet_signed_at,
+                wallet_chain=user.wallet_chain,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -268,6 +274,10 @@ class SQLMemoryStore(MemoryStore):
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
                 usdt_address=user.usdt_address,
+                wallet_address=user.wallet_address,
+                wallet_signature=user.wallet_signature,
+                wallet_signed_at=user.wallet_signed_at,
+                wallet_chain=user.wallet_chain,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -296,6 +306,10 @@ class SQLMemoryStore(MemoryStore):
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
                 usdt_address=user.usdt_address,
+                wallet_address=user.wallet_address,
+                wallet_signature=user.wallet_signature,
+                wallet_signed_at=user.wallet_signed_at,
+                wallet_chain=user.wallet_chain,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -309,6 +323,10 @@ class SQLMemoryStore(MemoryStore):
         is_verified: bool | None = None, knowledge_shared: bool | None = None,
         wechat_pay_qr_url: str | None = None, tipping_copy: str | None = None,
         usdt_address: str | None = None,
+        wallet_address: str | None = None,
+        wallet_signature: str | None = None,
+        wallet_signed_at: datetime | None = None,
+        wallet_chain: str | None = None,
     ) -> UserProfileData | None:
         """更新用户画像信息。"""
         with self._new_session() as session:
@@ -329,6 +347,14 @@ class SQLMemoryStore(MemoryStore):
                 user.tipping_copy = tipping_copy
             if usdt_address is not None:
                 user.usdt_address = usdt_address
+            if wallet_address is not None:
+                user.wallet_address = wallet_address
+            if wallet_signature is not None:
+                user.wallet_signature = wallet_signature
+            if wallet_signed_at is not None:
+                user.wallet_signed_at = wallet_signed_at
+            if wallet_chain is not None:
+                user.wallet_chain = wallet_chain
             if is_verified is not None:
                 user.is_verified = is_verified
             if knowledge_shared is not None:
@@ -356,6 +382,10 @@ class SQLMemoryStore(MemoryStore):
                 wechat_pay_qr_url=user.wechat_pay_qr_url,
                 tipping_copy=user.tipping_copy,
                 usdt_address=user.usdt_address,
+                wallet_address=user.wallet_address,
+                wallet_signature=user.wallet_signature,
+                wallet_signed_at=user.wallet_signed_at,
+                wallet_chain=user.wallet_chain,
                 is_verified=user.is_verified,
                 knowledge_shared=user.knowledge_shared,
                 follower_count=user.follower_count,
@@ -1730,6 +1760,222 @@ class SQLMemoryStore(MemoryStore):
                 "withdrawn_cents": paid_withdrawn,
                 "pending_cents": total - paid_withdrawn,
                 "currency": "usd",
+            }
+
+    # ------------------------------------------------------------------ #
+    # 加密货币打赏订单
+    # ------------------------------------------------------------------ #
+    def create_crypto_tip_order(self, order: CryptoTipOrderData) -> CryptoTipOrderData:
+        """创建加密货币打赏订单。"""
+        order_id = order.order_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = CryptoTipOrder(
+                order_id=order_id,
+                anyway_order_id=order.anyway_order_id,
+                merchant_reference=order.merchant_reference,
+                result_id=order.result_id,
+                payer_user_id=order.payer_user_id,
+                payer_wallet=order.payer_wallet,
+                author_user_id=order.author_user_id,
+                author_wallet=order.author_wallet,
+                amount_cents=order.amount_cents,
+                currency=order.currency,
+                tx_hash=order.tx_hash,
+                status=order.status,
+                verified_at=order.verified_at,
+                metadata_json=order.metadata_json,
+                paid_at=order.paid_at,
+            )
+            session.add(row)
+            session.commit()
+            logger.debug("Saved crypto tip order: %s", order_id)
+            return CryptoTipOrderData(
+                order_id=row.order_id,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                payer_wallet=row.payer_wallet,
+                author_user_id=row.author_user_id,
+                author_wallet=row.author_wallet,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                tx_hash=row.tx_hash,
+                status=row.status,
+                verified_at=row.verified_at,
+                metadata_json=row.metadata_json,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def get_crypto_tip_order(self, order_id: str) -> CryptoTipOrderData | None:
+        """根据 order_id 获取订单。"""
+        with self._new_session() as session:
+            row = session.query(CryptoTipOrder).filter_by(order_id=order_id).first()
+            if row is None:
+                return None
+            return CryptoTipOrderData(
+                order_id=row.order_id,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                payer_wallet=row.payer_wallet,
+                author_user_id=row.author_user_id,
+                author_wallet=row.author_wallet,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                tx_hash=row.tx_hash,
+                status=row.status,
+                verified_at=row.verified_at,
+                metadata_json=row.metadata_json,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def get_crypto_tip_order_by_merchant_reference(
+        self, merchant_reference: str
+    ) -> CryptoTipOrderData | None:
+        """根据 merchant_reference 获取订单。"""
+        with self._new_session() as session:
+            row = session.query(CryptoTipOrder).filter_by(merchant_reference=merchant_reference).first()
+            if row is None:
+                return None
+            return CryptoTipOrderData(
+                order_id=row.order_id,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                payer_wallet=row.payer_wallet,
+                author_user_id=row.author_user_id,
+                author_wallet=row.author_wallet,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                tx_hash=row.tx_hash,
+                status=row.status,
+                verified_at=row.verified_at,
+                metadata_json=row.metadata_json,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def update_crypto_tip_order(
+        self,
+        order_id: str,
+        anyway_order_id: str | None = None,
+        tx_hash: str | None = None,
+        status: str | None = None,
+        verified_at: datetime | None = None,
+        metadata_json: dict[str, Any] | None = None,
+        paid_at: datetime | None = None,
+    ) -> CryptoTipOrderData | None:
+        """更新加密货币打赏订单状态。"""
+        with self._new_session() as session:
+            row = session.query(CryptoTipOrder).filter_by(order_id=order_id).first()
+            if row is None:
+                return None
+            if anyway_order_id is not None:
+                row.anyway_order_id = anyway_order_id
+            if tx_hash is not None:
+                row.tx_hash = tx_hash
+            if status is not None:
+                row.status = status
+            if verified_at is not None:
+                row.verified_at = verified_at
+            if metadata_json is not None:
+                if row.metadata_json is None:
+                    row.metadata_json = {}
+                row.metadata_json.update(metadata_json)
+            if paid_at is not None:
+                row.paid_at = paid_at
+            session.commit()
+            return CryptoTipOrderData(
+                order_id=row.order_id,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                payer_wallet=row.payer_wallet,
+                author_user_id=row.author_user_id,
+                author_wallet=row.author_wallet,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                tx_hash=row.tx_hash,
+                status=row.status,
+                verified_at=row.verified_at,
+                metadata_json=row.metadata_json,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def list_crypto_tip_orders(
+        self,
+        payer_user_id: str | None = None,
+        author_user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[CryptoTipOrderData]:
+        """列出加密货币打赏订单。"""
+        with self._new_session() as session:
+            query = session.query(CryptoTipOrder)
+            if payer_user_id is not None:
+                query = query.filter_by(payer_user_id=payer_user_id)
+            if author_user_id is not None:
+                query = query.filter_by(author_user_id=author_user_id)
+            if status is not None:
+                query = query.filter_by(status=status)
+            rows = (
+                query.order_by(CryptoTipOrder.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return [
+                CryptoTipOrderData(
+                    order_id=r.order_id,
+                    anyway_order_id=r.anyway_order_id,
+                    merchant_reference=r.merchant_reference,
+                    result_id=r.result_id,
+                    payer_user_id=r.payer_user_id,
+                    payer_wallet=r.payer_wallet,
+                    author_user_id=r.author_user_id,
+                    author_wallet=r.author_wallet,
+                    amount_cents=r.amount_cents,
+                    currency=r.currency,
+                    tx_hash=r.tx_hash,
+                    status=r.status,
+                    verified_at=r.verified_at,
+                    metadata_json=r.metadata_json,
+                    created_at=r.created_at,
+                    paid_at=r.paid_at,
+                )
+                for r in rows
+            ]
+
+    def get_crypto_tip_stats(self, user_id: str) -> dict[str, Any]:
+        """获取用户加密货币打赏统计。"""
+        with self._new_session() as session:
+            tipped = sum(
+                o.amount_cents
+                for o in session.query(CryptoTipOrder)
+                .filter_by(payer_user_id=user_id, status="paid")
+                .all()
+            )
+            received = sum(
+                o.amount_cents
+                for o in session.query(CryptoTipOrder)
+                .filter_by(author_user_id=user_id, status="paid")
+                .all()
+            )
+            user = session.query(UserProfile).filter_by(user_id=user_id).first()
+            return {
+                "total_tipped_cents": tipped,
+                "total_received_cents": received,
+                "bound_wallet": user.wallet_address if user else None,
+                "wallet_chain": user.wallet_chain if user else "base",
+                "currency": "USDC",
             }
 
     # ------------------------------------------------------------------ #

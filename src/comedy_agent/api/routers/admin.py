@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
+from comedy_agent.core.config import settings
 from comedy_agent.services.anyway_client import AnywayClient
 from comedy_agent.api.routers.anyway_webhook import (
     _handle_order_failed,
@@ -21,8 +22,8 @@ from comedy_agent.memory.models import BannedWordData, CryptoTipOrderData, Earni
 
 router = APIRouter(tags=["admin"])
 
-# 简单硬编码管理员列表（后续可迁移到数据库或配置）
-ADMIN_USERS = {"admin"}
+# 管理员配置从 .env 读取（默认 admin/admin）
+ADMIN_USERS = {settings.admin_user_id}
 
 
 def require_admin(user_id: str = Depends(get_current_user)) -> str:

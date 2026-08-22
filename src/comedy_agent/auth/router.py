@@ -13,6 +13,7 @@ from comedy_agent.auth.security import (
     hash_password,
     verify_password,
 )
+from comedy_agent.core.config import settings
 from comedy_agent.memory.medium_term import SQLMemoryStore
 
 router = APIRouter(tags=["auth"])
@@ -75,8 +76,20 @@ async def register(request: RegisterRequest) -> UserResponse:
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest) -> TokenResponse:
-    """用户登录，返回 JWT token。"""
+    """用户登录，返回 JWT token。
+
+    管理员用户（ADMIN_USER_ID）的密码优先从 .env 读取，不依赖数据库中的哈希。
+    """
     store = SQLMemoryStore()
+
+    # 管理员账号：密码从 .env 读取，db 中有没有记录都不影响登录
+    if request.user_id == settings.admin_user_id:
+        admin_hash = hash_password(settings.admin_password)
+        if not verify_password(request.password, admin_hash):
+            raise HTTPException(status_code=401, detail="用户不存在或密码错误")
+        token = create_access_token(request.user_id)
+        return TokenResponse(access_token=token, user_id=request.user_id)
+
     hashed = store.get_user_password_hash(request.user_id)
     if hashed is None:
         raise HTTPException(status_code=401, detail="用户不存在或密码错误")

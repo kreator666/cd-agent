@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     anyway_min_tip_cents: int = Field(default=100, alias="ANYWAY_MIN_TIP_CENTS")
     anyway_max_tip_cents: int = Field(default=1000000, alias="ANYWAY_MAX_TIP_CENTS")
 
+    # 管理员账号（仅支持单一硬编码管理员，密码从环境变量读取）
+    admin_user_id: str = Field(default="admin", alias="ADMIN_USER_ID")
+    admin_password: str = Field(default="admin", alias="ADMIN_PASSWORD")
+
     # 加密货币打赏（Base 链校验）
     base_rpc_url: str = Field(default="https://mainnet.base.org", alias="BASE_RPC_URL")
     tip_token_contract: str = Field(default="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", alias="TIP_TOKEN_CONTRACT")

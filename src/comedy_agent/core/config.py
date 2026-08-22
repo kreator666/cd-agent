@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     anyway_payment_link_url: str = Field(default="", alias="ANYWAY_PAYMENT_LINK_URL")
     anyway_webhook_signing_key: str = Field(default="", alias="ANYWAY_WEBHOOK_SIGNING_KEY")
     anyway_webhook_path: str = Field(default="/webhooks/anyway", alias="ANYWAY_WEBHOOK_PATH")
-    anyway_fee_percent: float = Field(default=5.0, alias="ANYWAY_FEE_PERCENT")
+    anyway_fee_percent: float = Field(default=5.0, ge=0.0, le=100.0, alias="ANYWAY_FEE_PERCENT")
     anyway_min_tip_cents: int = Field(default=100, alias="ANYWAY_MIN_TIP_CENTS")
     anyway_max_tip_cents: int = Field(default=1000000, alias="ANYWAY_MAX_TIP_CENTS")
 

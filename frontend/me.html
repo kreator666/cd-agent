@@ -333,26 +333,6 @@
         </div>
       </div>
 
-      <div class="page-title" style="margin-top:1.5rem;">₿ 加密货币打赏统计</div>
-      <div class="card" style="max-width:900px;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:1rem;">
-          <div style="background:#e6f7ff;border:1px solid #91d5ff;border-radius:10px;padding:14px;">
-            <div style="font-size:12px;color:#096dd9;font-weight:650;">我打赏了</div>
-            <div style="font-size:20px;font-weight:780;color:#232323;" id="crypto-tipped">--</div>
-          </div>
-          <div style="background:#f6ffed;border:1px solid #b7eb8f;border-radius:10px;padding:14px;">
-            <div style="font-size:12px;color:#389e0d;font-weight:650;">我收到</div>
-            <div style="font-size:20px;font-weight:780;color:#232323;" id="crypto-received">--</div>
-          </div>
-        </div>
-        <div style="margin-top:1.5rem;">
-          <div style="font-size:.875rem;color:#666;margin-bottom:.5rem;font-weight:650;">最近订单</div>
-          <table>
-            <thead><tr><th>时间</th><th>方向</th><th>金额</th><th>币种</th><th>状态</th><th>交易</th></tr></thead>
-            <tbody id="crypto-orders-list"><tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
     </div>
   </main>
 </div>
@@ -607,7 +587,6 @@
         await loadTippingConfig();
         await loadWalletAddress();
         await loadTipsEarnings();
-        await loadCryptoStats();
     })();
     loadTokenBalance();
 
@@ -754,47 +733,6 @@
     function formatUsd(cents) {
         if (cents == null) return '--';
         return '$' + (cents / 100).toFixed(2);
-    }
-
-    function formatCryptoAmount(units, currency) {
-        if (units == null) return '--';
-        if (currency === 'ETH') {
-            return parseFloat((units / 1e18).toFixed(6)) + ' ETH';
-        }
-        return '$' + (units / 1e6).toFixed(2);
-    }
-
-    async function loadCryptoStats() {
-        try {
-            const res = await apiFetch('/tips/crypto/stats');
-            const data = await res.json();
-            document.getElementById('crypto-tipped').textContent = formatCryptoAmount(data.total_tipped_cents, data.currency);
-            document.getElementById('crypto-received').textContent = formatCryptoAmount(data.total_received_cents, data.currency);
-        } catch (err) {
-            console.error('加载加密货币打赏统计失败', err);
-        }
-        loadCryptoOrders();
-    }
-
-    async function loadCryptoOrders() {
-        const tbody = document.getElementById('crypto-orders-list');
-        try {
-            const res = await apiFetch('/tips/crypto/orders');
-            const items = await res.json();
-            if (!items || items.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无记录</td></tr>';
-                return;
-            }
-            const statusMap = { pending: '⏳ 待支付', paid: '✅ 已到账', failed: '❌ 失败', refunded: '↩️ 已退款' };
-            tbody.innerHTML = items.map(o => {
-                const date = o.created_at ? new Date(o.created_at).toLocaleString('zh-CN') : '--';
-                const txLink = o.tx_hash ? `<a href="https://basescan.org/tx/${escapeHtml(o.tx_hash)}" target="_blank" style="color:#ff764a;font-weight:700;">查看</a>` : '--';
-                const direction = o.payer_wallet === document.getElementById('wallet-bound-address').textContent ? '支出' : '收入';
-                return `<tr><td style="font-size:12px;color:#999;">${date}</td><td>${direction}</td><td>${formatCryptoAmount(o.amount_cents, o.currency)}</td><td>${escapeHtml(o.currency)}</td><td>${statusMap[o.status] || o.status}</td><td>${txLink}</td></tr>`;
-            }).join('');
-        } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#999;">加载失败</td></tr>`;
-        }
     }
 
     async function loadTipsEarnings() {

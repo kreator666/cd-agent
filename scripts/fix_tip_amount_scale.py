@@ -14,6 +14,10 @@ import argparse
 import logging
 import sys
 from datetime import datetime
+from pathlib import Path
+
+# 确保从项目 src 目录导入 comedy_agent
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from comedy_agent.core.config import settings
 from comedy_agent.memory.medium_term import SQLMemoryStore

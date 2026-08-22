@@ -13,6 +13,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from pathlib import Path
+
+# 确保从项目 src 目录导入 comedy_agent
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from comedy_agent.api.routers.anyway_webhook import _anyway_amount_to_cents
 from comedy_agent.core.config import settings

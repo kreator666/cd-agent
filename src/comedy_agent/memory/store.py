@@ -647,6 +647,11 @@ class MemoryStore(ABC):
         ...
 
     @abstractmethod
+    def get_tip_stats(self) -> dict[str, int]:
+        """获取 Anyway 打赏全局统计。"""
+        ...
+
+    @abstractmethod
     def create_withdrawal_request(self, request: WithdrawalRequestData) -> WithdrawalRequestData:
         """创建提现申请。"""
         ...

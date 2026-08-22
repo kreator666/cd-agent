@@ -399,6 +399,9 @@ class UnifiedMemory(MemoryStore):
     ) -> list[TipRecordData]:
         return self._store.list_tip_records(author_id, result_id, status, limit, offset)
 
+    def get_tip_stats(self) -> dict[str, int]:
+        return self._store.get_tip_stats()
+
     def create_withdrawal_request(self, request: WithdrawalRequestData) -> WithdrawalRequestData:
         return self._store.create_withdrawal_request(request)
 

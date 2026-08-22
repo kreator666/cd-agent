@@ -284,7 +284,7 @@ function renderJokes(jokes) {
     el.className = 'joke-card';
     el.onclick = () => openJoke(joke.result_id);
     const avg = joke.average_score != null ? joke.average_score : '-';
-    const hasTip = !!(joke.author_wechat_pay_qr_url || joke.author_usdt_address);
+    const hasTip = !!joke.author_wechat_pay_qr_url;
     el.innerHTML = `
       <div class="joke-card-header">
         <div>
@@ -346,16 +346,14 @@ async function openJoke(resultId) {
 function renderDetail(detail, comments) {
   const avg = detail.average_score != null ? detail.average_score : '暂无';
   const hasQr = !!detail.author_wechat_pay_qr_url;
-  const hasUsdt = !!detail.author_usdt_address;
   const hasAnyway = true;
   const hasCrypto = !!detail.author_wallet_address;
   const tippingCopy = detail.author_tipping_copy || '觉得这段子好笑？支持一下原创段子 ☕';
 
   let tippingHtml = '';
-  const activeTab = hasQr ? 'wechat' : (hasUsdt ? 'usdt' : (hasCrypto ? 'crypto' : 'anyway'));
-  if (hasQr || hasUsdt || hasAnyway || hasCrypto) {
+  const activeTab = hasQr ? 'wechat' : (hasCrypto ? 'crypto' : 'anyway');
+  if (hasQr || hasAnyway || hasCrypto) {
     const wechatTab = hasQr ? `<button class="tipping-tab${activeTab === 'wechat' ? ' active' : ''}" data-tab="wechat" onclick="switchTipTab('wechat')">微信打赏</button>` : '';
-    const usdtTab = hasUsdt ? `<button class="tipping-tab${activeTab === 'usdt' ? ' active' : ''}" data-tab="usdt" onclick="switchTipTab('usdt')">USDT 打赏</button>` : '';
     const anywayTab = `<button class="tipping-tab${activeTab === 'anyway' ? ' active' : ''}" data-tab="anyway" onclick="switchTipTab('anyway')">Anyway 打赏</button>`;
     const cryptoTab = hasCrypto ? `<button class="tipping-tab${activeTab === 'crypto' ? ' active' : ''}" data-tab="crypto" onclick="switchTipTab('crypto')">Crypto 打赏</button>` : '';
     const wechatPanel = hasQr ? `
@@ -363,17 +361,6 @@ function renderDetail(detail, comments) {
         <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
         <img class="tipping-qr" src="${escapeHtml(detail.author_wechat_pay_qr_url)}" alt="微信收款二维码">
         <div class="tipping-hint">打开微信扫一扫，支持原创段子</div>
-      </div>
-    ` : '';
-    const usdtPanel = hasUsdt ? `
-      <div class="tipping-panel" data-panel="usdt" style="${activeTab === 'usdt' ? 'display:block;' : 'display:none;'}">
-        <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
-        <img class="tipping-qr" src="/tipping/usdt-qr/${encodeURIComponent(detail.author_id)}" alt="USDT 收款二维码">
-        <div class="tipping-address">
-          <code>${escapeHtml(detail.author_usdt_address)}</code>
-          <button class="copy-address-btn" onclick="copyUsdtAddress(this)">复制地址</button>
-        </div>
-        <div class="tipping-hint">打开钱包扫一扫，或复制地址转账（ERC-20 USDT）</div>
       </div>
     ` : '';
     const anywayPanel = `
@@ -404,8 +391,8 @@ function renderDetail(detail, comments) {
     tippingHtml = `
       <div class="tipping-section">
         <div class="tipping-title">💰 打赏作者</div>
-        <div class="tipping-tabs">${wechatTab}${usdtTab}${cryptoTab}${anywayTab}</div>
-        ${wechatPanel}${usdtPanel}${cryptoPanel}${anywayPanel}
+        <div class="tipping-tabs">${wechatTab}${cryptoTab}${anywayTab}</div>
+        ${wechatPanel}${cryptoPanel}${anywayPanel}
       </div>
     `;
   }
@@ -497,19 +484,6 @@ function switchTipTab(tab) {
   section.querySelectorAll('.tipping-panel').forEach(panel => {
     panel.style.display = panel.dataset.panel === tab ? 'block' : 'none';
   });
-}
-
-async function copyUsdtAddress(btn) {
-  const code = btn.parentElement.querySelector('code');
-  if (!code) return;
-  try {
-    await navigator.clipboard.writeText(code.textContent);
-    const old = btn.textContent;
-    btn.textContent = '已复制';
-    setTimeout(() => btn.textContent = old, 1500);
-  } catch {
-    alert('复制失败');
-  }
 }
 
 async function createAnywayTip(resultId) {

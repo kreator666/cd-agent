@@ -195,7 +195,6 @@ class SquareJokeItem(BaseModel):
     hot_score: float
     author_wechat_pay_qr_url: str | None = Field(default=None, description="作者微信收款二维码 URL")
     author_tipping_copy: str | None = Field(default=None, description="作者打赏文案")
-    author_usdt_address: str | None = Field(default=None, description="作者 USDT 以太坊收款地址")
     author_wallet_address: str | None = Field(default=None, description="作者加密货币打赏钱包地址")
 
 
@@ -227,7 +226,6 @@ class SquareJokeDetail(BaseModel):
     published_at: str
     author_wechat_pay_qr_url: str | None = Field(default=None, description="作者微信收款二维码 URL")
     author_tipping_copy: str | None = Field(default=None, description="作者打赏文案")
-    author_usdt_address: str | None = Field(default=None, description="作者 USDT 以太坊收款地址")
     author_wallet_address: str | None = Field(default=None, description="作者加密货币打赏钱包地址")
 
 
@@ -746,7 +744,6 @@ async def list_square_jokes(
                     hot_score=round(hot_score, 2),
                     author_wechat_pay_qr_url=author.wechat_pay_qr_url,
                     author_tipping_copy=author.tipping_copy,
-                    author_usdt_address=author.usdt_address,
                     author_wallet_address=author.wallet_address,
                 )
             )
@@ -811,7 +808,6 @@ async def get_square_joke_detail(
             published_at=result.published_at.isoformat() if result.published_at else "",
             author_wechat_pay_qr_url=author.wechat_pay_qr_url,
             author_tipping_copy=author.tipping_copy,
-            author_usdt_address=author.usdt_address,
             author_wallet_address=author.wallet_address,
         )
 

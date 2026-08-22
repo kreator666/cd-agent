@@ -11,7 +11,7 @@ from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
 from datetime import datetime
 
-from comedy_agent.memory.models import BannedWordData, CryptoTipOrderData, EarningRecordData, IPStyleData, WithdrawalRequestData
+from comedy_agent.memory.models import BannedWordData, CryptoTipOrderData, EarningRecordData, IPStyleData, TipRecordData, WithdrawalRequestData
 
 router = APIRouter(tags=["admin"])
 
@@ -437,6 +437,68 @@ async def admin_mark_withdrawal_paid(
         processed_at=updated.processed_at.isoformat() if updated.processed_at else None,
     )
 
+
+# ------------------------------------------------------------------ #
+# Anyway 打赏订单管理
+# ------------------------------------------------------------------ #
+class TipRecordAdminItem(BaseModel):
+    """管理员视角 Anyway 打赏记录项。"""
+
+    tip_id: str = Field(description="打赏记录 ID")
+    merchant_reference: str | None = Field(default=None, description="Merchant reference")
+    anyway_order_id: str | None = Field(default=None, description="Anyway 订单 ID")
+    author_id: str = Field(description="被打赏作者用户 ID")
+    payer_user_id: str | None = Field(default=None, description="打赏读者用户 ID")
+    result_id: str = Field(description="广场段子 result_id")
+    amount_cents: int = Field(description="打赏金额（美分）")
+    fee_cents: int = Field(description="平台手续费（美分）")
+    net_amount_cents: int = Field(description="作者净得（美分）")
+    currency: str = Field(description="币种")
+    status: str = Field(description="状态")
+    created_at: str | None = Field(default=None, description="创建时间")
+    paid_at: str | None = Field(default=None, description="支付成功时间")
+
+
+class TipRecordListResponse(BaseModel):
+    """管理员视角 Anyway 打赏记录列表响应。"""
+
+    orders: list[TipRecordAdminItem] = Field(description="打赏记录列表")
+    count: int = Field(description="总数")
+    stats: dict[str, int] = Field(description="全局统计")
+
+
+@router.get("/admin/tip-records", response_model=TipRecordListResponse)
+async def admin_list_tip_records(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    _admin: str = Depends(require_admin),
+) -> TipRecordListResponse:
+    """获取 Anyway 打赏记录列表（管理员视角，含统计）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    records = state.memory.list_tip_records(status=status, limit=limit, offset=offset)
+    stats = state.memory.get_tip_stats()
+    items = [
+        TipRecordAdminItem(
+            tip_id=r.tip_id,
+            merchant_reference=r.merchant_reference,
+            anyway_order_id=r.anyway_order_id,
+            author_id=r.author_id,
+            payer_user_id=r.payer_user_id,
+            result_id=r.result_id,
+            amount_cents=r.amount_cents,
+            fee_cents=r.fee_cents,
+            net_amount_cents=r.net_amount_cents,
+            currency=r.currency,
+            status=r.status,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+            paid_at=r.paid_at.isoformat() if r.paid_at else None,
+        )
+        for r in records
+    ]
+    return TipRecordListResponse(orders=items, count=len(items), stats=stats)
 
 
 # ------------------------------------------------------------------ #

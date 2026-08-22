@@ -81,6 +81,7 @@
             <div class="tab" onclick="switchTab('verify')">认证审核</div>
             <div class="tab" onclick="switchTab('knowledge')">知识库共享</div>
             <div class="tab" onclick="switchTab('withdrawals')">提现审核</div>
+            <div class="tab" onclick="switchTab('anyway')">Anyway 打赏</div>
             <div class="tab" onclick="switchTab('crypto')">Crypto 打赏</div>
         </div>
 
@@ -156,6 +157,32 @@
                 <table class="table">
                     <thead><tr><th>申请ID</th><th>用户ID</th><th>金额</th><th>收款方式</th><th>收款账号</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
                     <tbody id="withdrawal-list"><tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-anyway">
+            <div class="section">
+                <h3>Anyway 打赏统计</h3>
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: 0.75rem;">
+                    <div class="stat-card"><div class="stat-value" id="anyway-stat-total">--</div><div class="stat-label">订单总数</div></div>
+                    <div class="stat-card"><div class="stat-value" id="anyway-stat-paid">--</div><div class="stat-label">已支付</div></div>
+                    <div class="stat-card"><div class="stat-value" id="anyway-stat-pending">--</div><div class="stat-label">待支付</div></div>
+                    <div class="stat-card"><div class="stat-value" id="anyway-stat-amount">--</div><div class="stat-label">总金额（美元）</div></div>
+                    <div class="stat-card"><div class="stat-value" id="anyway-stat-paid-amount">--</div><div class="stat-label">已到账（美元）</div></div>
+                </div>
+            </div>
+            <div class="section">
+                <h3>Anyway 打赏订单</h3>
+                <div style="margin-bottom:0.75rem;">
+                    <button class="btn" onclick="loadAnywayTipRecords('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:0.5rem;">待支付</button>
+                    <button class="btn" onclick="loadAnywayTipRecords('paid')" style="background:#f6ffed;color:#389e0d;border:1px solid #b7eb8f;margin-right:0.5rem;">已支付</button>
+                    <button class="btn" onclick="loadAnywayTipRecords('failed')" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;margin-right:0.5rem;">已失败</button>
+                    <button class="btn" onclick="loadAnywayTipRecords()" style="background:#f5f5f5;color:#666;border:1px solid #d9d9d9;">全部</button>
+                </div>
+                <table class="table">
+                    <thead><tr><th>记录ID</th><th>作者ID</th><th>付款人</th><th>金额</th><th>手续费</th><th>净得</th><th>状态</th><th>创建时间</th></tr></thead>
+                    <tbody id="anyway-orders-list"><tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -457,6 +484,39 @@
             }
         }
 
+        async function loadAnywayTipRecords(status) {
+            const tbody = document.getElementById('anyway-orders-list');
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr>';
+            try {
+                const url = status ? `/admin/tip-records?status=${status}` : '/admin/tip-records';
+                const res = await apiFetch(url);
+                const data = await res.json();
+                const items = data.orders || [];
+                const stats = data.stats || {};
+
+                document.getElementById('anyway-stat-total').textContent = stats.total_count ?? '--';
+                document.getElementById('anyway-stat-paid').textContent = stats.paid_count ?? '--';
+                document.getElementById('anyway-stat-pending').textContent = stats.pending_count ?? '--';
+                document.getElementById('anyway-stat-amount').textContent = formatUsd(stats.total_cents);
+                document.getElementById('anyway-stat-paid-amount').textContent = formatUsd(stats.paid_cents);
+
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                const statusMap = { pending: '⏳ 待支付', paid: '✅ 已到账', failed: '❌ 已失败' };
+                items.forEach(r => {
+                    const tr = document.createElement('tr');
+                    const date = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN') : '--';
+                    tr.innerHTML = `<td style="font-size:12px;word-break:break-all;">${escapeHtml(r.tip_id)}</td><td>${escapeHtml(r.author_id)}</td><td>${escapeHtml(r.payer_user_id || '--')}</td><td>${formatUsd(r.amount_cents)}</td><td>${formatUsd(r.fee_cents)}</td><td>${formatUsd(r.net_amount_cents)}</td><td>${statusMap[r.status] || r.status}</td><td style="font-size:12px;color:#999;">${date}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
         function formatCryptoAdminAmount(units, currency) {
             if (units == null) return '--';
             if (currency === 'ETH') return parseFloat((units / 1e18).toFixed(6)) + ' ETH';
@@ -511,6 +571,7 @@
         loadVerifications('pending');
         loadKnowledgeShareUsers();
         loadWithdrawals('pending');
+        loadAnywayTipRecords('pending');
         loadCryptoTipOrders('pending');
     </script>
 </body>

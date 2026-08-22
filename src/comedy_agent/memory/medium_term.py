@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, func, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -1637,6 +1637,31 @@ class SQLMemoryStore(MemoryStore):
                 )
                 for r in rows
             ]
+
+    def get_tip_stats(self) -> dict[str, int]:
+        """获取 Anyway 打赏全局统计。"""
+        with self._new_session() as session:
+            total = session.query(TipRecord).count()
+            paid_count = session.query(TipRecord).filter_by(status="paid").count()
+            pending_count = session.query(TipRecord).filter_by(status="pending").count()
+            total_cents = (
+                session.query(func.coalesce(func.sum(TipRecord.amount_cents), 0))
+                .scalar()
+                or 0
+            )
+            paid_cents = (
+                session.query(func.coalesce(func.sum(TipRecord.amount_cents), 0))
+                .filter_by(status="paid")
+                .scalar()
+                or 0
+            )
+            return {
+                "total_count": total,
+                "paid_count": paid_count,
+                "pending_count": pending_count,
+                "total_cents": int(total_cents),
+                "paid_cents": int(paid_cents),
+            }
 
     def create_withdrawal_request(self, request: WithdrawalRequestData) -> WithdrawalRequestData:
         request_id = request.request_id or uuid.uuid4().hex[:16]

@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
+from comedy_agent.services.anyway_client import AnywayClient
+from comedy_agent.api.routers.anyway_webhook import (
+    _handle_order_failed,
+    _handle_order_paid,
+    normalize_anyway_order,
+)
 from datetime import datetime
 
 from comedy_agent.memory.models import BannedWordData, CryptoTipOrderData, EarningRecordData, IPStyleData, TipRecordData, WithdrawalRequestData
@@ -499,6 +505,49 @@ async def admin_list_tip_records(
         for r in records
     ]
     return TipRecordListResponse(orders=items, count=len(items), stats=stats)
+
+
+class AnywayOrderSyncRequest(BaseModel):
+    """手动同步 Anyway 订单请求。"""
+
+    order_id: str = Field(description="Anyway 订单 ID，如 ORDxxxxx")
+
+
+@router.post("/admin/anyway-orders/sync")
+async def admin_sync_anyway_order(
+    request: AnywayOrderSyncRequest,
+    _admin: str = Depends(require_admin),
+) -> dict[str, Any]:
+    """根据 Anyway 订单 ID 拉取最新状态并同步到本地打赏记录。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+
+    client = AnywayClient()
+    raw_order = await client.get_order(request.order_id)
+    if raw_order is None:
+        raise HTTPException(status_code=404, detail="在 Anyway 未找到该订单")
+
+    order = normalize_anyway_order(raw_order)
+    status = (order.get("status") or "").upper()
+
+    if status == "PAID":
+        await _handle_order_paid(order, None)
+    elif status == "FAILED":
+        await _handle_order_failed(order, None)
+    else:
+        return {
+            "order_id": request.order_id,
+            "status": status,
+            "synced": False,
+            "detail": "订单未支付成功，未触发本地状态更新",
+        }
+
+    return {
+        "order_id": request.order_id,
+        "status": status,
+        "synced": True,
+        "detail": "已同步本地打赏记录",
+    }
 
 
 # ------------------------------------------------------------------ #

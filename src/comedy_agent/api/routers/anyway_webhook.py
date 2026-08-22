@@ -27,6 +27,25 @@ router = APIRouter(tags=["anyway"])
 
 _VERIFICATION_KEYS: list[Ed25519PublicKey] = []
 
+# Anyway Merchant API 与 webhook 事件字段命名可能不同，统一映射为 webhook  handler 使用的 camelCase
+_ANYWAY_ORDER_KEY_MAPPING = {
+    "merchant_reference": "merchantReference",
+    "order_id": "orderId",
+    "id": "orderId",
+    "amount_cents": "amountCents",
+    "transaction_hash": "transactionHash",
+    "tx_hash": "transactionHash",
+}
+
+
+def normalize_anyway_order(order: dict[str, Any]) -> dict[str, Any]:
+    """将 Anyway 订单详情统一转换为 webhook handler 内部使用的 camelCase 字段。"""
+    normalized: dict[str, Any] = dict(order)
+    for source_key, target_key in _ANYWAY_ORDER_KEY_MAPPING.items():
+        if source_key in normalized and target_key not in normalized:
+            normalized[target_key] = normalized.pop(source_key)
+    return normalized
+
 
 def _decode_base64url(value: str) -> bytes:
     """Base64url 解码。"""
@@ -300,8 +319,9 @@ async def sync_tip_status(
     client = AnywayClient()
     orders = await client.list_orders(merchant_reference=record.merchant_reference)
     for order in orders:
-        if order.get("status") == "PAID":
-            await _handle_order_paid(order, None)
+        normalized = normalize_anyway_order(order)
+        if normalized.get("status", "").upper() == "PAID":
+            await _handle_order_paid(normalized, None)
             return {"tip_id": tip_id, "status": "paid"}
 
     return {"tip_id": tip_id, "status": record.status}

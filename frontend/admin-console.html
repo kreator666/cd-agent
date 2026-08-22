@@ -173,6 +173,14 @@
                 </div>
             </div>
             <div class="section">
+                <h3>手动同步 Anyway 订单</h3>
+                <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;">
+                    <input type="text" id="anyway-sync-order-id" placeholder="输入 Anyway 订单 ID，如 ORDxxxxx" style="flex:1;min-width:220px;padding:0.5rem;border:1px solid #ddd;border-radius:0.375rem;font-size:0.875rem;">
+                    <button class="btn btn-primary" onclick="syncAnywayOrder()">拉取并同步</button>
+                </div>
+                <div id="anyway-sync-result" style="font-size:0.875rem;font-weight:500;"></div>
+            </div>
+            <div class="section">
                 <h3>Anyway 打赏订单</h3>
                 <div style="margin-bottom:0.75rem;">
                     <button class="btn" onclick="loadAnywayTipRecords('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:0.5rem;">待支付</button>
@@ -514,6 +522,34 @@
                 });
             } catch (err) {
                 tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function syncAnywayOrder() {
+            const input = document.getElementById('anyway-sync-order-id');
+            const resultDiv = document.getElementById('anyway-sync-result');
+            const orderId = input.value.trim();
+            if (!orderId) {
+                resultDiv.textContent = '请输入 Anyway 订单 ID';
+                resultDiv.style.color = '#d48806';
+                return;
+            }
+            resultDiv.textContent = '同步中...';
+            resultDiv.style.color = '#666';
+            try {
+                const res = await apiFetch('/admin/anyway-orders/sync', {
+                    method: 'POST',
+                    body: JSON.stringify({ order_id: orderId }),
+                });
+                const data = await res.json();
+                resultDiv.textContent = `同步结果：${data.status}，${data.detail || ''}`;
+                resultDiv.style.color = data.synced ? '#18a058' : '#d48806';
+                input.value = '';
+                loadAnywayTipRecords('pending');
+                loadAnywayTipRecords('paid');
+            } catch (err) {
+                resultDiv.textContent = '同步失败：' + err.message;
+                resultDiv.style.color = '#cf1322';
             }
         }
 

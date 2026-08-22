@@ -26,10 +26,16 @@ _WALLET_BINDING_TYPES = {
     ],
 }
 
-_WALLET_BINDING_DOMAIN = {
+_CHAIN_ID_MAP = {
+    "base": 8453,        # Base 主网
+    "ethereum": 1,       # 以太坊主网
+}
+
+
+_WALLET_BINDING_DOMAIN_TEMPLATE = {
     "name": "ComedyAgent",
     "version": "1",
-    "chainId": 8453,  # Base 主网
+    "chainId": 8453,  # 默认 Base 主网，build_wallet_sign_message 会按 chain 覆盖
     "verifyingContract": "0x0000000000000000000000000000000000000000",
 }
 
@@ -39,20 +45,25 @@ def validate_ethereum_address(address: str) -> bool:
     return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", address))
 
 
-def build_wallet_sign_message(address: str, content: str, nonce: str) -> dict[str, object]:
+def build_wallet_sign_message(
+    address: str, content: str, nonce: str, chain: str = "base"
+) -> dict[str, object]:
     """构造钱包绑定 EIP-712 签名消息。
 
     Args:
         address: 要绑定的钱包地址。
         content: 展示给用户的签名提示内容。
         nonce: 一次性随机串或用户 ID，用于防止签名重放。
+        chain: 链标识：base / ethereum。
 
     Returns:
         可直接交给钱包 signTypedData 的完整 EIP-712 消息结构。
     """
+    chain_id = _CHAIN_ID_MAP.get(chain.lower(), _CHAIN_ID_MAP["base"])
+    domain = {**_WALLET_BINDING_DOMAIN_TEMPLATE, "chainId": chain_id}
     return {
         "types": _WALLET_BINDING_TYPES,
-        "domain": _WALLET_BINDING_DOMAIN,
+        "domain": domain,
         "primaryType": "WalletBinding",
         "message": {
             "address": to_checksum_address(address),
@@ -70,7 +81,9 @@ def get_wallet_sign_content(address: str) -> str:
     )
 
 
-def verify_wallet_signature(address: str, content: str, nonce: str, signature: str) -> bool:
+def verify_wallet_signature(
+    address: str, content: str, nonce: str, signature: str, chain: str = "base"
+) -> bool:
     """验证 EIP-712 签名是否由指定地址产生。
 
     Args:
@@ -78,6 +91,7 @@ def verify_wallet_signature(address: str, content: str, nonce: str, signature: s
         content: 签名消息中的 content 字段。
         nonce: 签名消息中的 nonce 字段。
         signature: 0x 开头的签名 hex。
+        chain: 链标识：base / ethereum。
 
     Returns:
         签名合法且签名者等于 address 时返回 True。
@@ -85,7 +99,7 @@ def verify_wallet_signature(address: str, content: str, nonce: str, signature: s
     if not validate_ethereum_address(address):
         return False
     try:
-        full_message = build_wallet_sign_message(address, content, nonce)
+        full_message = build_wallet_sign_message(address, content, nonce, chain=chain)
         signable = encode_typed_data(full_message=full_message)
         recovered = Account.recover_message(signable, signature=signature)
         return to_checksum_address(recovered) == to_checksum_address(address)

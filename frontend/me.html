@@ -946,19 +946,26 @@
             btn.textContent = '请求连接钱包...';
             resultDiv.textContent = '';
 
-            // 1. 直接连接钱包获取地址
+            // 1. 直接连接钱包获取地址与当前网络
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
             const address = accounts[0];
             if (!validateWalletAddress(address)) {
                 throw new Error('钱包返回的地址格式不正确');
             }
 
-            document.getElementById('wallet-connect-preview').style.display = 'block';
-            document.getElementById('wallet-connect-address').textContent = address;
+            const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+            const chainId = parseInt(chainIdHex, 16);
+            const chainLabel = chainId === 1 ? 'ethereum' : chainId === 8453 ? 'base' : null;
+            if (!chainLabel) {
+                throw new Error('当前钱包网络不支持，请切换到 Ethereum 主网（1）或 Base 主网（8453）');
+            }
 
-            // 2. 从后端获取 EIP-712 签名消息
+            document.getElementById('wallet-connect-preview').style.display = 'block';
+            document.getElementById('wallet-connect-address').textContent = `${address} (${chainLabel}, chainId ${chainId})`;
+
+            // 2. 从后端获取与当前网络匹配的 EIP-712 签名消息
             btn.textContent = '请求签名消息...';
-            const signRes = await apiFetch(`/me/wallet-address/sign-message?address=${encodeURIComponent(address)}`);
+            const signRes = await apiFetch(`/me/wallet-address/sign-message?address=${encodeURIComponent(address)}&chain=${chainLabel}`);
             const signData = await signRes.json();
 
             // 3. 展示签名提示
@@ -979,7 +986,7 @@
                     address: address,
                     signature: signature,
                     nonce: signData.nonce,
-                    chain: 'base'
+                    chain: chainLabel
                 }),
             });
 

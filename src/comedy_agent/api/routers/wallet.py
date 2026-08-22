@@ -420,6 +420,7 @@ async def get_wallet_address(
 @router.get("/me/wallet-address/sign-message", response_model=WalletSignMessageResponse)
 async def get_wallet_sign_message_endpoint(
     address: str,
+    chain: str = "base",
     user_id: str = Depends(get_current_user),
 ) -> WalletSignMessageResponse:
     """为指定地址生成 EIP-712 签名消息。
@@ -428,9 +429,11 @@ async def get_wallet_sign_message_endpoint(
     """
     if not validate_ethereum_address(address):
         raise HTTPException(status_code=400, detail="钱包地址格式不正确")
+    if chain not in {"base", "ethereum"}:
+        raise HTTPException(status_code=400, detail="不支持的链")
     content = get_wallet_sign_content(address)
     nonce = uuid.uuid4().hex[:16]
-    typed_data = build_wallet_sign_message(address, content, nonce)
+    typed_data = build_wallet_sign_message(address, content, nonce, chain=chain)
     return WalletSignMessageResponse(
         address=address,
         content=content,
@@ -455,7 +458,9 @@ async def bind_wallet_address(
         raise HTTPException(status_code=400, detail="不支持的链")
 
     content = get_wallet_sign_content(request.address)
-    if not verify_wallet_signature(request.address, content, request.nonce, request.signature):
+    if not verify_wallet_signature(
+        request.address, content, request.nonce, request.signature, chain=request.chain
+    ):
         raise HTTPException(status_code=400, detail="签名验证失败，请使用对应地址签名")
 
     user = state.memory.update_user_profile(

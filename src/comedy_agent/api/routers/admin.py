@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user
-from comedy_agent.memory.models import BannedWordData, IPStyleData
+from datetime import datetime
+
+from comedy_agent.memory.models import BannedWordData, EarningRecordData, IPStyleData, WithdrawalRequestData
 
 router = APIRouter(tags=["admin"])
 
@@ -279,4 +281,158 @@ async def admin_set_knowledge_share(
     return KnowledgeShareResponse(
         user_id=user_id,
         knowledge_shared=updated.knowledge_shared,
+    )
+
+
+# ------------------------------------------------------------------ #
+# 打赏提现审核
+# ------------------------------------------------------------------ #
+class WithdrawalAdminItem(BaseModel):
+    """管理员视角提现申请项。"""
+
+    request_id: str = Field(description="申请 ID")
+    user_id: str = Field(description="申请人 ID")
+    amount_cents: int = Field(description="提现金额（美分）")
+    currency: str = Field(description="币种")
+    status: str = Field(description="申请状态")
+    payout_method: str | None = Field(default=None, description="收款方式")
+    payout_account: str | None = Field(default=None, description="收款账号")
+    created_at: str | None = Field(default=None, description="申请时间")
+    processed_at: str | None = Field(default=None, description="处理时间")
+
+
+class WithdrawalListResponse(BaseModel):
+    """提现申请列表响应。"""
+
+    requests: list[WithdrawalAdminItem] = Field(description="申请列表")
+    count: int = Field(description="总数")
+
+
+@router.get("/admin/withdrawals", response_model=WithdrawalListResponse)
+async def admin_list_withdrawals(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    _admin: str = Depends(require_admin),
+) -> WithdrawalListResponse:
+    """获取提现申请列表（支持按状态过滤）。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    records = state.memory.list_withdrawal_requests(status=status, limit=limit, offset=offset)
+    items = [
+        WithdrawalAdminItem(
+            request_id=r.request_id,
+            user_id=r.user_id,
+            amount_cents=r.amount_cents,
+            currency=r.currency,
+            status=r.status,
+            payout_method=r.payout_method,
+            payout_account=r.payout_account,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+            processed_at=r.processed_at.isoformat() if r.processed_at else None,
+        )
+        for r in records
+    ]
+    return WithdrawalListResponse(requests=items, count=len(items))
+
+
+@router.post("/admin/withdrawals/{request_id}/approve", response_model=WithdrawalAdminItem)
+async def admin_approve_withdrawal(
+    request_id: str,
+    _admin: str = Depends(require_admin),
+) -> WithdrawalAdminItem:
+    """通过提现申请。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    record = state.memory.get_withdrawal_request(request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="提现申请不存在")
+    if record.status != "pending":
+        raise HTTPException(status_code=400, detail="仅待审核申请可通过")
+    updated = state.memory.update_withdrawal_request_status(
+        request_id, status="approved", processed_at=datetime.utcnow()
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="更新失败")
+    return WithdrawalAdminItem(
+        request_id=updated.request_id,
+        user_id=updated.user_id,
+        amount_cents=updated.amount_cents,
+        currency=updated.currency,
+        status=updated.status,
+        payout_method=updated.payout_method,
+        payout_account=updated.payout_account,
+        created_at=updated.created_at.isoformat() if updated.created_at else None,
+        processed_at=updated.processed_at.isoformat() if updated.processed_at else None,
+    )
+
+
+@router.post("/admin/withdrawals/{request_id}/reject", response_model=WithdrawalAdminItem)
+async def admin_reject_withdrawal(
+    request_id: str,
+    _admin: str = Depends(require_admin),
+) -> WithdrawalAdminItem:
+    """拒绝提现申请，退回已冻结金额。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    record = state.memory.get_withdrawal_request(request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="提现申请不存在")
+    if record.status != "pending":
+        raise HTTPException(status_code=400, detail="仅待审核申请可拒绝")
+    updated = state.memory.update_withdrawal_request_status(
+        request_id, status="rejected", processed_at=datetime.utcnow()
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="更新失败")
+    # 拒绝后退回冻结金额
+    state.memory.save_earning(
+        EarningRecordData(
+            user_id=updated.user_id,
+            record_type="withdrawal_refund",
+            amount=updated.amount_cents,
+            description=f"提现申请拒绝退回 {updated.request_id}",
+        )
+    )
+    return WithdrawalAdminItem(
+        request_id=updated.request_id,
+        user_id=updated.user_id,
+        amount_cents=updated.amount_cents,
+        currency=updated.currency,
+        status=updated.status,
+        payout_method=updated.payout_method,
+        payout_account=updated.payout_account,
+        created_at=updated.created_at.isoformat() if updated.created_at else None,
+        processed_at=updated.processed_at.isoformat() if updated.processed_at else None,
+    )
+
+
+@router.post("/admin/withdrawals/{request_id}/paid", response_model=WithdrawalAdminItem)
+async def admin_mark_withdrawal_paid(
+    request_id: str,
+    _admin: str = Depends(require_admin),
+) -> WithdrawalAdminItem:
+    """标记提现申请已打款。"""
+    if state.memory is None:
+        raise HTTPException(status_code=503, detail="记忆系统未就绪")
+    record = state.memory.get_withdrawal_request(request_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="提现申请不存在")
+    if record.status != "approved":
+        raise HTTPException(status_code=400, detail="仅已通过申请可标记为已打款")
+    updated = state.memory.update_withdrawal_request_status(
+        request_id, status="paid", processed_at=datetime.utcnow()
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="更新失败")
+    return WithdrawalAdminItem(
+        request_id=updated.request_id,
+        user_id=updated.user_id,
+        amount_cents=updated.amount_cents,
+        currency=updated.currency,
+        status=updated.status,
+        payout_method=updated.payout_method,
+        payout_account=updated.payout_account,
+        created_at=updated.created_at.isoformat() if updated.created_at else None,
+        processed_at=updated.processed_at.isoformat() if updated.processed_at else None,
     )

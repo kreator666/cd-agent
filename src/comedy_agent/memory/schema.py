@@ -634,6 +634,95 @@ class TokenConsumptionRecord(Base):
 
 
 # ------------------------------------------------------------------ #
+# TipRecord —— Anyway 打赏记录
+# ------------------------------------------------------------------ #
+class TipRecord(Base):
+    """Anyway 打赏记录表。"""
+
+    __tablename__ = "tip_records"
+
+    tip_id: Mapped[str] = mapped_column(
+        String(32), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    author_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="被打赏作者 ID"
+    )
+    result_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="广场段子 result_id"
+    )
+    payer_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="打赏用户 ID"
+    )
+    amount_cents: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="读者输入金额（美分）"
+    )
+    currency: Mapped[str] = mapped_column(
+        String(8), default="usd", nullable=False, comment="币种"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / paid / failed / refunded"
+    )
+    anyway_order_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True, comment="Anyway 订单 ID"
+    )
+    merchant_reference: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, comment="关联用的 merchant reference"
+    )
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="扩展元数据"
+    )
+    fee_cents: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="手续费（美分）"
+    )
+    net_amount_cents: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="作者净得（美分）"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="支付成功时间"
+    )
+
+
+# ------------------------------------------------------------------ #
+# WithdrawalRequest —— 作者提现申请
+# ------------------------------------------------------------------ #
+class WithdrawalRequest(Base):
+    """作者提现申请表。"""
+
+    __tablename__ = "withdrawal_requests"
+
+    request_id: Mapped[str] = mapped_column(
+        String(32), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False, comment="申请人 ID"
+    )
+    amount_cents: Mapped[int] = mapped_column(
+        Integer, nullable=False, comment="提现金额（美分）"
+    )
+    currency: Mapped[str] = mapped_column(
+        String(8), default="usd", nullable=False, comment="币种"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / approved / rejected / paid"
+    )
+    payout_method: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="wechat / alipay / bank"
+    )
+    payout_account: Mapped[str | None] = mapped_column(
+        String(256), nullable=True, comment="收款账号"
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="处理时间"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+# ------------------------------------------------------------------ #
 # BannedWord —— 敏感词
 # ------------------------------------------------------------------ #
 class FeedbackEvent(Base):

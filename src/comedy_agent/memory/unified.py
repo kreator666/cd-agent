@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 from comedy_agent.memory.medium_term import SQLMemoryStore
@@ -25,10 +26,12 @@ from comedy_agent.memory.models import (
     SaltHistoryData,
     ScriptData,
     SubmissionData,
+    TipRecordData,
     TokenAccountData,
     TokenConsumptionData,
     UserContext,
     UserProfileData,
+    WithdrawalRequestData,
 )
 from comedy_agent.memory.store import MemoryStore
 
@@ -356,6 +359,64 @@ class UnifiedMemory(MemoryStore):
         return self._store.list_earnings(user_id, actor_name)
 
     # ------------------------------------------------------------------ #
+    # 打赏记录
+    # ------------------------------------------------------------------ #
+    def create_tip_record(self, record: TipRecordData) -> TipRecordData:
+        return self._store.create_tip_record(record)
+
+    def get_tip_record(self, tip_id: str) -> TipRecordData | None:
+        return self._store.get_tip_record(tip_id)
+
+    def get_tip_record_by_merchant_reference(self, merchant_reference: str) -> TipRecordData | None:
+        return self._store.get_tip_record_by_merchant_reference(merchant_reference)
+
+    def update_tip_record_status(
+        self,
+        tip_id: str,
+        status: str,
+        anyway_order_id: str | None = None,
+        fee_cents: int | None = None,
+        net_amount_cents: int | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> TipRecordData | None:
+        return self._store.update_tip_record_status(
+            tip_id, status, anyway_order_id, fee_cents, net_amount_cents, metadata_json
+        )
+
+    def list_tip_records(
+        self,
+        author_id: str | None = None,
+        result_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[TipRecordData]:
+        return self._store.list_tip_records(author_id, result_id, status, limit, offset)
+
+    def create_withdrawal_request(self, request: WithdrawalRequestData) -> WithdrawalRequestData:
+        return self._store.create_withdrawal_request(request)
+
+    def get_withdrawal_request(self, request_id: str) -> WithdrawalRequestData | None:
+        return self._store.get_withdrawal_request(request_id)
+
+    def update_withdrawal_request_status(
+        self, request_id: str, status: str, processed_at: datetime | None = None
+    ) -> WithdrawalRequestData | None:
+        return self._store.update_withdrawal_request_status(request_id, status, processed_at)
+
+    def list_withdrawal_requests(
+        self,
+        user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[WithdrawalRequestData]:
+        return self._store.list_withdrawal_requests(user_id, status, limit, offset)
+
+    def get_author_earnings(self, user_id: str) -> dict[str, Any]:
+        return self._store.get_author_earnings(user_id)
+
+    # ------------------------------------------------------------------ #
     # 敏感词
     # ------------------------------------------------------------------ #
     def save_banned_word(self, word: BannedWordData) -> BannedWordData:
@@ -366,6 +427,12 @@ class UnifiedMemory(MemoryStore):
 
     def delete_banned_word(self, word_id: int) -> bool:
         return self._store.delete_banned_word(word_id)
+
+    # ------------------------------------------------------------------ #
+    # 广场段子
+    # ------------------------------------------------------------------ #
+    def get_eval_result(self, result_id: str) -> Any | None:
+        return self._store.get_eval_result(result_id)
 
     # ------------------------------------------------------------------ #
     # 统计

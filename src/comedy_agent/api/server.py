@@ -25,6 +25,7 @@ from comedy_agent.api.middleware import RateLimitMiddleware
 from comedy_agent.api.state import state
 from comedy_agent.api.routers.admin import require_admin, router as admin_router
 from comedy_agent.api.routers.annotations import router as annotations_router
+from comedy_agent.api.routers.anyway_webhook import router as anyway_webhook_router
 from comedy_agent.api.routers.eval import router as eval_router
 from comedy_agent.api.routers.export import router as export_router
 from comedy_agent.api.routers.ip_styles import router as ip_styles_router
@@ -35,6 +36,7 @@ from comedy_agent.api.routers.publish import router as publish_router
 from comedy_agent.api.routers.salt import router as salt_router
 from comedy_agent.api.routers.speed import router as speed_router
 from comedy_agent.api.routers.submissions import router as submissions_router
+from comedy_agent.api.routers.tips import router as tips_router
 from comedy_agent.api.routers.users import router as users_router
 from comedy_agent.api.routers.wallet import router as wallet_router
 from comedy_agent.auth import get_current_user, router as auth_router
@@ -384,6 +386,8 @@ app.include_router(admin_router)
 app.include_router(export_router)
 app.include_router(eval_router)
 app.include_router(publish_router)
+app.include_router(tips_router)
+app.include_router(anyway_webhook_router)
 
 # 禁止浏览器缓存前端静态资源，避免部署新版后页面仍显示旧版本
 @app.middleware("http")

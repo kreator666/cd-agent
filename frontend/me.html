@@ -259,6 +259,55 @@
         <button class="btn" onclick="saveTippingConfig()">保存打赏设置</button>
         <div id="tipping-save-result" style="margin-top:.5rem;font-size:.875rem;font-weight:600;"></div>
       </div>
+
+      <div class="page-title" style="margin-top:1.5rem;">💵 我的打赏收益</div>
+      <div class="card" style="max-width:900px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:1rem;">
+          <div style="background:#f6ffed;border:1px solid #b7eb8f;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#389e0d;font-weight:650;">累计收益</div>
+            <div style="font-size:20px;font-weight:780;color:#232323;" id="earnings-total">--</div>
+          </div>
+          <div style="background:#e6fffb;border:1px solid #87e8de;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#08979c;font-weight:650;">已提现</div>
+            <div style="font-size:20px;font-weight:780;color:#232323;" id="earnings-withdrawn">--</div>
+          </div>
+          <div style="background:#fff2ed;border:1px solid #ffd8c4;border-radius:10px;padding:14px;">
+            <div style="font-size:12px;color:#d46b08;font-weight:650;">可提现</div>
+            <div style="font-size:20px;font-weight:780;color:#232323;" id="earnings-pending">--</div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <label>发起提现</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">
+            <input type="number" id="withdraw-amount" step="0.01" min="0.01" placeholder="金额（USD）" style="width:140px;">
+            <select id="withdraw-method" style="width:130px;">
+              <option value="wechat">微信</option>
+              <option value="alipay">支付宝</option>
+              <option value="bank">银行卡</option>
+            </select>
+            <input type="text" id="withdraw-account" placeholder="收款账号" style="flex:1;min-width:180px;">
+            <button class="btn" onclick="createWithdrawal()">申请提现</button>
+          </div>
+          <div id="withdraw-result" style="margin-top:.5rem;font-size:.875rem;font-weight:600;"></div>
+        </div>
+
+        <div style="margin-top:1.5rem;">
+          <div style="font-size:.875rem;color:#666;margin-bottom:.5rem;font-weight:650;">打赏记录</div>
+          <table>
+            <thead><tr><th>时间</th><th>金额</th><th>手续费</th><th>净得</th><th>状态</th></tr></thead>
+            <tbody id="tip-history-list"><tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:1.5rem;">
+          <div style="font-size:.875rem;color:#666;margin-bottom:.5rem;font-weight:650;">提现记录</div>
+          <table>
+            <thead><tr><th>时间</th><th>金额</th><th>方式</th><th>账号</th><th>状态</th></tr></thead>
+            <tbody id="withdraw-history-list"><tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -523,6 +572,7 @@
         await loadModels();
         await loadModelConfig();
         await loadTippingConfig();
+        await loadTipsEarnings();
     })();
     loadTokenBalance();
 
@@ -663,6 +713,97 @@
             loadWorkflow();
         } catch (err) {
             alert('保存失败：' + err.message);
+        }
+    }
+
+    function formatUsd(cents) {
+        if (cents == null) return '--';
+        return '$' + (cents / 100).toFixed(2);
+    }
+
+    async function loadTipsEarnings() {
+        try {
+            const res = await apiFetch('/tips/earnings');
+            const data = await res.json();
+            document.getElementById('earnings-total').textContent = formatUsd(data.total_cents);
+            document.getElementById('earnings-withdrawn').textContent = formatUsd(data.withdrawn_cents);
+            document.getElementById('earnings-pending').textContent = formatUsd(data.pending_cents);
+        } catch (err) {
+            console.error('加载收益失败', err);
+        }
+        loadTipHistory();
+        loadWithdrawHistory();
+    }
+
+    async function loadTipHistory() {
+        const tbody = document.getElementById('tip-history-list');
+        try {
+            const res = await apiFetch('/tips/history');
+            const items = await res.json();
+            if (!items || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(t => {
+                const statusMap = { pending: '⏳ 待支付', paid: '✅ 已到账', failed: '❌ 失败', refunded: '↩️ 已退款' };
+                const date = t.created_at ? new Date(t.created_at).toLocaleString('zh-CN') : '--';
+                return `<tr><td style="font-size:12px;color:#999;">${date}</td><td>${formatUsd(t.amount_cents)}</td><td>${formatUsd(t.fee_cents)}</td><td>${formatUsd(t.net_amount_cents)}</td><td>${statusMap[t.status] || t.status}</td></tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;">加载失败</td></tr>`;
+        }
+    }
+
+    async function loadWithdrawHistory() {
+        const tbody = document.getElementById('withdraw-history-list');
+        try {
+            const res = await apiFetch('/tips/withdrawals');
+            const items = await res.json();
+            if (!items || items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                return;
+            }
+            tbody.innerHTML = items.map(w => {
+                const statusMap = { pending: '⏳ 待审核', approved: '✅ 已通过', rejected: '❌ 已拒绝', paid: '💰 已打款' };
+                const date = w.created_at ? new Date(w.created_at).toLocaleString('zh-CN') : '--';
+                const methodMap = { wechat: '微信', alipay: '支付宝', bank: '银行卡' };
+                return `<tr><td style="font-size:12px;color:#999;">${date}</td><td>${formatUsd(w.amount_cents)}</td><td>${methodMap[w.payout_method] || w.payout_method || '--'}</td><td>${escapeHtml(w.payout_account || '--')}</td><td>${statusMap[w.status] || w.status}</td></tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;">加载失败</td></tr>`;
+        }
+    }
+
+    async function createWithdrawal() {
+        const resultDiv = document.getElementById('withdraw-result');
+        const amountInput = document.getElementById('withdraw-amount');
+        const method = document.getElementById('withdraw-method').value;
+        const account = document.getElementById('withdraw-account').value.trim();
+        const dollars = parseFloat(amountInput.value);
+        if (Number.isNaN(dollars) || dollars <= 0) {
+            resultDiv.textContent = '请输入有效的提现金额';
+            resultDiv.style.color = '#ff4a4a';
+            return;
+        }
+        if (!account) {
+            resultDiv.textContent = '请输入收款账号';
+            resultDiv.style.color = '#ff4a4a';
+            return;
+        }
+        const amountCents = Math.round(dollars * 100);
+        try {
+            await apiFetch('/tips/withdrawals', {
+                method: 'POST',
+                body: JSON.stringify({ amount_cents: amountCents, payout_method: method, payout_account: account }),
+            });
+            resultDiv.textContent = '提现申请已提交，等待平台审核';
+            resultDiv.style.color = '#18a058';
+            amountInput.value = '';
+            document.getElementById('withdraw-account').value = '';
+            loadTipsEarnings();
+        } catch (err) {
+            resultDiv.textContent = '提交失败：' + err.message;
+            resultDiv.style.color = '#ff4a4a';
         }
     }
 </script>

@@ -347,21 +347,24 @@ function renderDetail(detail, comments) {
   const avg = detail.average_score != null ? detail.average_score : '暂无';
   const hasQr = !!detail.author_wechat_pay_qr_url;
   const hasUsdt = !!detail.author_usdt_address;
+  const hasAnyway = true;
   const tippingCopy = detail.author_tipping_copy || '觉得这段子好笑？支持一下原创段子 ☕';
 
   let tippingHtml = '';
-  if (hasQr || hasUsdt) {
-    const wechatTab = hasQr ? `<button class="tipping-tab active" data-tab="wechat" onclick="switchTipTab('wechat')">微信打赏</button>` : '';
-    const usdtTab = hasUsdt ? `<button class="tipping-tab${hasQr ? '' : ' active'}" data-tab="usdt" onclick="switchTipTab('usdt')">USDT 打赏</button>` : '';
+  const activeTab = hasQr ? 'wechat' : (hasUsdt ? 'usdt' : 'anyway');
+  if (hasQr || hasUsdt || hasAnyway) {
+    const wechatTab = hasQr ? `<button class="tipping-tab${activeTab === 'wechat' ? ' active' : ''}" data-tab="wechat" onclick="switchTipTab('wechat')">微信打赏</button>` : '';
+    const usdtTab = hasUsdt ? `<button class="tipping-tab${activeTab === 'usdt' ? ' active' : ''}" data-tab="usdt" onclick="switchTipTab('usdt')">USDT 打赏</button>` : '';
+    const anywayTab = `<button class="tipping-tab${activeTab === 'anyway' ? ' active' : ''}" data-tab="anyway" onclick="switchTipTab('anyway')">Anyway 打赏</button>`;
     const wechatPanel = hasQr ? `
-      <div class="tipping-panel" data-panel="wechat" style="${hasUsdt ? '' : 'display:block;'}">
+      <div class="tipping-panel" data-panel="wechat" style="${activeTab === 'wechat' ? 'display:block;' : 'display:none;'}">
         <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
         <img class="tipping-qr" src="${escapeHtml(detail.author_wechat_pay_qr_url)}" alt="微信收款二维码">
         <div class="tipping-hint">打开微信扫一扫，支持原创段子</div>
       </div>
     ` : '';
     const usdtPanel = hasUsdt ? `
-      <div class="tipping-panel" data-panel="usdt" style="${hasQr ? 'display:none;' : 'display:block;'}">
+      <div class="tipping-panel" data-panel="usdt" style="${activeTab === 'usdt' ? 'display:block;' : 'display:none;'}">
         <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
         <img class="tipping-qr" src="/tipping/usdt-qr/${encodeURIComponent(detail.author_id)}" alt="USDT 收款二维码">
         <div class="tipping-address">
@@ -371,11 +374,22 @@ function renderDetail(detail, comments) {
         <div class="tipping-hint">打开钱包扫一扫，或复制地址转账（ERC-20 USDT）</div>
       </div>
     ` : '';
+    const anywayPanel = `
+      <div class="tipping-panel" data-panel="anyway" style="${activeTab === 'anyway' ? 'display:block;' : 'display:none;'}">
+        <div class="tipping-copy">${escapeHtml(tippingCopy)}</div>
+        <div class="tipping-address" style="justify-content:center;flex-wrap:wrap;gap:8px;">
+          <span style="font-size:13px;color:#666;font-weight:650;">打赏金额（USD）</span>
+          <input id="anyway-tip-amount" type="number" step="0.01" min="0.01" placeholder="如 1.00" style="width:100px;padding:8px 10px;border:1px solid var(--line-dark);border-radius:8px;font-size:14px;font-weight:700;">
+          <button class="copy-address-btn" onclick="createAnywayTip('${detail.result_id}')" style="padding:8px 16px;">立即支付</button>
+        </div>
+        <div class="tipping-hint">支持信用卡 / 借记卡 / 稳定币，平台代收后结算给作者</div>
+      </div>
+    `;
     tippingHtml = `
       <div class="tipping-section">
         <div class="tipping-title">💰 打赏作者</div>
-        <div class="tipping-tabs">${wechatTab}${usdtTab}</div>
-        ${wechatPanel}${usdtPanel}
+        <div class="tipping-tabs">${wechatTab}${usdtTab}${anywayTab}</div>
+        ${wechatPanel}${usdtPanel}${anywayPanel}
       </div>
     `;
   }
@@ -479,6 +493,30 @@ async function copyUsdtAddress(btn) {
     setTimeout(() => btn.textContent = old, 1500);
   } catch {
     alert('复制失败');
+  }
+}
+
+async function createAnywayTip(resultId) {
+  const input = document.getElementById('anyway-tip-amount');
+  const dollars = parseFloat(input.value);
+  if (Number.isNaN(dollars) || dollars <= 0) {
+    alert('请输入有效的打赏金额');
+    return;
+  }
+  const amountCents = Math.round(dollars * 100);
+  try {
+    const res = await apiFetch('/tips/intent', {
+      method: 'POST',
+      body: JSON.stringify({ result_id: resultId, amount_cents: amountCents, currency: 'usd' }),
+    });
+    const data = await res.json();
+    if (data.payment_url) {
+      window.open(data.payment_url, '_blank');
+    } else {
+      alert('创建支付链接失败，请稍后重试');
+    }
+  } catch (err) {
+    alert('打赏创建失败：' + err.message);
   }
 }
 

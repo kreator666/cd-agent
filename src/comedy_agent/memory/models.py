@@ -267,6 +267,42 @@ class TokenConsumptionData(BaseModel):
 
 
 # ------------------------------------------------------------------ #
+# 打赏与提现
+# ------------------------------------------------------------------ #
+class TipRecordData(BaseModel):
+    """打赏记录数据。"""
+
+    tip_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    author_id: str = Field(description="被打赏作者 ID")
+    result_id: str = Field(description="广场段子 result_id")
+    payer_user_id: str | None = Field(default=None, description="打赏用户 ID")
+    amount_cents: int = Field(description="读者输入金额（美分）")
+    currency: str = Field(default="usd", description="币种")
+    status: str = Field(default="pending", description="pending / paid / failed / refunded")
+    anyway_order_id: str | None = Field(default=None, description="Anyway 订单 ID")
+    merchant_reference: str = Field(description="关联用的 merchant reference")
+    metadata_json: dict[str, Any] | None = Field(default=None, description="扩展元数据")
+    fee_cents: int = Field(default=0, description="手续费（美分）")
+    net_amount_cents: int = Field(default=0, description="作者净得（美分）")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+    paid_at: datetime | None = Field(default=None, description="支付成功时间")
+
+
+class WithdrawalRequestData(BaseModel):
+    """提现申请数据。"""
+
+    request_id: str | None = Field(default=None, description="记录唯一标识，留空则自动生成")
+    user_id: str = Field(description="申请人 ID")
+    amount_cents: int = Field(description="提现金额（美分）")
+    currency: str = Field(default="usd", description="币种")
+    status: str = Field(default="pending", description="pending / approved / rejected / paid")
+    payout_method: str | None = Field(default=None, description="wechat / alipay / bank")
+    payout_account: str | None = Field(default=None, description="收款账号")
+    processed_at: datetime | None = Field(default=None, description="处理时间")
+    created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
 # 敏感词
 # ------------------------------------------------------------------ #
 class FollowData(BaseModel):

@@ -80,6 +80,7 @@
             <div class="tab" onclick="switchTab('words')">敏感词</div>
             <div class="tab" onclick="switchTab('verify')">认证审核</div>
             <div class="tab" onclick="switchTab('knowledge')">知识库共享</div>
+            <div class="tab" onclick="switchTab('withdrawals')">提现审核</div>
         </div>
 
         <div class="tab-panel active" id="panel-skills">
@@ -137,6 +138,23 @@
                 <table class="table">
                     <thead><tr><th>用户ID</th><th>昵称</th><th>认证状态</th><th>共享状态</th><th>操作</th></tr></thead>
                     <tbody id="knowledge-share-list"><tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-withdrawals">
+            <div class="section">
+                <h3>作者提现审核</h3>
+                <div style="margin-bottom:0.75rem;">
+                    <button class="btn" onclick="loadWithdrawals('pending')" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;margin-right:0.5rem;">待审核</button>
+                    <button class="btn" onclick="loadWithdrawals('approved')" style="background:#e6fffb;color:#13c2c2;border:1px solid #87e8de;margin-right:0.5rem;">已通过</button>
+                    <button class="btn" onclick="loadWithdrawals('paid')" style="background:#f6ffed;color:#389e0d;border:1px solid #b7eb8f;margin-right:0.5rem;">已打款</button>
+                    <button class="btn" onclick="loadWithdrawals('rejected')" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;margin-right:0.5rem;">已拒绝</button>
+                    <button class="btn" onclick="loadWithdrawals()" style="background:#f5f5f5;color:#666;border:1px solid #d9d9d9;">全部</button>
+                </div>
+                <table class="table">
+                    <thead><tr><th>申请ID</th><th>用户ID</th><th>金额</th><th>收款方式</th><th>收款账号</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead>
+                    <tbody id="withdrawal-list"><tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr></tbody>
                 </table>
             </div>
         </div>
@@ -374,12 +392,61 @@
             }
         }
 
+        function formatUsd(cents) {
+            if (cents == null) return '--';
+            return '$' + (cents / 100).toFixed(2);
+        }
+
+        async function loadWithdrawals(status) {
+            const tbody = document.getElementById('withdrawal-list');
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">加载中...</td></tr>';
+            try {
+                const url = status ? `/admin/withdrawals?status=${status}` : '/admin/withdrawals';
+                const res = await apiFetch(url);
+                const data = await res.json();
+                const items = data.requests || [];
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                const statusMap = { pending: '⏳ 待审核', approved: '✅ 已通过', paid: '💰 已打款', rejected: '❌ 已拒绝' };
+                const methodMap = { wechat: '微信', alipay: '支付宝', bank: '银行卡' };
+                items.forEach(w => {
+                    const tr = document.createElement('tr');
+                    const date = w.created_at ? new Date(w.created_at).toLocaleString('zh-CN') : '--';
+                    let actions = '';
+                    if (w.status === 'pending') {
+                        actions = `<button class="btn btn-success" onclick="reviewWithdrawal('${w.request_id}', 'approve')" style="margin-right:0.25rem;">通过</button><button class="btn btn-danger" onclick="reviewWithdrawal('${w.request_id}', 'reject')">拒绝</button>`;
+                    } else if (w.status === 'approved') {
+                        actions = `<button class="btn btn-primary" onclick="reviewWithdrawal('${w.request_id}', 'paid')">标记已打款</button>`;
+                    }
+                    tr.innerHTML = `<td style="font-size:12px;word-break:break-all;">${escapeHtml(w.request_id)}</td><td>${escapeHtml(w.user_id)}</td><td>${formatUsd(w.amount_cents)}</td><td>${methodMap[w.payout_method] || w.payout_method || '--'}</td><td style="word-break:break-all;">${escapeHtml(w.payout_account || '--')}</td><td>${statusMap[w.status] || w.status}</td><td style="font-size:12px;color:#999;">${date}</td><td>${actions}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#999;">加载失败</td></tr>`;
+            }
+        }
+
+        async function reviewWithdrawal(requestId, action) {
+            const confirmed = action === 'paid' ? confirm(`确认已给 ${requestId} 打款？`) : true;
+            if (!confirmed) return;
+            try {
+                await apiFetch(`/admin/withdrawals/${requestId}/${action}`, { method: 'POST' });
+                loadWithdrawals('pending');
+            } catch (err) {
+                alert('操作失败: ' + err.message);
+            }
+        }
+
         loadOverview();
         loadPendingSkills();
         loadAdminIPStyles();
         loadBannedWords();
         loadVerifications('pending');
         loadKnowledgeShareUsers();
+        loadWithdrawals('pending');
     </script>
 </body>
 </html>

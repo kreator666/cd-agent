@@ -10,6 +10,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import create_engine, inspect
@@ -31,23 +32,29 @@ from comedy_agent.memory.models import (
     SaltHistoryData,
     ScriptData,
     SubmissionData,
+    TipRecordData,
     TokenAccountData,
     TokenConsumptionData,
     UserContext,
     UserProfileData,
+    WithdrawalRequestData,
 )
 from comedy_agent.memory.schema import (
     Base,
     BannedWord,
     EarningRecord,
+    EvalResult,
+    EvalSession,
     FeedbackEvent,
     Follow,
     IPStyle,
     KnowledgeCard,
     SaltHistory,
     ScriptSubmission,
+    TipRecord,
     TokenConsumptionRecord,
     UserConversation,
+    WithdrawalRequest,
     UserDocument,
     UserPreference,
     UserProfile,
@@ -1431,6 +1438,301 @@ class SQLMemoryStore(MemoryStore):
             ]
 
     # ------------------------------------------------------------------ #
+    # 打赏记录
+    # ------------------------------------------------------------------ #
+    def create_tip_record(self, record: TipRecordData) -> TipRecordData:
+        tip_id = record.tip_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = TipRecord(
+                tip_id=tip_id,
+                author_id=record.author_id,
+                result_id=record.result_id,
+                payer_user_id=record.payer_user_id,
+                amount_cents=record.amount_cents,
+                currency=record.currency,
+                status=record.status,
+                anyway_order_id=record.anyway_order_id,
+                merchant_reference=record.merchant_reference,
+                metadata_json=record.metadata_json,
+                fee_cents=record.fee_cents,
+                net_amount_cents=record.net_amount_cents,
+                paid_at=record.paid_at,
+            )
+            session.add(row)
+            session.commit()
+            logger.debug("Saved tip record: %s", tip_id)
+            return TipRecordData(
+                tip_id=row.tip_id,
+                author_id=row.author_id,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                metadata_json=row.metadata_json,
+                fee_cents=row.fee_cents,
+                net_amount_cents=row.net_amount_cents,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def get_tip_record(self, tip_id: str) -> TipRecordData | None:
+        with self._new_session() as session:
+            row = session.query(TipRecord).filter_by(tip_id=tip_id).first()
+            if row is None:
+                return None
+            return TipRecordData(
+                tip_id=row.tip_id,
+                author_id=row.author_id,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                metadata_json=row.metadata_json,
+                fee_cents=row.fee_cents,
+                net_amount_cents=row.net_amount_cents,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def get_tip_record_by_merchant_reference(self, merchant_reference: str) -> TipRecordData | None:
+        with self._new_session() as session:
+            row = session.query(TipRecord).filter_by(merchant_reference=merchant_reference).first()
+            if row is None:
+                return None
+            return TipRecordData(
+                tip_id=row.tip_id,
+                author_id=row.author_id,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                metadata_json=row.metadata_json,
+                fee_cents=row.fee_cents,
+                net_amount_cents=row.net_amount_cents,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def update_tip_record_status(
+        self,
+        tip_id: str,
+        status: str,
+        anyway_order_id: str | None = None,
+        fee_cents: int | None = None,
+        net_amount_cents: int | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> TipRecordData | None:
+        with self._new_session() as session:
+            row = session.query(TipRecord).filter_by(tip_id=tip_id).first()
+            if row is None:
+                return None
+            row.status = status
+            if anyway_order_id is not None:
+                row.anyway_order_id = anyway_order_id
+            if fee_cents is not None:
+                row.fee_cents = fee_cents
+            if net_amount_cents is not None:
+                row.net_amount_cents = net_amount_cents
+            if metadata_json is not None:
+                if row.metadata_json is None:
+                    row.metadata_json = {}
+                row.metadata_json.update(metadata_json)
+            if status == "paid":
+                row.paid_at = self._now()
+            session.commit()
+            return TipRecordData(
+                tip_id=row.tip_id,
+                author_id=row.author_id,
+                result_id=row.result_id,
+                payer_user_id=row.payer_user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                anyway_order_id=row.anyway_order_id,
+                merchant_reference=row.merchant_reference,
+                metadata_json=row.metadata_json,
+                fee_cents=row.fee_cents,
+                net_amount_cents=row.net_amount_cents,
+                created_at=row.created_at,
+                paid_at=row.paid_at,
+            )
+
+    def list_tip_records(
+        self,
+        author_id: str | None = None,
+        result_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[TipRecordData]:
+        with self._new_session() as session:
+            query = session.query(TipRecord)
+            if author_id is not None:
+                query = query.filter_by(author_id=author_id)
+            if result_id is not None:
+                query = query.filter_by(result_id=result_id)
+            if status is not None:
+                query = query.filter_by(status=status)
+            rows = (
+                query.order_by(TipRecord.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return [
+                TipRecordData(
+                    tip_id=r.tip_id,
+                    author_id=r.author_id,
+                    result_id=r.result_id,
+                    payer_user_id=r.payer_user_id,
+                    amount_cents=r.amount_cents,
+                    currency=r.currency,
+                    status=r.status,
+                    anyway_order_id=r.anyway_order_id,
+                    merchant_reference=r.merchant_reference,
+                    metadata_json=r.metadata_json,
+                    fee_cents=r.fee_cents,
+                    net_amount_cents=r.net_amount_cents,
+                    created_at=r.created_at,
+                    paid_at=r.paid_at,
+                )
+                for r in rows
+            ]
+
+    def create_withdrawal_request(self, request: WithdrawalRequestData) -> WithdrawalRequestData:
+        request_id = request.request_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = WithdrawalRequest(
+                request_id=request_id,
+                user_id=request.user_id,
+                amount_cents=request.amount_cents,
+                currency=request.currency,
+                status=request.status,
+                payout_method=request.payout_method,
+                payout_account=request.payout_account,
+                processed_at=request.processed_at,
+            )
+            session.add(row)
+            session.commit()
+            logger.debug("Saved withdrawal request: %s", request_id)
+            return WithdrawalRequestData(
+                request_id=row.request_id,
+                user_id=row.user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                payout_method=row.payout_method,
+                payout_account=row.payout_account,
+                processed_at=row.processed_at,
+                created_at=row.created_at,
+            )
+
+    def get_withdrawal_request(self, request_id: str) -> WithdrawalRequestData | None:
+        with self._new_session() as session:
+            row = session.query(WithdrawalRequest).filter_by(request_id=request_id).first()
+            if row is None:
+                return None
+            return WithdrawalRequestData(
+                request_id=row.request_id,
+                user_id=row.user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                payout_method=row.payout_method,
+                payout_account=row.payout_account,
+                processed_at=row.processed_at,
+                created_at=row.created_at,
+            )
+
+    def update_withdrawal_request_status(
+        self, request_id: str, status: str, processed_at: datetime | None = None
+    ) -> WithdrawalRequestData | None:
+        with self._new_session() as session:
+            row = session.query(WithdrawalRequest).filter_by(request_id=request_id).first()
+            if row is None:
+                return None
+            row.status = status
+            if processed_at is not None:
+                row.processed_at = processed_at
+            session.commit()
+            return WithdrawalRequestData(
+                request_id=row.request_id,
+                user_id=row.user_id,
+                amount_cents=row.amount_cents,
+                currency=row.currency,
+                status=row.status,
+                payout_method=row.payout_method,
+                payout_account=row.payout_account,
+                processed_at=row.processed_at,
+                created_at=row.created_at,
+            )
+
+    def list_withdrawal_requests(
+        self,
+        user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[WithdrawalRequestData]:
+        with self._new_session() as session:
+            query = session.query(WithdrawalRequest)
+            if user_id is not None:
+                query = query.filter_by(user_id=user_id)
+            if status is not None:
+                query = query.filter_by(status=status)
+            rows = (
+                query.order_by(WithdrawalRequest.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return [
+                WithdrawalRequestData(
+                    request_id=r.request_id,
+                    user_id=r.user_id,
+                    amount_cents=r.amount_cents,
+                    currency=r.currency,
+                    status=r.status,
+                    payout_method=r.payout_method,
+                    payout_account=r.payout_account,
+                    processed_at=r.processed_at,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    def get_author_earnings(self, user_id: str) -> dict[str, Any]:
+        """获取作者收益汇总。
+
+        total_cents 为收益记录余额；已提现仅统计 status=paid 的提现申请；
+        pending_cents = total - paid，提现申请被冻结时已通过负向收益记录扣减余额。
+        """
+        with self._new_session() as session:
+            records = session.query(EarningRecord).filter_by(user_id=user_id).all()
+            total = sum(r.amount for r in records)
+            paid_withdrawn = sum(
+                w.amount_cents
+                for w in session.query(WithdrawalRequest)
+                .filter_by(user_id=user_id, status="paid")
+                .all()
+            )
+            return {
+                "total_cents": total,
+                "withdrawn_cents": paid_withdrawn,
+                "pending_cents": total - paid_withdrawn,
+                "currency": "usd",
+            }
+
+    # ------------------------------------------------------------------ #
     # Token 消费记录
     # ------------------------------------------------------------------ #
     def save_consumption_record(
@@ -1552,6 +1854,27 @@ class SQLMemoryStore(MemoryStore):
             session.commit()
             logger.debug("Deleted banned word: %d", word_id)
             return True
+
+    # ------------------------------------------------------------------ #
+    # 广场段子
+    # ------------------------------------------------------------------ #
+    def get_eval_result(self, result_id: str) -> Any | None:
+        """根据 result_id 获取已发布的广场段子（包含作者 user_id）。"""
+        with self._new_session() as session:
+            result = (
+                session.query(EvalResult, EvalSession.user_id)
+                .join(EvalSession, EvalResult.session_id == EvalSession.session_id)
+                .filter(EvalResult.result_id == result_id, EvalResult.is_published.is_(True))
+                .first()
+            )
+            if result is None:
+                return None
+            row, user_id = result
+            ns = SimpleNamespace(
+                **{c.name: getattr(row, c.name) for c in EvalResult.__table__.columns},
+                user_id=user_id,
+            )
+            return ns
 
     # ------------------------------------------------------------------ #
     # 统计

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any
 
 from comedy_agent.memory.models import (
@@ -23,10 +24,12 @@ from comedy_agent.memory.models import (
     SaltHistoryData,
     ScriptData,
     SubmissionData,
+    TipRecordData,
     TokenAccountData,
     TokenConsumptionData,
     UserContext,
     UserProfileData,
+    WithdrawalRequestData,
 )
 
 
@@ -600,6 +603,86 @@ class MemoryStore(ABC):
         ...
 
     # ------------------------------------------------------------------ #
+    # 打赏记录
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def create_tip_record(self, record: TipRecordData) -> TipRecordData:
+        """创建打赏记录。"""
+        ...
+
+    @abstractmethod
+    def get_tip_record(self, tip_id: str) -> TipRecordData | None:
+        """根据 tip_id 获取打赏记录。"""
+        ...
+
+    @abstractmethod
+    def get_tip_record_by_merchant_reference(self, merchant_reference: str) -> TipRecordData | None:
+        """根据 merchant_reference 获取打赏记录。"""
+        ...
+
+    @abstractmethod
+    def update_tip_record_status(
+        self,
+        tip_id: str,
+        status: str,
+        anyway_order_id: str | None = None,
+        fee_cents: int | None = None,
+        net_amount_cents: int | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> TipRecordData | None:
+        """更新打赏记录状态。"""
+        ...
+
+    @abstractmethod
+    def list_tip_records(
+        self,
+        author_id: str | None = None,
+        result_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[TipRecordData]:
+        """列出打赏记录。"""
+        ...
+
+    @abstractmethod
+    def create_withdrawal_request(self, request: WithdrawalRequestData) -> WithdrawalRequestData:
+        """创建提现申请。"""
+        ...
+
+    @abstractmethod
+    def get_withdrawal_request(self, request_id: str) -> WithdrawalRequestData | None:
+        """根据 request_id 获取提现申请。"""
+        ...
+
+    @abstractmethod
+    def update_withdrawal_request_status(
+        self, request_id: str, status: str, processed_at: datetime | None = None
+    ) -> WithdrawalRequestData | None:
+        """更新提现申请状态。"""
+        ...
+
+    @abstractmethod
+    def list_withdrawal_requests(
+        self,
+        user_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[WithdrawalRequestData]:
+        """列出提现申请。"""
+        ...
+
+    @abstractmethod
+    def get_author_earnings(self, user_id: str) -> dict[str, Any]:
+        """获取作者收益汇总。
+
+        Returns:
+            dict: 包含 total_cents, withdrawn_cents, pending_cents, currency。
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
     # Token 消费记录
     # ------------------------------------------------------------------ #
     @abstractmethod
@@ -635,6 +718,15 @@ class MemoryStore(ABC):
     # ------------------------------------------------------------------ #
     # 统计
     # ------------------------------------------------------------------ #
+    @abstractmethod
+    def get_eval_result(self, result_id: str) -> Any | None:
+        """根据 result_id 获取已发布的广场段子信息。
+
+        Returns:
+            包含 user_id 和 is_published 的对象，若不存在或未发布则返回 None。
+        """
+        ...
+
     @abstractmethod
     def get_user_stats(self, user_id: str) -> dict[str, Any]:
         """获取用户使用统计。

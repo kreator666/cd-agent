@@ -41,6 +41,7 @@ dependencies = [
     "pydantic>=2.7.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",
+    "cryptography>=42.0.0",
     # 检索增强
     "rank-bm25>=0.2.2",
     "sentence-transformers>=3.0.0",

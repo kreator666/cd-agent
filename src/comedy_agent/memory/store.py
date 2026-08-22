@@ -630,6 +630,8 @@ class MemoryStore(ABC):
         fee_cents: int | None = None,
         net_amount_cents: int | None = None,
         metadata_json: dict[str, Any] | None = None,
+        amount_cents: int | None = None,
+        currency: str | None = None,
     ) -> TipRecordData | None:
         """更新打赏记录状态。"""
         ...

@@ -1560,6 +1560,8 @@ class SQLMemoryStore(MemoryStore):
         fee_cents: int | None = None,
         net_amount_cents: int | None = None,
         metadata_json: dict[str, Any] | None = None,
+        amount_cents: int | None = None,
+        currency: str | None = None,
     ) -> TipRecordData | None:
         with self._new_session() as session:
             row = session.query(TipRecord).filter_by(tip_id=tip_id).first()
@@ -1568,6 +1570,10 @@ class SQLMemoryStore(MemoryStore):
             row.status = status
             if anyway_order_id is not None:
                 row.anyway_order_id = anyway_order_id
+            if amount_cents is not None:
+                row.amount_cents = amount_cents
+            if currency is not None:
+                row.currency = currency
             if fee_cents is not None:
                 row.fee_cents = fee_cents
             if net_amount_cents is not None:

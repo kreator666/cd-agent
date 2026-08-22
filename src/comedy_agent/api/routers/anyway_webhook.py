@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import time
 from typing import Any
 
@@ -45,6 +46,41 @@ def normalize_anyway_order(order: dict[str, Any]) -> dict[str, Any]:
         if source_key in normalized and target_key not in normalized:
             normalized[target_key] = normalized.pop(source_key)
     return normalized
+
+
+# 常见币种精度：Anyway 的 amountCents 字段实际为最小单位，需换算为美分
+_ANYWAY_CURRENCY_DECIMALS: dict[str, int] = {
+    "USD": 2,
+    "USDC": 6,
+    "USDT": 6,
+}
+
+
+def _anyway_amount_to_cents(order: dict[str, Any]) -> int | None:
+    """将 Anyway 订单金额统一换算为美分。
+
+    Anyway 的 `amountCents` 在不同币种下代表最小单位：
+    - 法币 USD：amountCents 就是美分（2 位小数）
+    - 稳定币 USDC/USDT：amountCents 为 micro-units（6 位小数）
+    本函数根据币种精度或 amount/amountCents 推导精度，返回美分整数。
+    """
+    amount_raw = order.get("amount")
+    amount_smallest = order.get("amountCents")
+    if amount_smallest is None or amount_raw is None:
+        return None
+
+    currency = (order.get("currency") or "").upper()
+    decimals = _ANYWAY_CURRENCY_DECIMALS.get(currency)
+    if decimals is None:
+        try:
+            # 通过 amountCents / amount 推导精度
+            decimals = round(math.log10(amount_smallest / amount_raw))
+        except (ValueError, ZeroDivisionError, TypeError):
+            decimals = 2
+
+    # 最小单位 -> 美分：除以 10^(decimals - 2)
+    factor = 10 ** (decimals - 2)
+    return int(amount_smallest / factor)
 
 
 def _decode_base64url(value: str) -> bytes:
@@ -188,19 +224,25 @@ async def _handle_order_paid(order: dict[str, Any], webhook_id: str | None) -> N
         logger.info("tip_record %s 已处理，跳过", record.tip_id)
         return
 
-    amount_cents = order.get("amountCents") or record.amount_cents
-    fee_cents = int(amount_cents * settings.anyway_fee_percent / 100)
-    net_amount_cents = amount_cents - fee_cents
+    # Anyway 的 amountCents 在不同币种下精度不同，统一换算为美分
+    actual_amount_cents = _anyway_amount_to_cents(order) or record.amount_cents
+    fee_cents = int(actual_amount_cents * settings.anyway_fee_percent / 100)
+    net_amount_cents = actual_amount_cents - fee_cents
+    actual_currency = (order.get("currency") or record.currency or "usd").lower()
 
     metadata = dict(record.metadata_json or {})
     metadata["anyway_order_id"] = order_id
     metadata["webhook_id"] = webhook_id
-    metadata["actual_amount_cents"] = str(amount_cents)
+    metadata["actual_amount_cents"] = str(actual_amount_cents)
+    metadata["anyway_amount_smallest"] = str(order.get("amountCents") or "")
+    metadata["anyway_amount"] = str(order.get("amount") or "")
 
     state.memory.update_tip_record_status(
         record.tip_id,
         status="paid",
         anyway_order_id=order_id,
+        amount_cents=actual_amount_cents,
+        currency=actual_currency,
         fee_cents=fee_cents,
         net_amount_cents=net_amount_cents,
         metadata_json=metadata,
@@ -214,7 +256,7 @@ async def _handle_order_paid(order: dict[str, Any], webhook_id: str | None) -> N
             description=f"Anyway 打赏 {record.tip_id}",
         )
     )
-    logger.info("记录 Anyway 打赏收益: tip_id=%s amount=%s", record.tip_id, net_amount_cents)
+    logger.info("记录 Anyway 打赏收益: tip_id=%s amount=%s fee=%s net=%s", record.tip_id, actual_amount_cents, fee_cents, net_amount_cents)
 
 
 async def _handle_crypto_order_paid(

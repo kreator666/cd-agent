@@ -384,9 +384,11 @@ class UnifiedMemory(MemoryStore):
         fee_cents: int | None = None,
         net_amount_cents: int | None = None,
         metadata_json: dict[str, Any] | None = None,
+        amount_cents: int | None = None,
+        currency: str | None = None,
     ) -> TipRecordData | None:
         return self._store.update_tip_record_status(
-            tip_id, status, anyway_order_id, fee_cents, net_amount_cents, metadata_json
+            tip_id, status, anyway_order_id, fee_cents, net_amount_cents, metadata_json, amount_cents, currency
         )
 
     def list_tip_records(

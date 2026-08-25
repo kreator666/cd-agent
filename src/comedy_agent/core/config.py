@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     admin_user_id: str = Field(default="admin", alias="ADMIN_USER_ID")
     admin_password: str = Field(default="admin", alias="ADMIN_PASSWORD")
 
+    # 阿里云 Workbench CLI（ECS 远程运维）
+    ecs_workbench_enabled: bool = Field(default=False, alias="ECS_WORKBENCH_ENABLED")
+    ecs_workbench_profile: str = Field(default="default", alias="ECS_WORKBENCH_PROFILE")
+    ecs_default_region: str = Field(default="cn-hangzhou", alias="ECS_DEFAULT_REGION")
+    ecs_exec_timeout: int = Field(default=30, alias="ECS_EXEC_TIMEOUT")
+
     # 加密货币打赏（Base 链校验）
     base_rpc_url: str = Field(default="https://mainnet.base.org", alias="BASE_RPC_URL")
     tip_token_contract: str = Field(default="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", alias="TIP_TOKEN_CONTRACT")

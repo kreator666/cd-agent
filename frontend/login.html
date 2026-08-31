@@ -3,246 +3,567 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 — Comedy Agent</title>
-    <link rel="stylesheet" href="/static/common.css">
+    <title>喜剧龙虾 — AI 喜剧创作平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --lobster: #e94560;
+            --lobster-deep: #c73050;
+            --gold: #f5af19;
+            --gold-light: #ffe082;
+            --dark: #0f0f1a;
+            --dark-card: #16162a;
+            --purple: #6c3ce0;
+            --purple-light: #a78bfa;
+            --cream: #fdf6ec;
+            --text: #f0eef5;
+            --muted: #9892a6;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--dark);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ===== Layout ===== */
+        .cover {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: 100vh;
+        }
+
+        /* ===== Left Panel: Hero ===== */
+        .hero {
+            position: relative;
             display: flex;
             flex-direction: column;
+            justify-content: center;
+            padding: 4rem 4.5rem;
+            overflow: hidden;
+            background: linear-gradient(160deg, #1a1035 0%, #0f0f1a 40%, #1c0a20 100%);
         }
-        header {
-            display: block;
-            text-align: center;
+
+        /* Animated mesh gradient blob */
+        .hero::before {
+            content: '';
+            position: absolute;
+            width: 600px; height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(233,69,96,.18) 0%, rgba(108,60,224,.12) 50%, transparent 70%);
+            top: -10%; left: -10%;
+            animation: blobDrift 12s ease-in-out infinite alternate;
+            pointer-events: none;
         }
-        .main {
-            flex: 1;
+        .hero::after {
+            content: '';
+            position: absolute;
+            width: 500px; height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(245,175,25,.12) 0%, rgba(233,69,96,.08) 50%, transparent 70%);
+            bottom: -8%; right: -8%;
+            animation: blobDrift 10s ease-in-out infinite alternate-reverse;
+            pointer-events: none;
+        }
+        @keyframes blobDrift {
+            0%   { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(60px, 40px) scale(1.15); }
+        }
+
+        .hero-content { position: relative; z-index: 2; }
+
+        /* Logo cluster */
+        .logo-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 2.5rem;
+        }
+        .logo-icon {
+            width: 56px; height: 56px;
+            background: linear-gradient(135deg, var(--lobster), var(--gold));
+            border-radius: 16px;
+            display: grid;
+            place-items: center;
+            font-size: 28px;
+            box-shadow: 0 6px 24px rgba(233,69,96,.35);
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+        @keyframes logoPulse {
+            0%,100% { box-shadow: 0 6px 24px rgba(233,69,96,.35); }
+            50%     { box-shadow: 0 6px 36px rgba(233,69,96,.55); }
+        }
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 900;
+            letter-spacing: -0.02em;
+            background: linear-gradient(90deg, #fff 30%, var(--gold-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero h1 {
+            font-size: 3.2rem;
+            font-weight: 900;
+            line-height: 1.15;
+            margin-bottom: 1.25rem;
+            letter-spacing: -0.03em;
+        }
+        .hero h1 .accent {
+            background: linear-gradient(90deg, var(--lobster), var(--gold));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero .tagline {
+            font-size: 1.15rem;
+            color: var(--muted);
+            line-height: 1.7;
+            max-width: 440px;
+            margin-bottom: 2.5rem;
+        }
+
+        /* Feature chips */
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 3rem;
+        }
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 18px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.08);
+            backdrop-filter: blur(8px);
+            transition: all .25s;
+        }
+        .chip:hover {
+            background: rgba(233,69,96,.12);
+            border-color: rgba(233,69,96,.3);
+            transform: translateY(-2px);
+        }
+
+        /* Floating comedy icons */
+        .float-icons {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .float-icon {
+            position: absolute;
+            font-size: 2rem;
+            opacity: .12;
+            animation: floatUp linear infinite;
+        }
+        @keyframes floatUp {
+            0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+            10%  { opacity: .12; }
+            90%  { opacity: .12; }
+            100% { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
+        }
+
+        /* Stats bar */
+        .hero-stats {
+            display: flex;
+            gap: 2.5rem;
+        }
+        .hero-stat-num {
+            font-size: 1.75rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, var(--gold), var(--lobster));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-stat-label {
+            font-size: .8rem;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        /* ===== Right Panel: Auth ===== */
+        .auth-panel {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 2rem;
+            padding: 3rem;
+            background: var(--dark);
+            position: relative;
         }
-        .card {
-            background: #fff;
-            border-radius: 0.75rem;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+
+        .auth-box {
             width: 100%;
-            max-width: 400px;
-            padding: 2rem;
+            max-width: 420px;
+            background: var(--dark-card);
+            border: 1px solid rgba(255,255,255,.06);
+            border-radius: 24px;
+            padding: 2.5rem 2.25rem;
+            box-shadow: 0 24px 80px rgba(0,0,0,.4);
+            position: relative;
+            overflow: hidden;
         }
-        .tabs {
+
+        /* Glow accent on top of card */
+        .auth-box::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 200px; height: 3px;
+            background: linear-gradient(90deg, var(--lobster), var(--gold));
+            border-radius: 0 0 4px 4px;
+        }
+
+        .auth-tabs {
             display: flex;
-            margin-bottom: 1.5rem;
-            border-bottom: 2px solid #eee;
+            gap: 0;
+            margin-bottom: 2rem;
+            background: rgba(255,255,255,.04);
+            border-radius: 12px;
+            padding: 4px;
         }
-        .tab {
+        .auth-tab {
             flex: 1;
-            padding: 0.75rem;
+            padding: 10px;
             text-align: center;
+            border-radius: 10px;
+            font-size: .95rem;
+            font-weight: 600;
+            color: var(--muted);
             cursor: pointer;
-            font-weight: 500;
-            color: #666;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-            transition: all 0.2s;
-        }
-        .tab.active {
-            color: #1a1a2e;
-            border-bottom-color: #1a1a2e;
-        }
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        .form-group label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #555;
-            margin-bottom: 0.375rem;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 0.625rem 0.875rem;
-            border: 1px solid #ddd;
-            border-radius: 0.5rem;
-            font-size: 0.9375rem;
-            transition: border-color 0.2s;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: #1a1a2e;
-        }
-        .btn {
-            width: 100%;
-            padding: 0.75rem;
-            background: #1a1a2e;
-            color: #fff;
+            transition: all .25s;
             border: none;
-            border-radius: 0.5rem;
-            font-size: 0.9375rem;
+            background: transparent;
+        }
+        .auth-tab.active {
+            background: rgba(233,69,96,.15);
+            color: var(--lobster);
+        }
+        .auth-tab:hover:not(.active) {
+            color: #ccc;
+        }
+
+        .auth-field { margin-bottom: 1.25rem; }
+        .auth-field label {
+            display: block;
+            font-size: .8rem;
             font-weight: 500;
+            color: var(--muted);
+            margin-bottom: 6px;
+            letter-spacing: .03em;
+        }
+        .auth-field input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255,255,255,.05);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 12px;
+            font-size: .95rem;
+            color: #fff;
+            font-family: inherit;
+            outline: none;
+            transition: all .25s;
+        }
+        .auth-field input::placeholder { color: #555; }
+        .auth-field input:focus {
+            border-color: var(--lobster);
+            box-shadow: 0 0 0 3px rgba(233,69,96,.15);
+        }
+
+        .auth-btn {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            font-family: inherit;
             cursor: pointer;
-            transition: opacity 0.2s;
+            color: #fff;
+            background: linear-gradient(135deg, var(--lobster), var(--lobster-deep));
+            box-shadow: 0 4px 20px rgba(233,69,96,.35);
+            transition: all .25s;
+            margin-top: 4px;
         }
-        .btn:hover { opacity: 0.9; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .error {
-            color: #e94560;
-            font-size: 0.875rem;
-            margin-top: 0.75rem;
-            text-align: center;
-            min-height: 1.25rem;
+        .auth-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(233,69,96,.45);
         }
-        .success {
-            color: #16c79a;
-            font-size: 0.875rem;
-            margin-top: 0.75rem;
-            text-align: center;
-            min-height: 1.25rem;
+        .auth-btn:active { transform: translateY(0); }
+        .auth-btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+            transform: none;
         }
-        .hint {
+
+        .auth-msg {
             text-align: center;
-            font-size: 0.8125rem;
-            color: #888;
-            margin-top: 1rem;
+            font-size: .85rem;
+            min-height: 1.3rem;
+            margin-top: .75rem;
+        }
+        .auth-msg.error { color: var(--lobster); }
+        .auth-msg.success { color: #16c79a; }
+
+        .auth-footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: .78rem;
+            color: #555;
+            line-height: 1.6;
+        }
+
+        /* ===== Decorative grid ===== */
+        .grid-bg {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 900px) {
+            .cover {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+            .hero {
+                padding: 2.5rem 1.5rem 2rem;
+                min-height: auto;
+            }
+            .hero h1 { font-size: 2rem; }
+            .hero-stats { gap: 1.5rem; }
+            .hero-stat-num { font-size: 1.3rem; }
+            .auth-panel { padding: 2rem 1.5rem; }
+            .auth-box { padding: 2rem 1.5rem; }
+            .grid-bg { display: none; }
         }
     </style>
 </head>
 <body>
-    <header>
-        <h1>🎤 Comedy Agent</h1>
-    </header>
-    <div class="main">
-        <div class="card">
-            <div class="tabs">
-                <div class="tab active" onclick="switchTab('login')" id="tab-login">登录</div>
-                <div class="tab" onclick="switchTab('register')" id="tab-register">注册</div>
+
+<div class="cover">
+    <!-- ===== Left: Hero ===== -->
+    <section class="hero">
+        <div class="grid-bg"></div>
+
+        <!-- Floating comedy icons -->
+        <div class="float-icons" id="float-icons"></div>
+
+        <div class="hero-content">
+            <div class="logo-row">
+                <div class="logo-icon">🦞</div>
+                <span class="logo-text">喜剧龙虾</span>
             </div>
 
-            <!-- 登录表单 -->
-            <form id="login-form" onsubmit="handleLogin(event)">
-                <div class="form-group">
-                    <label for="login-user-id">用户 ID</label>
-                    <input id="login-user-id" type="text" placeholder="请输入用户 ID" required>
-                </div>
-                <div class="form-group">
-                    <label for="login-password">密码</label>
-                    <input id="login-password" type="password" placeholder="请输入密码" required>
-                </div>
-                <button class="btn" type="submit" id="login-btn">登录</button>
-                <div class="error" id="login-error"></div>
-            </form>
+            <h1>
+                让每一次创作<br>
+                都<span class="accent">笑果拉满</span>
+            </h1>
 
-            <!-- 注册表单 -->
-            <form id="register-form" onsubmit="handleRegister(event)" style="display:none;">
-                <div class="form-group">
-                    <label for="reg-user-id">用户 ID</label>
-                    <input id="reg-user-id" type="text" placeholder="请输入用户 ID" required minlength="1" maxlength="64">
-                </div>
-                <div class="form-group">
-                    <label for="reg-nickname">昵称（可选）</label>
-                    <input id="reg-nickname" type="text" placeholder="请输入昵称">
-                </div>
-                <div class="form-group">
-                    <label for="reg-password">密码</label>
-                    <input id="reg-password" type="password" placeholder="至少 4 位字符" required minlength="4">
-                </div>
-                <div class="form-group">
-                    <label for="reg-password2">确认密码</label>
-                    <input id="reg-password2" type="password" placeholder="再次输入密码" required>
-                </div>
-                <button class="btn" type="submit" id="register-btn">注册</button>
-                <div class="error" id="register-error"></div>
-                <div class="success" id="register-success"></div>
-            </form>
+            <p class="tagline">
+                AI 驱动的喜剧创作平台 —— 脱口秀、相声、小品、漫才，
+                从灵感到成稿，一键生成专业级喜剧内容。
+            </p>
 
-            <div class="hint">登录后即可使用 Comedy Agent 进行喜剧创作</div>
+            <div class="chips">
+                <span class="chip">🎭 脱口秀生成</span>
+                <span class="chip">🎤 相声剧本</span>
+                <span class="chip">😂 智能加梗</span>
+                <span class="chip">🎬 分镜脚本</span>
+                <span class="chip">📚 RAG 知识库</span>
+                <span class="chip">🧠 个性化记忆</span>
+            </div>
+
+            <div class="hero-stats">
+                <div>
+                    <div class="hero-stat-num">8+</div>
+                    <div class="hero-stat-label">创作类型</div>
+                </div>
+                <div>
+                    <div class="hero-stat-num">秒级</div>
+                    <div class="hero-stat-label">出稿速度</div>
+                </div>
+                <div>
+                    <div class="hero-stat-num">哈哈</div>
+                    <div class="hero-stat-label">观众反应</div>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
 
-    <script>
-        const API_BASE = window.location.origin;
+    <!-- ===== Right: Auth ===== -->
+    <section class="auth-panel">
+        <div class="auth-box">
+            <!-- Tabs -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchTab('login')" id="tab-login">登录</button>
+                <button class="auth-tab" onclick="switchTab('register')" id="tab-register">注册</button>
+            </div>
 
-        function switchTab(tab) {
-            document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
-            document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
-            document.getElementById('tab-login').classList.toggle('active', tab === 'login');
-            document.getElementById('tab-register').classList.toggle('active', tab === 'register');
-            document.getElementById('login-error').textContent = '';
-            document.getElementById('register-error').textContent = '';
-            document.getElementById('register-success').textContent = '';
+            <!-- Login Form -->
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="auth-field">
+                    <label for="login-user-id">用户 ID</label>
+                    <input id="login-user-id" type="text" placeholder="请输入用户 ID" required autocomplete="username">
+                </div>
+                <div class="auth-field">
+                    <label for="login-password">密码</label>
+                    <input id="login-password" type="password" placeholder="请输入密码" required autocomplete="current-password">
+                </div>
+                <button class="auth-btn" type="submit" id="login-btn">登 录</button>
+                <div class="auth-msg error" id="login-error"></div>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" onsubmit="handleRegister(event)" style="display:none;">
+                <div class="auth-field">
+                    <label for="reg-user-id">用户 ID</label>
+                    <input id="reg-user-id" type="text" placeholder="请输入用户 ID" required minlength="1" maxlength="64" autocomplete="username">
+                </div>
+                <div class="auth-field">
+                    <label for="reg-nickname">昵称（可选）</label>
+                    <input id="reg-nickname" type="text" placeholder="给自己取个艺名">
+                </div>
+                <div class="auth-field">
+                    <label for="reg-password">密码</label>
+                    <input id="reg-password" type="password" placeholder="至少 4 位字符" required minlength="4" autocomplete="new-password">
+                </div>
+                <div class="auth-field">
+                    <label for="reg-password2">确认密码</label>
+                    <input id="reg-password2" type="password" placeholder="再次输入密码" required autocomplete="new-password">
+                </div>
+                <button class="auth-btn" type="submit" id="register-btn">注 册</button>
+                <div class="auth-msg error" id="register-error"></div>
+                <div class="auth-msg success" id="register-success"></div>
+            </form>
+
+            <div class="auth-footer">
+                登录后即可使用喜剧龙虾进行 AI 喜剧创作 ✨
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    const API_BASE = window.location.origin;
+
+    // ---- Floating icons ----
+    (function initFloats() {
+        const icons = ['🎭','😂','🎤','🦞','🎬','🎪','🤡','🤣','✨','🃏','💬','🎵','🎶','💫','🌟'];
+        const container = document.getElementById('float-icons');
+        for (let i = 0; i < 18; i++) {
+            const el = document.createElement('span');
+            el.className = 'float-icon';
+            el.textContent = icons[i % icons.length];
+            el.style.left = Math.random() * 90 + '%';
+            el.style.fontSize = (1.2 + Math.random() * 1.4) + 'rem';
+            el.style.animationDuration = (14 + Math.random() * 18) + 's';
+            el.style.animationDelay  = (Math.random() * 16) + 's';
+            container.appendChild(el);
+        }
+    })();
+
+    // ---- Tab switch ----
+    function switchTab(tab) {
+        document.getElementById('login-form').style.display  = tab === 'login' ? 'block' : 'none';
+        document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+        document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+        document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+        document.getElementById('login-error').textContent = '';
+        document.getElementById('register-error').textContent = '';
+        document.getElementById('register-success').textContent = '';
+    }
+
+    // ---- Login ----
+    async function handleLogin(e) {
+        e.preventDefault();
+        const btn = document.getElementById('login-btn');
+        const err = document.getElementById('login-error');
+        btn.disabled = true;
+        err.textContent = '';
+
+        const userId = document.getElementById('login-user-id').value.trim();
+        const password = document.getElementById('login-password').value;
+
+        try {
+            const res = await fetch(`${API_BASE}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, password }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('user_id', data.user_id);
+                window.location.href = '/static/index.html?_=' + Date.now();
+            } else {
+                err.textContent = data.detail || '登录失败';
+            }
+        } catch {
+            err.textContent = '网络错误，请稍后重试';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // ---- Register ----
+    async function handleRegister(e) {
+        e.preventDefault();
+        const btn = document.getElementById('register-btn');
+        const err = document.getElementById('register-error');
+        const ok  = document.getElementById('register-success');
+        btn.disabled = true;
+        err.textContent = '';
+        ok.textContent = '';
+
+        const userId   = document.getElementById('reg-user-id').value.trim();
+        const nickname  = document.getElementById('reg-nickname').value.trim() || null;
+        const password  = document.getElementById('reg-password').value;
+        const password2 = document.getElementById('reg-password2').value;
+
+        if (password !== password2) {
+            err.textContent = '两次输入的密码不一致';
+            btn.disabled = false;
+            return;
         }
 
-        async function handleLogin(e) {
-            e.preventDefault();
-            const btn = document.getElementById('login-btn');
-            const errorEl = document.getElementById('login-error');
-            btn.disabled = true;
-            errorEl.textContent = '';
-
-            const userId = document.getElementById('login-user-id').value.trim();
-            const password = document.getElementById('login-password').value;
-
-            try {
-                const res = await fetch(`${API_BASE}/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, password }),
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    localStorage.setItem('token', data.access_token);
-                    localStorage.setItem('user_id', data.user_id);
-                    // 加时间戳，避免浏览器缓存旧版 index.html
-                    window.location.href = '/static/index.html?_=' + Date.now();
-                } else {
-                    errorEl.textContent = data.detail || '登录失败';
-                }
-            } catch (err) {
-                errorEl.textContent = '网络错误，请稍后重试';
-            } finally {
-                btn.disabled = false;
+        try {
+            const res = await fetch(`${API_BASE}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, password, nickname }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                ok.textContent = '🎉 注册成功，即将跳转登录…';
+                setTimeout(() => switchTab('login'), 800);
+            } else {
+                err.textContent = data.detail || '注册失败';
             }
+        } catch {
+            err.textContent = '网络错误，请稍后重试';
+        } finally {
+            btn.disabled = false;
         }
-
-        async function handleRegister(e) {
-            e.preventDefault();
-            const btn = document.getElementById('register-btn');
-            const errorEl = document.getElementById('register-error');
-            const successEl = document.getElementById('register-success');
-            btn.disabled = true;
-            errorEl.textContent = '';
-            successEl.textContent = '';
-
-            const userId = document.getElementById('reg-user-id').value.trim();
-            const nickname = document.getElementById('reg-nickname').value.trim() || null;
-            const password = document.getElementById('reg-password').value;
-            const password2 = document.getElementById('reg-password2').value;
-
-            if (password !== password2) {
-                errorEl.textContent = '两次输入的密码不一致';
-                btn.disabled = false;
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API_BASE}/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, password, nickname }),
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    successEl.textContent = '注册成功，请登录';
-                    setTimeout(() => switchTab('login'), 800);
-                } else {
-                    errorEl.textContent = data.detail || '注册失败';
-                }
-            } catch (err) {
-                errorEl.textContent = '网络错误，请稍后重试';
-            } finally {
-                btn.disabled = false;
-            }
-        }
-    </script>
+    }
+</script>
 </body>
 </html>

@@ -72,7 +72,7 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
 @keyframes blobDrift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(60px,40px) scale(1.15)}}
 
 /* ===== 通用 Section ===== */
-.section{max-width:1160px;margin:0 auto;padding:clamp(80px,12vh,140px) clamp(20px,4vw,48px)}
+.section{max-width:1160px;margin:0 auto;padding:clamp(80px,12vh,140px) clamp(20px,4vw,48px);scroll-margin-top:72px}
 .sec-head{margin-bottom:64px}
 .sec-eyebrow{display:inline-block;font-size:12px;letter-spacing:.3em;font-weight:700;padding:6px 18px;border-radius:999px;margin-bottom:18px;text-indent:.3em}
 .sec-eyebrow.lobster{color:var(--lobster);background:var(--lobster-soft)}
@@ -152,10 +152,9 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
     <span class="sub">喜剧智能创作</span>
   </a>
   <nav class="topnav">
+    <a href="#home">首页</a>
     <a href="#skill">Skill 介绍</a>
     <a href="#team">团队介绍</a>
-    <a href="/static/eval-square.html">段子广场</a>
-    <a href="/static/me.html">个人中心</a>
   </nav>
   <div class="auth-area" id="auth-area">
     <!-- 未登录：登录按钮 / 已登录：余额 + 我的 + 退出 -->
@@ -163,7 +162,7 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
 </header>
 
 <!-- ===== Hero ===== -->
-<section class="hero">
+<section class="hero" id="home">
   <div class="eyebrow">🎭 COMEDY AGENT SKILL</div>
   <h1>让 <span class="hl">AI</span> 学会喜剧</h1>
   <p class="sub"><strong>写段子 · 剪视频 · 做海报</strong><br>一条指令，AI Agent 变身你的喜剧创作搭子——从创意文本到成片物料，一站搞定。</p>

@@ -1,10 +1,10 @@
 # 阿里云 ECS 运维连接方式
 
-记录如何通过 Workbench CLI 连接 `47.86.55.179` 进行运维。
+记录如何连接 `47.86.55.179` 进行运维。
 
 ## 连接方式概览
 
-该服务器**不走 SSH 密钥直连**（服务器只认密钥，本机公钥未授权）。之前是通过**阿里云 Workbench CLI**（云助手通道，免 SSH 密钥/免公网 IP 要求）连接的。
+**首选 SSH 直连**（已配置免密部署密钥），Workbench CLI 作为备用（云助手通道，免 SSH 密钥）。
 
 ## 环境信息
 
@@ -20,7 +20,18 @@
 
 ## 常用命令
 
-### 1. 交互式登录（人工操作）
+### 0. SSH 直连（首选）
+
+```bash
+ssh claw                              # 已配好别名（~/.ssh/config → claw_deploy 密钥）
+ssh -i ~/.ssh/claw_deploy root@47.86.55.179   # 完整写法
+```
+
+- 密钥：`~/.ssh/claw_deploy`（ed25519 免密部署专用，公钥在服务器 `/root/.ssh/authorized_keys`）
+- 注意：本机 `id_ed25519` 带密码短语，非交互场景不要用
+- 文件传输用 `scp` / `rsync`，例如：`scp ./index.html claw:/var/www/frontend/`
+
+### 1. 交互式登录（备用，人工操作）
 
 ```bash
 workbench connect -r cn-hongkong -i i-j6cefwm4czuvg3uklqpk
@@ -28,7 +39,7 @@ workbench connect -r cn-hongkong -i i-j6cefwm4czuvg3uklqpk
 
 连上后按 `Tab` 弹出命令面板；`/exit` 或 `Ctrl+D` 退出。
 
-### 2. 远程执行单条命令（脚本/Agent 运维）
+### 2. 远程执行单条命令（备用，脚本/Agent 运维）
 
 ```bash
 workbench exec -r cn-hongkong -i i-j6cefwm4czuvg3uklqpk -c "<命令>" --output json

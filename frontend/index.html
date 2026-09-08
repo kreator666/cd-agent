@@ -1,379 +1,291 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCN-AI Agent｜模式入口</title>
-    <style>
-    /* ===== Common layout (from pro.html) ===== */
-    :root{
-      --bg:#ffffff;--ink:#343434;--muted:#888b92;--light:#f5f6f8;--line:#eceef2;--line-dark:#dfe2e7;
-      --orange:#ff764a;--green:#18a058;--icon:#5f6368;--shadow:0 18px 50px rgba(20,26,38,.10);
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
-      font-size:16px;letter-spacing:.02em;
-    }
-    .app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
-    button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cclaw｜让 AI 学会喜剧</title>
+<meta name="description" content="Cclaw — 开源喜剧创作 Skill：写段子、剪视频、做海报。喜剧理论 + 案例库知识驱动，一条命令装进你的 AI Agent。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0e1013; --bg-soft:#14171c; --ink:#eceae4; --muted:#9a978f; --faint:#6b6963;
+  --gold:#d8a94e; --gold-soft:rgba(216,169,78,.14); --line:rgba(255,255,255,.08);
+  --serif:"Noto Serif SC",serif; --sans:"Noto Sans SC",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;letter-spacing:.02em;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
+::selection{background:var(--gold);color:#0e1013}
 
-    /* Topbar */
-    .topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
-    .title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
-    .actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
-    .action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);}
-    .action:hover{background:#f7f8fa;transform:translateY(-1px)}
-    .action svg{width:20px;height:20px;stroke:#41454b;stroke-width:2;fill:none;transition:.24s}.action:hover svg{stroke:#ff764a;transform:scale(1.05)}
+/* ===== 顶栏 ===== */
+.topbar{position:fixed;inset:0 0 auto 0;height:72px;z-index:50;display:flex;align-items:center;justify-content:space-between;
+  padding:0 clamp(20px,4vw,56px);background:rgba(14,16,19,.72);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:12px}
+.brand .logo{font-family:var(--serif);font-weight:900;font-size:24px;letter-spacing:.14em;color:var(--ink)}
+.brand .logo em{color:var(--gold);font-style:normal}
+.brand .sub{font-size:12px;color:var(--muted);letter-spacing:.3em}
+.topnav{display:flex;gap:34px;font-size:14px;color:var(--muted)}
+.topnav a{transition:color .2s;position:relative;padding:4px 0}
+.topnav a:hover{color:var(--ink)}
+.topnav a::after{content:"";position:absolute;left:0;bottom:0;width:0;height:1px;background:var(--gold);transition:width .25s}
+.topnav a:hover::after{width:100%}
+.auth-area{display:flex;align-items:center;gap:14px;font-size:13px}
+.token-pill{padding:5px 14px;border:1px solid var(--line);border-radius:20px;color:var(--gold);background:var(--gold-soft);white-space:nowrap}
+.btn-login{padding:8px 22px;border:1px solid var(--gold);border-radius:22px;color:var(--gold);font-size:13px;letter-spacing:.08em;transition:.25s}
+.btn-login:hover{background:var(--gold);color:#0e1013}
+.link-me{color:var(--muted);transition:color .2s}
+.link-me:hover{color:var(--ink)}
+.btn-logout{color:var(--faint);font-size:13px;transition:color .2s}
+.btn-logout:hover{color:var(--ink)}
 
-    /* Nav sidebar */
-    .nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
-    .nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
-    .nav-sidebar a:hover{background:#f0f1f4;}
-    .nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+/* ===== Hero ===== */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+  padding:120px 24px 80px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 45% at 50% 0%,rgba(216,169,78,.13),transparent 65%),
+             radial-gradient(ellipse 40% 35% at 85% 90%,rgba(216,169,78,.06),transparent 60%)}
+.hero::after{content:"笑";position:absolute;right:-4%;bottom:-12%;font-family:var(--serif);font-weight:900;
+  font-size:clamp(300px,42vw,560px);color:rgba(255,255,255,.022);pointer-events:none;line-height:1}
+.eyebrow{font-size:13px;letter-spacing:.5em;color:var(--gold);margin-bottom:28px;text-indent:.5em}
+.hero h1{font-family:var(--serif);font-weight:900;font-size:clamp(44px,7.5vw,92px);line-height:1.18;letter-spacing:.06em}
+.hero h1 .hl{color:var(--gold);position:relative}
+.hero .sub{margin-top:30px;max-width:640px;color:var(--muted);font-size:clamp(15px,1.6vw,18px)}
+.hero .sub strong{color:var(--ink);font-weight:500}
+.cta-row{margin-top:52px;display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+.btn-primary{padding:16px 44px;background:var(--gold);color:#141414;border-radius:32px;font-weight:700;font-size:15px;letter-spacing:.1em;transition:.28s;box-shadow:0 8px 32px rgba(216,169,78,.22)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 44px rgba(216,169,78,.32)}
+.btn-ghost{padding:16px 44px;border:1px solid var(--line);border-radius:32px;color:var(--ink);font-size:15px;letter-spacing:.1em;transition:.28s}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
+.scroll-hint{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);color:var(--faint);font-size:11px;letter-spacing:.4em;writing-mode:vertical-rl;animation:hint 2.4s ease-in-out infinite}
+@keyframes hint{0%,100%{opacity:.35;transform:translate(-50%,0)}50%{opacity:.9;transform:translate(-50%,8px)}}
 
-    /* Main */
-    .main{flex:1;min-height:0;padding-left:56px;overflow-y:auto;}
-    .main-inner{max-width:960px;margin:0 auto;padding:24px 20px;}
+/* ===== 通用 Section ===== */
+.section{max-width:1160px;margin:0 auto;padding:clamp(80px,12vh,140px) clamp(20px,4vw,48px)}
+.sec-head{margin-bottom:64px}
+.sec-eyebrow{font-size:12px;letter-spacing:.45em;color:var(--gold);margin-bottom:16px}
+.sec-title{font-family:var(--serif);font-weight:700;font-size:clamp(30px,4vw,46px);letter-spacing:.04em}
+.sec-desc{margin-top:16px;color:var(--muted);max-width:560px}
+.reveal{opacity:0;transform:translateY(36px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+.reveal.in{opacity:1;transform:none}
 
-    /* ===== Index page specific ===== */
-    .token-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:#fff2ed;border-radius:20px;font-size:13px;font-weight:700;color:#ff764a;}
+/* ===== Skill ===== */
+.skill-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.skill-card{background:var(--bg-soft);border:1px solid var(--line);border-radius:18px;padding:36px 30px;transition:.3s;position:relative;overflow:hidden}
+.skill-card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--gold),transparent);opacity:0;transition:.3s}
+.skill-card:hover{transform:translateY(-6px);border-color:rgba(216,169,78,.35)}
+.skill-card:hover::before{opacity:1}
+.skill-card .ico{font-size:30px;margin-bottom:22px;display:block}
+.skill-card h3{font-family:var(--serif);font-size:20px;font-weight:700;margin-bottom:14px;letter-spacing:.05em}
+.skill-card p{color:var(--muted);font-size:14.5px}
+.skill-card .tags{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.skill-card .tag{font-size:12px;color:var(--gold);background:var(--gold-soft);border-radius:14px;padding:3px 12px;letter-spacing:.04em}
 
-    /* 轮播 */
-    .carousel-wrap{position:relative;overflow:hidden;border-radius:14px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.06);border:1px solid var(--line);}
-    .carousel-track{display:flex;transition:transform 0.5s ease;}
-    .carousel-slide{min-width:100%;padding:40px 32px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;}
-    .carousel-slide .badge{display:inline-block;background:#2c7da0;color:#fff;font-size:0.75rem;padding:4px 12px;border-radius:12px;width:fit-content;}
-    .carousel-slide h2{color:#0f3b5c;margin:0;font-size:1.5rem;}
-    .carousel-slide p{color:#555;line-height:1.6;margin:0;}
-    .carousel-slide .features{color:#777;font-size:0.875rem;}
-    .carousel-slide .btn{background:#2c7da0;color:#fff;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:0.9375rem;width:fit-content;margin-top:4px;font-weight:600;transition:.15s;}
-    .carousel-slide .btn:hover{background:#1f5a75;}
-    .carousel-slide .btn.pro{background:#e94560;}
-    .carousel-slide .btn.pro:hover{background:#c73850;}
-    .carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.95);border:1px solid var(--line);width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:1.25rem;color:#333;display:flex;align-items:center;justify-content:center;z-index:2;transition:.15s;}
-    .carousel-arrow:hover{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
-    .carousel-arrow.prev{left:12px;}
-    .carousel-arrow.next{right:12px;}
-    .carousel-dots{display:flex;justify-content:center;gap:8px;padding:12px;background:#fff;border-top:1px solid var(--line);}
-    .carousel-dots span{width:8px;height:8px;border-radius:50%;background:#ccc;cursor:pointer;transition:background 0.2s;}
-    .carousel-dots span.active{background:#2c7da0;}
+.install-bar{margin-top:44px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:var(--bg-soft);
+  border:1px solid var(--line);border-radius:16px;padding:22px 28px}
+.install-bar .lbl{font-size:13px;color:var(--muted);letter-spacing:.15em;white-space:nowrap}
+.install-cmd{flex:1;min-width:260px;font-family:Consolas,Menlo,monospace;font-size:15px;color:var(--gold);
+  background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:10px;padding:14px 20px;overflow-x:auto;white-space:nowrap}
+.btn-copy{padding:12px 26px;border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--muted);transition:.25s;white-space:nowrap}
+.btn-copy:hover{border-color:var(--gold);color:var(--gold)}
+.btn-copy.done{border-color:var(--gold);color:var(--gold);background:var(--gold-soft)}
+.install-note{margin-top:14px;font-size:13px;color:var(--faint)}
+.install-note a{color:var(--gold);border-bottom:1px dotted var(--gold)}
 
-    /* 个人主页 */
-    .profile-card{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;border:1px solid var(--line);margin-top:20px;}
-    .profile-header{height:120px;background:linear-gradient(135deg, #0f3b5c 0%, #2c7da0 100%);}
-    .profile-body{padding:0 24px 24px;position:relative;}
-    .profile-avatar{width:90px;height:90px;border-radius:50%;border:4px solid #fff;background:#e0e0e0;margin-top:-45px;object-fit:cover;}
-    .profile-name{font-size:1.25rem;font-weight:700;color:#1a1a2e;margin:8px 0 4px;}
-    .profile-id{font-size:0.8125rem;color:#888;}
-    .profile-bio{color:#555;font-size:0.9375rem;line-height:1.6;margin:12px 0;}
-    .profile-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
-    .profile-tags .tag{background:#f0f4f8;color:#2c7da0;padding:4px 12px;border-radius:16px;font-size:0.8125rem;}
-    .profile-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center;padding-top:16px;border-top:1px solid #f0f0f0;}
-    .profile-stats .stat-value{font-size:1.125rem;font-weight:700;color:#1a1a2e;}
-    .profile-stats .stat-label{font-size:0.75rem;color:#888;margin-top:2px;}
-    .profile-section-title{font-size:1rem;font-weight:700;color:#0f3b5c;margin:20px 0 12px;}
-    .profile-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-    .profile-info-item{font-size:0.875rem;color:#555;}
-    .profile-info-item .label{color:#888;font-size:0.75rem;}
-    .edit-btn{background:#f0f1f4;color:#333;padding:6px 14px;border:none;border-radius:8px;cursor:pointer;font-size:0.8125rem;font-weight:650;transition:.15s;}
-    .edit-btn:hover{background:#e5e7eb;}
+/* ===== 团队 ===== */
+.team-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.member{display:flex;background:var(--bg-soft);border:1px solid var(--line);border-radius:20px;overflow:hidden;transition:.3s}
+.member:hover{border-color:rgba(216,169,78,.3);transform:translateY(-4px)}
+.member .photo{width:42%;min-height:380px;object-fit:cover;object-position:top center;filter:saturate(.92);transition:.4s}
+.member:hover .photo{filter:saturate(1)}
+.member .info{flex:1;padding:34px 30px;display:flex;flex-direction:column}
+.member .role{font-size:11px;letter-spacing:.3em;color:var(--gold);margin-bottom:10px}
+.member h3{font-family:var(--serif);font-size:26px;font-weight:700;letter-spacing:.05em}
+.member .en{font-size:13px;color:var(--faint);margin:2px 0 16px;letter-spacing:.15em}
+.member .bio{list-style:none;font-size:13.5px;color:var(--muted)}
+.member .bio li{padding:5px 0 5px 16px;position:relative}
+.member .bio li::before{content:"";position:absolute;left:0;top:14px;width:6px;height:1px;background:var(--gold)}
+.member .quote{margin-top:auto;padding-top:20px;font-family:var(--serif);font-size:14px;color:var(--gold);letter-spacing:.04em}
 
-    /* Modal */
-    .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;}
-    .modal-overlay.active{display:flex;}
-    .modal-box{background:#fff;padding:24px;border-radius:12px;width:480px;max-width:90vw;max-height:90vh;overflow-y:auto;}
-    .modal-box h3{margin-top:0;font-size:1.125rem;}
-    .modal-box input,.modal-box textarea,.modal-box select{width:100%;padding:10px 12px;border:1px solid var(--line-dark);border-radius:8px;font-size:0.875rem;font-family:inherit;outline:none;box-sizing:border-box;}
-    .modal-box input:focus,.modal-box textarea:focus{border-color:#ff764a;}
+/* ===== 页脚 ===== */
+.footer{border-top:1px solid var(--line);padding:44px 24px;text-align:center;color:var(--faint);font-size:13px}
+.footer a{color:var(--muted);transition:color .2s}
+.footer a:hover{color:var(--gold)}
+.footer .sep{margin:0 12px}
 
-    @media(max-width:768px){.main{padding-left:0;}.profile-stats{grid-template-columns:repeat(2,1fr);}.profile-info-grid{grid-template-columns:1fr;}}
-    </style>
+@media(max-width:960px){
+  .skill-grid{grid-template-columns:1fr}
+  .team-grid{grid-template-columns:1fr}
+  .topnav{display:none}
+  .member .photo{width:38%;min-height:320px}
+}
+@media(max-width:600px){
+  .member{flex-direction:column}
+  .member .photo{width:100%;min-height:0;height:300px}
+  .brand .sub{display:none}
+}
+</style>
 </head>
 <body>
-<div class="app">
-  <header class="topbar">
-    <div></div>
-    <div class="title">MCN-AI Agent｜模式入口</div>
-    <div class="actions">
-      <span class="token-pill" id="token-balance-pill">💰 --</span>
-      <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
-    </div>
-  </header>
 
-  <nav class="nav-sidebar">
-    <a href="/static/index.html" class="active" title="首页">🏠</a>
-    <a href="/static/speed.html" title="极速版">⚡</a>
-    <a href="/static/pro-b.html" title="专业版">🎬</a>
-    <a href="/static/eval.html" title="笑果评测">🎯</a>
-    <a href="/static/eval-square.html" title="段子广场">🏛️</a>
-    <a href="/static/me.html" title="我的">👤</a>
+<header class="topbar">
+  <a class="brand" href="/static/index.html">
+    <span class="logo">CCL<em>A</em>W</span>
+    <span class="sub">喜剧智能创作</span>
+  </a>
+  <nav class="topnav">
+    <a href="#skill">Skill 介绍</a>
+    <a href="#team">团队介绍</a>
+    <a href="/static/eval-square.html">段子广场</a>
+    <a href="/static/me.html">个人中心</a>
   </nav>
+  <div class="auth-area" id="auth-area">
+    <!-- 未登录：登录按钮 / 已登录：余额 + 我的 + 退出 -->
+  </div>
+</header>
 
-  <main class="main">
-    <div class="main-inner">
-      <!-- 轮播 -->
-      <div class="carousel-wrap">
-        <div class="carousel-track" id="carousel-track">
-          <div class="carousel-slide">
-            <span class="badge">极速版</span>
-            <h2>趣味表达引擎</h2>
-            <p><strong>加点料，不改味</strong></p>
-            <p>适合轻量化改稿、加梗、IP 风格化二创。输入任意文案，一键生成带有趣味表达的短视频脚本。</p>
-            <p class="features">✅ 保留原意　✅ 自动加梗　✅ IP 角色风格化</p>
-            <button class="btn" onclick="goSpeed()">进入极速版 →</button>
-          </div>
-          <div class="carousel-slide">
-            <span class="badge" style="background:#e94560;">专业版</span>
-            <h2>剧本工坊</h2>
-            <p><strong>人物画像 + Skill 组合</strong></p>
-            <p>适合系统化剧本创作、分镜、台词生成。基于人物画像写作规则，组合话题/态度/情绪/风格 Skill，输出高质量结构化剧本。</p>
-            <p class="features">✅ 人物画像约束　✅ 多 Skill 组合　✅ Markdown 剧本输出</p>
-            <button class="btn pro" onclick="goPro()">进入专业版 →</button>
-          </div>
-        </div>
-        <button class="carousel-arrow prev" onclick="prevSlide()">‹</button>
-        <button class="carousel-arrow next" onclick="nextSlide()">›</button>
-        <div class="carousel-dots">
-          <span class="active" onclick="goToSlide(0)"></span>
-          <span onclick="goToSlide(1)"></span>
-        </div>
+<!-- ===== Hero ===== -->
+<section class="hero">
+  <div class="eyebrow">COMEDY AGENT SKILL</div>
+  <h1>让 <span class="hl">AI</span> 学会喜剧</h1>
+  <p class="sub"><strong>写段子 · 剪视频 · 做海报</strong><br>一条指令，AI Agent 变身你的喜剧创作搭子——从创意文本到成片物料，一站搞定。</p>
+  <div class="cta-row">
+    <button class="btn-primary" onclick="goSpeed()">立即体验</button>
+    <a class="btn-ghost" href="https://clawhub.ai/kreator666/skills/cclaw" target="_blank" rel="noopener">ClawHub 查看 ↗</a>
+  </div>
+  <div class="scroll-hint">SCROLL</div>
+</section>
+
+<!-- ===== Skill 介绍 ===== -->
+<section class="section" id="skill">
+  <div class="sec-head reveal">
+    <div class="sec-eyebrow">CCLAW SKILL</div>
+    <h2 class="sec-title">一个 Skill，三种绝活</h2>
+    <p class="sec-desc">Cclaw 是开源的喜剧创作 Agent 技能：知识库驱动的文本创作、自然语言驱动的视频剪辑、按平台规格出图的海报生成。</p>
+  </div>
+  <div class="skill-grid">
+    <div class="skill-card reveal">
+      <span class="ico">✍️</span>
+      <h3>喜剧文本创作</h3>
+      <p>脱口秀、漫才、Sketch、日式短剧等 7 种输出模板。喜剧理论 + 案例库 + 黑话手册知识驱动，模糊需求自动追问澄清，成品附创作笔记。</p>
+      <div class="tags"><span class="tag">知识驱动</span><span class="tag">意图确认</span><span class="tag">创作笔记</span></div>
+    </div>
+    <div class="skill-card reveal">
+      <span class="ico">🎬</span>
+      <h3>视频剪辑</h3>
+      <p>用自然语言描述剪辑需求，Skill 自动解析并生成 FFmpeg 命令执行。不用记参数，说人话就能剪片。</p>
+      <div class="tags"><span class="tag">FFmpeg</span><span class="tag">自然语言驱动</span></div>
+    </div>
+    <div class="skill-card reveal">
+      <span class="ico">🖼️</span>
+      <h3>海报生成</h3>
+      <p>Brief 驱动的视觉生成：大麦 / 猫眼 / 秀动等平台的海报、详情长图、Banner 规格全部内置，创作完顺手出图。</p>
+      <div class="tags"><span class="tag">平台规格内置</span><span class="tag">Brief 驱动</span></div>
+    </div>
+  </div>
+  <div class="install-bar reveal">
+    <span class="lbl">INSTALL</span>
+    <code class="install-cmd" id="install-cmd">openclaw skills install @kreator666/cclaw</code>
+    <button class="btn-copy" id="btn-copy" onclick="copyInstall()">复制命令</button>
+  </div>
+  <p class="install-note reveal">一行命令，装进你的 AI Agent（OpenClaw / Claude Code 等兼容 Skills 标准的环境）。开源项目，
+    <a href="https://clawhub.ai/kreator666/skills/cclaw" target="_blank" rel="noopener">在 ClawHub 查看源码与文档 ↗</a>
+  </p>
+</section>
+
+<!-- ===== 团队介绍 ===== -->
+<section class="section" id="team">
+  <div class="sec-head reveal">
+    <div class="sec-eyebrow">TEAM</div>
+    <h2 class="sec-title">一个懂喜剧，一个懂 AI</h2>
+  </div>
+  <div class="team-grid">
+    <div class="member reveal">
+      <img class="photo" src="/images/team/member1.jpg" alt="意辰">
+      <div class="info">
+        <div class="role">CO-FOUNDER · 内容主创</div>
+        <h3>意辰</h3>
+        <div class="en">YI CHEN · 脱口秀主持人 / 演员 / 编剧</div>
+        <ul class="bio">
+          <li>原北京首家脱口秀厂牌「北脱」主理人</li>
+          <li>腾讯首档视频播客《喜剧搭子》节目监制、主持人</li>
+          <li>CCTV1《大国品牌》脱口秀导演、总编剧</li>
+          <li>CCTV6《佳片有约电影秀》主持人</li>
+          <li>2026 微博之夜《时代影人》总编剧</li>
+        </ul>
+        <div class="quote">"为 Cclaw 注入灵魂的男人。"</div>
       </div>
-
-      <!-- 个人主页 -->
-      <div class="profile-card">
-        <div class="profile-header"></div>
-        <div class="profile-body">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <img class="profile-avatar" src="https://via.placeholder.com/90?text=👤" id="profile-avatar" alt="头像">
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-top:8px;">
-              <button class="edit-btn" onclick="openEditModal()">✏️ 编辑资料</button>
-              <button id="btn-verify" class="edit-btn" onclick="openVerifyModal()" style="background:#fff7e6;color:#d48806;border:1px solid #ffd591;display:none;">🏅 申请认证</button>
-              <span id="verify-status" style="font-size:.75rem;color:#999;display:none;"></span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div class="profile-name" id="profile-name" style="margin-bottom:0;">加载中...</div>
-            <span id="verified-badge" style="display:none;background:linear-gradient(135deg,#f5af19,#f12711);color:#fff;font-size:.6875rem;padding:2px 8px;border-radius:12px;font-weight:600;">认证大V</span>
-          </div>
-          <div class="profile-id" id="profile-id">@--</div>
-          <div class="profile-bio" id="profile-bio">--</div>
-          <div class="profile-tags" id="profile-tags"></div>
-          <div class="profile-stats" id="profile-stats">
-            <div><div class="stat-value" id="stat-generations">--</div><div class="stat-label">生成次数</div></div>
-            <div><div class="stat-value" id="stat-followers">--</div><div class="stat-label">粉丝</div></div>
-            <div><div class="stat-value" id="stat-following">--</div><div class="stat-label">关注</div></div>
-            <div><div class="stat-value" id="stat-tokens">--</div><div class="stat-label">Token 消耗</div></div>
-          </div>
-          <div class="profile-section-title">📋 个人信息</div>
-          <div class="profile-info-grid">
-            <div class="profile-info-item"><div class="label">用户 ID</div><div id="info-user-id">--</div></div>
-            <div class="profile-info-item"><div class="label">加入时间</div><div id="info-joined">--</div></div>
-            <div class="profile-info-item"><div class="label">昵称</div><div id="info-nickname">--</div></div>
-            <div class="profile-info-item"><div class="label">角色</div><div id="info-role">创作者</div></div>
-          </div>
-        </div>
+    </div>
+    <div class="member reveal">
+      <img class="photo" src="/images/team/member2.png" alt="Diego">
+      <div class="info">
+        <div class="role">CO-FOUNDER · 技术主创</div>
+        <h3>Diego</h3>
+        <div class="en">AI AGENT 实战专家 · 全栈工程师</div>
+        <ul class="bio">
+          <li>国内最早一批落地 AI Agent 的实战专家</li>
+          <li>曾任全球 TOP3 平台 OKX 资深技术负责人</li>
+          <li>主导平台核心生态级产品从 0 到 1 全流程落地</li>
+          <li>18 年全栈技术沉淀，兼具严谨标准与前沿创新</li>
+          <li>且！热爱喜剧</li>
+        </ul>
+        <div class="quote">喜剧的灵魂 × 工程的严谨。</div>
       </div>
     </div>
-  </main>
-</div>
+  </div>
+</section>
 
-<!-- 申请认证 Modal -->
-<div class="modal-overlay" id="verify-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000;">
-    <div class="modal-box">
-        <h3 style="margin-top:0;">🏅 申请认证</h3>
-        <p style="font-size:.875rem;color:#666;margin-bottom:12px;">提交认证申请后，管理员将进行审核。通过后你的头像旁将显示"认证大V"标签。</p>
-        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">申请理由（可选）</label>
-        <textarea id="verify-reason" placeholder="简单说明你的创作背景或申请理由..." style="height:80px;resize:vertical;"></textarea>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-            <button onclick="closeVerifyModal()" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:#f0f0f0;cursor:pointer;">取消</button>
-            <button onclick="submitVerify()" style="padding:8px 16px;border:none;border-radius:8px;background:#d48806;color:#fff;cursor:pointer;">提交申请</button>
-        </div>
-    </div>
-</div>
-
-<!-- 编辑资料 Modal -->
-<div class="modal-overlay" id="edit-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000;">
-    <div class="modal-box">
-        <h3 style="margin-top:0;">编辑个人资料</h3>
-        <div style="text-align:center;margin-bottom:16px;">
-            <img id="edit-avatar-preview" src="https://via.placeholder.com/90?text=👤" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid #eee;"><br>
-            <input type="file" id="edit-avatar-file" accept="image/*" style="display:none;" onchange="onAvatarSelected(event)">
-            <button onclick="document.getElementById('edit-avatar-file').click()" style="margin-top:8px;padding:6px 14px;border:1px solid #ddd;border-radius:8px;background:#f8f8f8;cursor:pointer;font-size:.8125rem;">📷 更换头像</button>
-        </div>
-        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">昵称</label>
-        <input type="text" id="edit-nickname" placeholder="你的昵称" style="margin-bottom:12px;">
-        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">个人简介</label>
-        <textarea id="edit-bio" placeholder="写一段个人简介..." style="height:80px;resize:vertical;margin-bottom:12px;"></textarea>
-        <label style="font-size:.8125rem;color:#666;display:block;margin-bottom:4px;">兴趣标签（用逗号分隔）</label>
-        <input type="text" id="edit-tags" placeholder="如：喜剧创作, 短视频, 剧本写作" style="margin-bottom:12px;">
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-            <button onclick="closeEditModal()" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:#f0f0f0;cursor:pointer;">取消</button>
-            <button onclick="saveProfile()" style="padding:8px 16px;border:none;border-radius:8px;background:#2c7da0;color:#fff;cursor:pointer;">保存</button>
-        </div>
-    </div>
-</div>
+<footer class="footer">
+  © 2026 Cclaw · comedyclaw.cn<span class="sep">·</span>
+  <a href="https://clawhub.ai/kreator666/skills/cclaw" target="_blank" rel="noopener">ClawHub ↗</a><span class="sep">·</span>
+  <a href="/static/login.html">登录</a>
+</footer>
 
 <script src="/static/common.js"></script>
 <script>
-    requireAuth();
-    const currentUserId = getCurrentUserId();
-
-    // 轮播逻辑
-    let currentSlide = 0;
-    const totalSlides = 2;
-    const track = document.getElementById('carousel-track');
-    const dots = document.querySelectorAll('.carousel-dots span');
-
-    function updateCarousel() {
-        track.style.transform = `translateX(-${currentSlide * 100}%)`;
-        dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+// ===== 登录区（弱化处理：顶栏小组件）=====
+(function initAuthArea() {
+    const area = document.getElementById('auth-area');
+    if (getToken() && getCurrentUserId()) {
+        area.innerHTML = `
+            <span class="token-pill" id="token-pill">💰 --</span>
+            <a class="link-me" href="/static/me.html">我的</a>
+            <button class="btn-logout" onclick="logout()">退出</button>`;
+        fetch(`${API_BASE}/me/wallet`, { headers: authHeaders() })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d) document.getElementById('token-pill').textContent = '💰 ' + (d.balance ?? '--'); })
+            .catch(() => {});
+    } else {
+        area.innerHTML = `<a class="btn-login" href="/static/login.html">登 录</a>`;
     }
-    function nextSlide() { currentSlide = (currentSlide + 1) % totalSlides; updateCarousel(); }
-    function prevSlide() { currentSlide = (currentSlide - 1 + totalSlides) % totalSlides; updateCarousel(); }
-    function goToSlide(n) { currentSlide = n; updateCarousel(); }
-    setInterval(nextSlide, 8000);
+})();
 
-    let profileData = {};
+// ===== 复制安装命令 =====
+function copyInstall() {
+    const cmd = document.getElementById('install-cmd').textContent.trim();
+    const btn = document.getElementById('btn-copy');
+    const done = () => { btn.textContent = '已复制 ✓'; btn.classList.add('done');
+        setTimeout(() => { btn.textContent = '复制命令'; btn.classList.remove('done'); }, 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(done).catch(() => fallbackCopy(cmd, done));
+    } else { fallbackCopy(cmd, done); }
+}
+function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+}
 
-    async function loadUserProfile() {
-        try {
-            const meRes = await apiFetch('/me');
-            const me = await meRes.json();
-            profileData = me;
-            document.getElementById('profile-name').textContent = me.nickname || me.user_id;
-            document.getElementById('profile-id').textContent = '@' + me.user_id;
-            document.getElementById('profile-bio').textContent = me.bio || '暂无简介';
-            document.getElementById('profile-avatar').src = me.avatar_url || 'https://via.placeholder.com/90?text=👤';
-            document.getElementById('info-user-id').textContent = me.user_id;
-            document.getElementById('info-nickname').textContent = me.nickname || '未设置';
-            if (me.created_at) {
-                document.getElementById('info-joined').textContent = new Date(me.created_at).toLocaleDateString('zh-CN');
-            }
-            document.getElementById('info-role').textContent = me.user_id === 'admin' ? '管理员' : '创作者';
-
-            const verifiedBadge = document.getElementById('verified-badge');
-            if (me.is_verified) { verifiedBadge.style.display = 'inline-block'; } else { verifiedBadge.style.display = 'none'; }
-
-            const tagsEl = document.getElementById('profile-tags');
-            if (me.tags && me.tags.length) {
-                tagsEl.innerHTML = me.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
-            } else {
-                tagsEl.innerHTML = '<span style="color:#999;font-size:.8125rem;">暂无标签</span>';
-            }
-
-            loadVerificationStatus();
-            document.getElementById('stat-followers').textContent = (me.follower_count || 0).toLocaleString();
-            document.getElementById('stat-following').textContent = (me.following_count || 0).toLocaleString();
-        } catch (err) {
-            document.getElementById('profile-name').textContent = currentUserId || '未知用户';
-            document.getElementById('profile-id').textContent = '@' + (currentUserId || '--');
-        }
-    }
-
-    async function loadStats() {
-        try {
-            const res = await apiFetch('/me/stats');
-            const data = await res.json();
-            document.getElementById('stat-generations').textContent = (data.generations || 0).toLocaleString();
-        } catch (err) {
-            console.error('加载统计失败', err);
-        }
-    }
-
-    async function loadTokenBalance() {
-        try {
-            const res = await apiFetch('/me/wallet');
-            const data = await res.json();
-            document.getElementById('token-balance-pill').textContent = '💰 ' + (data.balance ?? '--');
-            document.getElementById('stat-tokens').textContent = (data.total_consumed || 0).toLocaleString();
-        } catch {
-            document.getElementById('token-balance-pill').textContent = '💰 --';
-        }
-    }
-
-    let pendingAvatarFile = null;
-
-    function onAvatarSelected(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        pendingAvatarFile = file;
-        const reader = new FileReader();
-        reader.onload = e => { document.getElementById('edit-avatar-preview').src = e.target.result; };
-        reader.readAsDataURL(file);
-    }
-
-    function openEditModal() {
-        pendingAvatarFile = null;
-        document.getElementById('edit-avatar-preview').src = profileData.avatar_url || 'https://via.placeholder.com/90?text=👤';
-        document.getElementById('edit-nickname').value = profileData.nickname || '';
-        document.getElementById('edit-bio').value = profileData.bio || '';
-        document.getElementById('edit-tags').value = (profileData.tags || []).join(', ');
-        document.getElementById('edit-modal').style.display = 'flex';
-    }
-    function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
-    async function saveProfile() {
-        try {
-            let avatarUrl = profileData.avatar_url || null;
-            if (pendingAvatarFile) {
-                const formData = new FormData();
-                formData.append('file', pendingAvatarFile);
-                const res = await fetch(`${API_BASE}/me/avatar`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${getToken()}` },
-                    body: formData,
-                });
-                if (!res.ok) throw new Error('头像上传失败');
-                const data = await res.json();
-                avatarUrl = data.avatar_url;
-            }
-            const payload = {
-                avatar_url: avatarUrl,
-                nickname: document.getElementById('edit-nickname').value.trim() || null,
-                bio: document.getElementById('edit-bio').value.trim() || null,
-                tags: document.getElementById('edit-tags').value.split(',').map(s => s.trim()).filter(Boolean),
-            };
-            await apiFetch('/me', { method: 'PUT', body: JSON.stringify(payload) });
-            closeEditModal();
-            loadUserProfile();
-        } catch (err) {
-            alert('保存失败：' + err.message);
-        }
-    }
-
-    async function loadVerificationStatus() {
-        const btn = document.getElementById('btn-verify');
-        const statusEl = document.getElementById('verify-status');
-        if (profileData.is_verified || profileData.user_id === 'admin') {
-            btn.style.display = 'none'; statusEl.style.display = 'none'; return;
-        }
-        try {
-            const res = await apiFetch('/me/verification');
-            if (res.ok) {
-                const data = await res.json();
-                if (data.status === 'pending') { btn.style.display = 'none'; statusEl.textContent = '⏳ 审核中'; statusEl.style.display = 'inline-block'; }
-                else if (data.status === 'rejected') { btn.style.display = 'inline-block'; statusEl.textContent = '❌ 上次申请未通过'; statusEl.style.display = 'inline-block'; }
-                else { btn.style.display = 'none'; statusEl.style.display = 'none'; }
-            } else { btn.style.display = 'inline-block'; statusEl.style.display = 'none'; }
-        } catch (err) { btn.style.display = 'inline-block'; statusEl.style.display = 'none'; }
-    }
-
-    function openVerifyModal() { document.getElementById('verify-reason').value = ''; document.getElementById('verify-modal').style.display = 'flex'; }
-    function closeVerifyModal() { document.getElementById('verify-modal').style.display = 'none'; }
-    async function submitVerify() {
-        try {
-            const reason = document.getElementById('verify-reason').value.trim() || null;
-            await apiFetch('/me/verify-apply', { method: 'POST', body: JSON.stringify({ reason }) });
-            closeVerifyModal();
-            alert('申请已提交，请等待管理员审核');
-            loadVerificationStatus();
-        } catch (err) { alert('申请失败：' + err.message); }
-    }
-
-    loadUserProfile();
-    loadStats();
-    loadTokenBalance();
+// ===== 滚动渐显 =====
+const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 </script>
 </body>
 </html>

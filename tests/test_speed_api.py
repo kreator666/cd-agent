@@ -33,11 +33,10 @@ def client():
         state.memory = store
         state.orch = mock_orch
 
-        # 创建用户和 Token
-        store.save_user_profile("test_user", "测试用户")
-        store.ensure_token_account("test_user")
+        # 创建用户和 Token（Token 账户不存在时自动创建，赠 5000）
+        store.get_token_account("test_user")
         from comedy_agent.auth.router import create_access_token
-        token = create_access_token({"sub": "test_user"})
+        token = create_access_token("test_user")
 
         with TestClient(app) as c:
             c.headers["Authorization"] = f"Bearer {token}"
@@ -98,10 +97,11 @@ class TestSpeedAPI:
         assert data["ip_role"]["profile_url"] == "/ip/lidan"
 
     def test_polish_insufficient_tokens(self, client):
-        """余额不足返回 402。"""
+        """余额不足不再拦截：一键生成始终可用，扣费失败仅记日志。"""
         state.memory.deduct_tokens("test_user", 5000)  # 扣光余额
         res = client.post("/speed/polish", json={
             "text": "测试文本",
             "intensity": "medium",
         })
-        assert res.status_code == 402
+        assert res.status_code == 200
+        assert "polished" in res.json()

@@ -74,12 +74,6 @@ async def speed_polish(
         raise HTTPException(status_code=503, detail="记忆系统未就绪")
 
     min_cost = INTENSITY_COST.get(request.intensity, 20)
-    account = state.memory.get_token_account(user_id)
-    if account.balance < min_cost:
-        raise HTTPException(
-            status_code=402,
-            detail=f"Token 余额不足（至少需 {min_cost}，余 {account.balance}）",
-        )
 
     # 模型选择：用户传入 > 用户配置 > 默认
     model_name = request.model

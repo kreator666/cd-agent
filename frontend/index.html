@@ -71,6 +71,40 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
 @keyframes hint{0%,100%{opacity:.4;transform:translate(-50%,0)}50%{opacity:.9;transform:translate(-50%,8px)}}
 @keyframes blobDrift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(60px,40px) scale(1.15)}}
 
+/* ===== 项目定位（整屏）===== */
+.about{min-height:100vh;display:flex;align-items:center;position:relative;overflow:hidden;scroll-margin-top:72px;
+  background:linear-gradient(200deg,#0f0f1a 0%,#171030 55%,#100d1e 100%)}
+.about::before{content:"";position:absolute;width:520px;height:520px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(245,175,25,.10) 0%,rgba(108,60,224,.08) 50%,transparent 70%);
+  bottom:-14%;right:-8%;animation:blobDrift 14s ease-in-out infinite alternate-reverse}
+.about::after{content:"笑";position:absolute;left:-2%;top:-8%;font-family:var(--serif);font-weight:900;
+  font-size:clamp(240px,30vw,420px);color:rgba(245,175,25,.045);pointer-events:none;line-height:1;transform:rotate(5deg)}
+.about-inner{position:relative;z-index:1;max-width:1160px;width:100%;margin:0 auto;padding:104px clamp(20px,4vw,48px) 64px}
+.about-head{text-align:center;margin-bottom:34px}
+.about-title{font-family:var(--serif);font-weight:900;font-size:clamp(34px,4.6vw,56px);letter-spacing:.05em;line-height:1.25}
+.about-title em{font-style:normal;background:linear-gradient(90deg,var(--lobster),var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.about-sub{margin:14px auto 0;max-width:700px;color:var(--muted);font-size:clamp(13px,1.4vw,15px)}
+.about-sub .en-line{display:block;margin-top:6px;color:var(--faint);font-size:12px;letter-spacing:.12em}
+.manifesto{text-align:center;margin-bottom:40px}
+.manifesto .m-zh{font-family:var(--serif);font-weight:700;font-size:clamp(18px,2.2vw,26px);letter-spacing:.06em;
+  background:linear-gradient(90deg,var(--lobster),var(--gold));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.manifesto .m-en{margin-top:6px;font-size:11.5px;color:var(--faint);letter-spacing:.16em}
+.about-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:36px}
+.a-card{background:rgba(22,22,42,.72);border:1px solid var(--line);border-radius:18px;padding:22px 20px;backdrop-filter:blur(6px);transition:.3s}
+.a-card:hover{transform:translateY(-4px);border-color:rgba(233,69,96,.3)}
+.a-kicker{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:700;letter-spacing:.18em;margin-bottom:12px}
+.a-kicker span{font-size:10px;font-weight:500;letter-spacing:.16em;color:var(--faint)}
+.about-grid .a-card:nth-child(1) .a-kicker{color:#ff8ba0}
+.about-grid .a-card:nth-child(2) .a-kicker{color:var(--purple-light)}
+.about-grid .a-card:nth-child(3) .a-kicker{color:var(--gold-light)}
+.about-grid .a-card:nth-child(4) .a-kicker{color:#ff8ba0}
+.a-zh{font-size:13.5px;line-height:1.8;color:var(--ink)}
+.a-zh strong{color:var(--gold-light);font-weight:600}
+.a-en{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:11px;line-height:1.65;color:var(--faint)}
+.vision{text-align:center;border-top:1px solid var(--line);padding-top:24px}
+.vision .v-zh{font-family:var(--serif);font-weight:700;font-size:clamp(15px,1.7vw,19px);letter-spacing:.06em}
+.vision .v-en{margin-top:6px;font-size:11px;color:var(--faint);letter-spacing:.14em}
+
 /* ===== 通用 Section ===== */
 .section{max-width:1160px;margin:0 auto;padding:clamp(80px,12vh,140px) clamp(20px,4vw,48px);scroll-margin-top:72px}
 .sec-head{margin-bottom:64px}
@@ -136,6 +170,11 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
   .team-grid{grid-template-columns:1fr}
   .topnav{display:none}
   .member .photo{width:38%;min-height:320px}
+  .about-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:600px){
+  .about-grid{grid-template-columns:1fr}
+  .about-inner{padding-top:88px}
 }
 @media(max-width:600px){
   .member{flex-direction:column}
@@ -153,6 +192,7 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
   </a>
   <nav class="topnav">
     <a href="#home">首页</a>
+    <a href="#about">项目定位</a>
     <a href="#skill">Skill 介绍</a>
     <a href="#team">团队介绍</a>
   </nav>
@@ -171,6 +211,48 @@ button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
     <a class="btn-ghost" href="https://clawhub.ai/kreator666/skills/cclaw" target="_blank" rel="noopener">ClawHub 查看 ↗</a>
   </div>
   <div class="scroll-hint">SCROLL</div>
+</section>
+
+<!-- ===== 项目定位 ===== -->
+<section class="about" id="about">
+  <div class="about-inner">
+    <div class="about-head reveal">
+      <h2 class="about-title">喜剧龙虾<em>，一条路</em></h2>
+      <p class="about-sub">全球首个开源喜剧 AI —— 面向全场景喜剧创作者的开源创作辅助工具，专注解决从灵感到成稿的「从 0 到 1」难题。
+        <span class="en-line">THE WORLD'S FIRST OPEN-SOURCE COMEDY AI — COMEDY LOBSTER</span>
+      </p>
+    </div>
+    <div class="manifesto reveal">
+      <div class="m-zh">「我们不制造廉价的梗，我们搭建真正的喜剧发生机制。」</div>
+      <div class="m-en">AI DELIVERS "ZERO TO ONE" · HUMANS TAKE IT FROM 1 TO INFINITY</div>
+    </div>
+    <div class="about-grid">
+      <div class="a-card reveal">
+        <div class="a-kicker">项目定位<span>POSITIONING</span></div>
+        <p class="a-zh">不只是一个工具，更是一条路。以 AI 为笔，把你的独特喜剧视角写成<strong>能笑、能传、能站得住</strong>的文本。</p>
+        <p class="a-en">More than a tool — a path forward. AI as the pen, turning your comedic perspective into writing that's funny, shareable, and built to last.</p>
+      </div>
+      <div class="a-card reveal">
+        <div class="a-kicker">行业之痛<span>THE GAP</span></div>
+        <p class="a-zh">心里有戏、笔下无文；AI 只懂堆砌笑点，不懂章法与人；新人写了稿，没人改、没人教、没人指路。</p>
+        <p class="a-en">People full of stories but unable to write them; AI with jokes but no craft; newcomers with no one to guide them.</p>
+      </div>
+      <div class="a-card reveal">
+        <div class="a-kicker">核心能力<span>CAPABILITIES</span></div>
+        <p class="a-zh"><strong>一事、一情、一念</strong>，即可生成完整喜剧文本。脱口秀、段子、漫才、Sketch、短剧、喜剧演讲——全类型结构内置。</p>
+        <p class="a-en">From a single moment, feeling, or thought — to a full script. Every comedy format built in.</p>
+      </div>
+      <div class="a-card reveal">
+        <div class="a-kicker">谁都能用<span>FOR EVERYONE</span></div>
+        <p class="a-zh">演员、编剧、短视频创作者、漫才 / Sketch 团队、企业年会与幽默演讲——每一个想把生活讲成喜剧的人。</p>
+        <p class="a-en">Comedians, creators, teams, and anyone who wants to make comedy out of life.</p>
+      </div>
+    </div>
+    <div class="vision reveal">
+      <div class="v-zh">做喜剧行业的基础设施 —— 用 AI 拆掉创作门槛，让每一个心怀欢喜的人，站上属于自己的舞台。</div>
+      <div class="v-en">TO BUILD THE INFRASTRUCTURE OF COMEDY — SO EVERYONE WITH JOY IN THEIR HEART HAS A STAGE</div>
+    </div>
+  </div>
 </section>
 
 <!-- ===== Skill 介绍 ===== -->

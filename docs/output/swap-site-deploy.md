@@ -29,13 +29,10 @@ curl -sk -o /dev/null -w "%{http_code}\n" https://www.comedyclaw.cn/            
 
 ## 域名 / HTTPS 状态
 
-- 占位域名：`swap.comedyclaw.cn`。**需要配置 DNS**：A 记录 → `47.86.55.179`
-- 当前仅监听 80 端口；DNS 生效后补 HTTPS：
-  ```bash
-  ssh claw '/root/.acme.sh/acme.sh --issue -d swap.comedyclaw.cn --webroot /var/www/frontend ...'  # 沿用主站 acme.sh 模式
-  ```
-  然后在 swap.conf 参照主站加 443 server + 80 跳转，证书放 `/etc/nginx/ssl/`
-- 换正式独立域名时：改 swap.conf 的 `server_name`，重新签发证书即可
+- 域名：`swap.comedyclaw.cn`，DNS A 记录已指向 `47.86.55.179`（2026-10-01 生效）
+- HTTPS 已完成：acme.sh ECC 证书（`/root/.acme.sh/swap.comedyclaw.cn_ecc/`），install-cert 到 `/etc/nginx/ssl/swap.crt` / `swap.key`，cron 自动续期（reloadcmd 已配）
+- swap.conf：80 端口仅保留续期验证 + 301 跳 443；业务全走 443
+- 换正式独立域名时：改 swap.conf 的 `server_name`，重新 `--issue` + `--install-cert` 即可
 
 ## nginx 配置要点（swap.conf）
 

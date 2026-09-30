@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交换详情 — 喜剧换 · Comedy Swap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="swap-common.css">
+<style>
+/* ===== 详情布局 ===== */
+.detail-grid{display:grid;grid-template-columns:1.65fr 1fr;gap:26px;align-items:start;margin-top:22px}
+.info-card{padding:26px 28px}
+.info-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
+.info-head h1{font-family:var(--serif);font-weight:900;font-size:clamp(22px,3vw,30px);line-height:1.4;letter-spacing:.03em}
+.info-maker{font-size:13px;color:var(--faint);margin-bottom:20px}
+.sec-block{border-top:1px dashed var(--line);padding:18px 0}
+.sec-block h3{font-size:13px;letter-spacing:.2em;color:var(--lobster);font-weight:700;margin-bottom:10px}
+.sec-block .txt{font-size:14.5px;line-height:1.85;white-space:pre-wrap;word-break:break-word}
+
+/* ===== 图集 ===== */
+.gallery-main{aspect-ratio:4/3;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:#0a0a14}
+.gallery-main img{width:100%;height:100%;object-fit:cover}
+.gallery-thumbs{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+.gallery-thumbs .th{width:72px;height:72px;border-radius:12px;overflow:hidden;border:2px solid transparent;cursor:pointer;transition:.2s;opacity:.65}
+.gallery-thumbs .th.active{border-color:var(--gold);opacity:1}
+.gallery-thumbs .th img{width:100%;height:100%;object-fit:cover}
+.gallery-thumbs .th:hover{opacity:1}
+
+/* ===== 右栏 ===== */
+.side-card{padding:24px 26px;position:sticky;top:96px}
+.side-card h2{font-family:var(--serif);font-weight:700;font-size:19px;margin-bottom:18px;letter-spacing:.05em}
+.stat-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:10px 0;border-bottom:1px dashed var(--line)}
+.stat-row b{color:var(--ink);font-weight:600}
+
+/* ===== 状态条 ===== */
+.status-banner{border-radius:14px;padding:14px 18px;font-size:14px;margin-bottom:18px;line-height:1.7}
+.status-banner.matched{color:var(--gold-light);background:var(--gold-soft);border:1px solid rgba(245,175,25,.35)}
+.status-banner.closed{color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.status-banner.open{color:var(--green);background:var(--green-soft);border:1px solid rgba(22,199,154,.3)}
+
+/* ===== 成交卡 ===== */
+.deal-card{border:1px solid rgba(245,175,25,.5);border-radius:16px;padding:20px 22px;margin-bottom:18px;
+  background:linear-gradient(160deg,rgba(245,175,25,.1),var(--card) 55%);box-shadow:0 8px 30px rgba(245,175,25,.1)}
+.deal-card .deal-title{font-family:var(--serif);font-weight:900;font-size:17px;color:var(--gold-light);margin-bottom:8px}
+.deal-card .deal-contact{font-size:14px;margin-top:10px;padding:10px 14px;background:rgba(0,0,0,.25);border-radius:10px;word-break:break-all}
+.deal-card .deal-contact span{color:var(--faint);font-size:12px;margin-right:8px}
+
+/* ===== maker 视角 offer 列表 ===== */
+.offer-item{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+.offer-item .o-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.offer-item .o-time{font-size:12px;color:var(--faint)}
+.offer-item .o-desc{font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word}
+.offer-item .o-contact{margin-top:10px;font-size:13px;padding:9px 12px;background:rgba(0,0,0,.25);border-radius:10px;word-break:break-all}
+.offer-item .o-contact span{color:var(--faint);font-size:11.5px;margin-right:8px}
+.offer-item .o-imgs{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.offer-item .o-imgs img{width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--line);cursor:pointer}
+.offer-item.accepted{border-color:rgba(245,175,25,.5);background:linear-gradient(160deg,rgba(245,175,25,.07),transparent 60%)}
+.offer-actions{margin-top:12px;text-align:right}
+
+/* ===== admin 精选按钮 ===== */
+.feature-btn{padding:7px 16px;border-radius:16px;font-size:13px;border:1px solid rgba(245,175,25,.4);color:var(--gold-light);background:var(--gold-soft);transition:.25s;white-space:nowrap}
+.feature-btn:hover{background:var(--gold);color:#0f0f1a}
+.feature-btn.featured{background:linear-gradient(90deg,var(--gold),var(--gold-light));color:#0f0f1a;font-weight:700}
+
+/* ===== 我的 offer 摘要（已提交过）===== */
+.my-offer-note{font-size:13px;color:var(--gold-light);background:var(--gold-soft);border:1px solid rgba(245,175,25,.3);border-radius:12px;padding:10px 14px;margin-bottom:16px}
+
+@media(max-width:960px){
+  .detail-grid{grid-template-columns:1fr}
+  .side-card{position:static}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="index.html">
+    <span class="logo">喜剧<em>换</em></span>
+    <span class="sub">COMEDY SWAP</span>
+  </a>
+  <div class="mid">
+    <a class="btn-primary btn-sm" href="create.html">＋ 发起交换</a>
+  </div>
+  <div class="auth-area" id="auth-area"></div>
+</header>
+
+<main class="page-wrap" style="max-width:1080px;">
+  <div id="page-loading" class="loading-state">加载中…</div>
+  <div id="page-error" class="empty-state" style="display:none;"></div>
+
+  <div id="detail-root" style="display:none;">
+    <div class="detail-grid">
+      <!-- 左：订单信息 -->
+      <div class="card info-card">
+        <div class="info-head">
+          <h1 id="d-title"></h1>
+          <button class="feature-btn" id="feature-btn" style="display:none;" onclick="toggleFeature()">☆ 加为精选</button>
+        </div>
+        <div class="info-maker">发布者：一位喜剧人 · <span id="d-status-tag"></span></div>
+
+        <div id="d-gallery" style="display:none;margin-bottom:18px;">
+          <div class="gallery-main" id="gallery-main"></div>
+          <div class="gallery-thumbs" id="gallery-thumbs"></div>
+        </div>
+
+        <div class="sec-block">
+          <h3>🎁 我提供什么</h3>
+          <div class="txt" id="d-offer"></div>
+        </div>
+        <div class="sec-block">
+          <h3>🎯 想换什么</h3>
+          <div class="txt" id="d-want"></div>
+        </div>
+      </div>
+
+      <!-- 右：操作区 -->
+      <div>
+        <div class="card side-card" id="side-open" style="display:none;">
+          <h2>提交你的 offer</h2>
+          <div id="side-status-slot"></div>
+          <form id="offer-form" onsubmit="submitOffer(event)">
+            <div id="my-offer-note" class="my-offer-note" style="display:none;">你已提交过 offer，可修改后重新提交</div>
+            <div class="field">
+              <label for="f-item">你拿什么换 <span class="char-count" id="item-count">0/500</span></label>
+              <textarea id="f-item" rows="4" maxlength="500" placeholder="描述你提供的物品或服务…" oninput="document.getElementById('item-count').textContent=this.value.length+'/500'"></textarea>
+            </div>
+            <div class="field">
+              <label for="f-contact">联系方式</label>
+              <input id="f-contact" type="text" placeholder="微信 / 手机 / 邮箱…">
+              <div class="hint">仅订单发布者可见，成交后双方可见</div>
+            </div>
+            <div class="field">
+              <label>图片（最多 3 张，可选）</label>
+              <div class="upload-row" id="offer-upload-row"></div>
+            </div>
+            <button class="btn-primary btn-block" type="submit" id="offer-submit-btn">提 交</button>
+          </form>
+        </div>
+
+        <div class="card side-card" id="side-maker" style="display:none;">
+          <h2>收到的 offer <span id="maker-count" class="tag tag-pending" style="margin-left:6px;">0</span></h2>
+          <div style="margin-bottom:18px;">
+            <button class="btn-ghost btn-sm" onclick="closeOrder()" id="btn-close-order">关闭订单</button>
+          </div>
+          <div id="offer-list"></div>
+        </div>
+
+        <div class="card side-card" id="side-deal" style="display:none;">
+          <h2>交换状态</h2>
+          <div id="side-deal-body"></div>
+        </div>
+
+        <div class="card side-card" id="side-closed" style="display:none;">
+          <h2>交换状态</h2>
+          <div class="status-banner closed">该订单已关闭，不再接受新的 offer。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <a href="index.html">交换市场</a><span class="sep">·</span>
+  <span>喜剧换 · Comedy Swap</span>
+</footer>
+
+<script src="common.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const ORDER_ID = params.get('id');
+if (!ORDER_ID) {
+    document.getElementById('page-loading').style.display = 'none';
+    document.getElementById('page-error').style.display = '';
+    document.getElementById('page-error').innerHTML = '<div class="ico">🔍</div><p>缺少订单参数，<a href="index.html" style="color:var(--gold)">返回列表</a></p>';
+    throw new Error('missing id');
+}
+
+const STATUS_LABEL = { open: '征集中', matched: '已成交', closed: '已关闭' };
+const OFFER_STATUS_LABEL = { pending: '待筛选', accepted: '已成交', rejected: '未中选', expired: '已失效' };
+
+let order = null;
+let isMaker = false;
+let featuredState = false; // 详情接口拿不到 featured，用前端状态记录
+let offerImages = [];      // 待提交 offer 的图片 url
+
+/* ===== 加载详情 ===== */
+async function loadOrder() {
+    document.getElementById('page-loading').style.display = '';
+    document.getElementById('page-error').style.display = 'none';
+    document.getElementById('detail-root').style.display = 'none';
+    try {
+        const res = await apiFetch(`/swap/orders/${encodeURIComponent(ORDER_ID)}`);
+        order = await res.json();
+        render();
+    } catch (e) {
+        document.getElementById('page-loading').style.display = 'none';
+        const box = document.getElementById('page-error');
+        box.style.display = '';
+        box.innerHTML = '<div class="ico">🛰️</div><p>加载失败：' + escapeHtml(e.message) +
+            ' <a href="index.html" style="color:var(--gold)">返回列表</a></p>';
+    }
+}
+
+function render() {
+    document.getElementById('page-loading').style.display = 'none';
+    document.getElementById('detail-root').style.display = '';
+
+    document.getElementById('d-title').textContent = order.title || '';
+    document.getElementById('d-offer').textContent = order.offer_desc || '—';
+    document.getElementById('d-want').textContent = order.want_desc || '—';
+    document.getElementById('d-status-tag').textContent = STATUS_LABEL[order.status] || order.status;
+
+    // 图集
+    const imgs = Array.isArray(order.images) ? order.images.filter(Boolean) : [];
+    const gal = document.getElementById('d-gallery');
+    if (imgs.length) {
+        gal.style.display = '';
+        renderGallery(imgs);
+    } else {
+        gal.style.display = 'none';
+    }
+
+    const myId = getCurrentUserId();
+    const offers = Array.isArray(order.offers) ? order.offers : null;
+    isMaker = !!(myId && order.maker_id && String(order.maker_id) === String(myId)) || offers !== null;
+
+    // admin 精选按钮（始终尝试显示，点击后 403 则隐藏）
+    document.getElementById('feature-btn').style.display = '';
+
+    // 状态条
+    const slot = document.getElementById('side-status-slot');
+    slot.innerHTML = '';
+
+    const show = (id) => {
+        ['side-open', 'side-maker', 'side-deal', 'side-closed'].forEach(k =>
+            document.getElementById(k).style.display = k === id ? '' : 'none');
+    };
+
+    if (order.status === 'closed') {
+        show('side-closed');
+    } else if (isMaker && offers) {
+        show('side-maker');
+        renderMakerOffers(offers);
+    } else if (order.status === 'matched') {
+        // 成交双方：maker 已在上面分支；这里是成交 taker（拿不到 offers 时）
+        show('side-deal');
+        renderDealCard(null);
+    } else if (order.status === 'open') {
+        show('side-open');
+        renderOfferForm();
+    } else {
+        show('side-deal');
+        renderDealCard(null);
+    }
+}
+
+/* ===== 图集渲染 ===== */
+function renderGallery(imgs) {
+    const main = document.getElementById('gallery-main');
+    const thumbs = document.getElementById('gallery-thumbs');
+    const showAt = (i) => {
+        main.innerHTML = `<img src="${escapeHtml(imgs[i])}" alt="" onerror="this.parentNode.innerHTML='<div class=img-ph style=&quot;height:100%&quot;>🎁</div>'">`;
+        thumbs.querySelectorAll('.th').forEach((el, j) => el.classList.toggle('active', j === i));
+    };
+    main.innerHTML = '';
+    thumbs.innerHTML = imgs.map((u, i) =>
+        `<div class="th${i === 0 ? ' active' : ''}"><img src="${escapeHtml(u)}" alt="" onerror="this.remove()"></div>`).join('');
+    thumbs.querySelectorAll('.th').forEach((el, i) => el.addEventListener('click', () => showAt(i)));
+    showAt(0);
+}
+
+/* ===== taker：offer 表单 ===== */
+function renderOfferForm() {
+    // 已提交过 → 尝试回填（后端可能在详情里带 my_offer；缺失则静默跳过）
+    const mine = order.my_offer || null;
+    if (mine) {
+        document.getElementById('my-offer-note').style.display = '';
+        document.getElementById('f-item').value = mine.item_desc || '';
+        document.getElementById('f-contact').value = mine.contact || '';
+        document.getElementById('item-count').textContent = (mine.item_desc || '').length + '/500';
+        offerImages = Array.isArray(mine.images) ? [...mine.images] : [];
+    } else {
+        document.getElementById('my-offer-note').style.display = 'none';
+        offerImages = [];
+    }
+    renderOfferUploadRow();
+}
+
+function renderOfferUploadRow() {
+    const row = document.getElementById('offer-upload-row');
+    let html = offerImages.map((u, i) => `
+        <div class="upload-thumb">
+          <img src="${escapeHtml(u)}" alt="" onerror="this.parentNode.remove()">
+          <span class="del" onclick="removeOfferImage(${i})">×</span>
+        </div>`).join('');
+    if (offerImages.length < 3) {
+        html += `
+        <label class="upload-add" id="upload-add-btn">
+          ＋<span>传图</span>
+          <input type="file" accept="image/*" style="display:none;" onchange="handleOfferImage(this)">
+        </label>`;
+    }
+    row.innerHTML = html;
+}
+
+async function handleOfferImage(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (offerImages.length >= 3) { toast('最多 3 张图', 'warn'); return; }
+    const addBtn = document.getElementById('upload-add-btn');
+    try {
+        if (addBtn) addBtn.innerHTML = '<div class="upload-loading">上传中</div>';
+        const url = await uploadSwapImage(file);
+        if (url) offerImages.push(url);
+    } catch (e) {
+        toast('图片上传失败：' + e.message, 'error');
+    } finally {
+        renderOfferUploadRow();
+    }
+    input.value = '';
+}
+
+function removeOfferImage(i) {
+    offerImages.splice(i, 1);
+    renderOfferUploadRow();
+}
+
+async function submitOffer(e) {
+    e.preventDefault();
+    if (!requireAuth()) return;
+    const btn = document.getElementById('offer-submit-btn');
+    const itemDesc = document.getElementById('f-item').value.trim();
+    const contact = document.getElementById('f-contact').value.trim();
+    if (!itemDesc) { toast('请描述你提供什么', 'warn'); return; }
+    btn.disabled = true;
+    try {
+        await apiFetch(`/swap/orders/${encodeURIComponent(ORDER_ID)}/offers`, {
+            method: 'POST',
+            body: JSON.stringify({ item_desc: itemDesc, contact, images: offerImages }),
+        });
+        toast('offer 已提交 🎉', 'success');
+        document.getElementById('my-offer-note').style.display = '';
+    } catch (err) {
+        toast('提交失败：' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* ===== maker：offer 列表 ===== */
+function renderMakerOffers(offers) {
+    document.getElementById('maker-count').textContent = String(offers.length);
+    const box = document.getElementById('offer-list');
+    document.getElementById('btn-close-order').style.display = order.status === 'open' ? '' : 'none';
+    if (!offers.length) {
+        box.innerHTML = '<div class="empty-state" style="padding:32px 12px;"><div class="ico">📭</div><p>还没有 offer，稍安勿躁</p></div>';
+        return;
+    }
+    box.innerHTML = offers.map(o => {
+        const imgs = Array.isArray(o.images) ? o.images.filter(Boolean) : [];
+        const accepted = o.status === 'accepted';
+        const pending = o.status === 'pending' && order.status === 'open';
+        return `
+        <div class="offer-item${accepted ? ' accepted' : ''}">
+          <div class="o-head">
+            <span class="tag tag-${escapeHtml(o.status || 'pending')}">${OFFER_STATUS_LABEL[o.status] || escapeHtml(o.status || '')}</span>
+            <span class="o-time">${escapeHtml(o.created_at || o.submitted_at || '')}</span>
+          </div>
+          <div class="o-desc">${escapeHtml(o.item_desc || '—')}</div>
+          ${imgs.length ? `<div class="o-imgs">${imgs.map(u => `<img src="${escapeHtml(u)}" alt="" onclick="window.open('${escapeHtml(u)}','_blank')">`).join('')}</div>` : ''}
+          <div class="o-contact"><span>联系方式</span>${escapeHtml(o.contact || '—')}</div>
+          ${pending ? `<div class="offer-actions"><button class="btn-primary btn-sm" onclick="acceptOffer(${o.offer_id ?? o.id})">✓ 选这个成交</button></div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+async function acceptOffer(offerId) {
+    const ok = await confirmDialog('确认选择这个 offer 成交吗？成交后订单将关闭。');
+    if (!ok) return;
+    try {
+        await apiFetch(`/swap/offers/${encodeURIComponent(offerId)}/accept`, { method: 'POST', body: '{}' });
+        toast('已成交 🎉', 'success');
+        loadOrder();
+    } catch (e) {
+        toast('操作失败：' + e.message, 'error');
+    }
+}
+
+async function closeOrder() {
+    const ok = await confirmDialog('确认关闭该订单吗？关闭后不再接受新的 offer。');
+    if (!ok) return;
+    try {
+        await apiFetch(`/swap/orders/${encodeURIComponent(ORDER_ID)}/close`, { method: 'POST', body: '{}' });
+        toast('订单已关闭', 'success');
+        loadOrder();
+    } catch (e) {
+        toast('操作失败：' + e.message, 'error');
+    }
+}
+
+/* ===== 成交卡 ===== */
+function renderDealCard(acceptedOffer) {
+    const body = document.getElementById('side-deal-body');
+    const contact = acceptedOffer ? (acceptedOffer.contact || '—') : '—';
+    const desc = acceptedOffer ? (acceptedOffer.item_desc || '') : '';
+    body.innerHTML = `
+      <div class="deal-card">
+        <div class="deal-title">🎉 恭喜成交！</div>
+        <div style="font-size:13.5px;color:var(--muted);">请联系对方完成交换。</div>
+        ${desc ? `<div style="font-size:13px;margin-top:10px;color:var(--ink);">成交内容：${escapeHtml(desc)}</div>` : ''}
+        <div class="deal-contact"><span>联系方式</span>${escapeHtml(contact)}</div>
+      </div>`;
+}
+
+/* ===== admin：精选切换 ===== */
+async function toggleFeature() {
+    try {
+        await apiFetch(`/swap/admin/orders/${encodeURIComponent(ORDER_ID)}/feature`, { method: 'POST', body: '{}' });
+        featuredState = !featuredState;
+        renderFeatureBtn();
+        toast(featuredState ? '已加为精选 ⭐' : '已取消精选', 'success');
+    } catch (e) {
+        if (/403/.test(e.message)) {
+            toast('需要管理员权限', 'error');
+            document.getElementById('feature-btn').style.display = 'none';
+        } else {
+            toast('操作失败：' + e.message, 'error');
+        }
+    }
+}
+
+function renderFeatureBtn() {
+    const btn = document.getElementById('feature-btn');
+    btn.textContent = featuredState ? '★ 取消精选' : '☆ 加为精选';
+    btn.classList.toggle('featured', featuredState);
+}
+
+renderAuthArea();
+renderFeatureBtn();
+loadOrder();
+</script>
+</body>
+</html>

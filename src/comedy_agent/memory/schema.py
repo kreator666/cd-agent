@@ -10,7 +10,16 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -991,6 +1000,88 @@ class JokeComment(Base):
         nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False, comment="点评内容")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+# ------------------------------------------------------------------ #
+# SwapOrder —— 物品/服务交换订单
+# ------------------------------------------------------------------ #
+class SwapOrder(Base):
+    """物品/服务交换订单表。"""
+
+    __tablename__ = "swap_orders"
+
+    order_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    maker_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(128), nullable=False, comment="标题")
+    offer_desc: Mapped[str] = mapped_column(Text, nullable=False, comment="我提供什么")
+    want_desc: Mapped[str] = mapped_column(Text, nullable=False, comment="想换什么")
+    images: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False, comment="配图 URL 列表（≤3 张）"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="open", nullable=False, comment="open / deal / closed"
+    )
+    featured: Mapped[bool] = mapped_column(
+        default=False, nullable=False, comment="是否精选"
+    )
+    featured_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, comment="精选时间"
+    )
+    deal_offer_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="成交的交换意向 ID"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+# ------------------------------------------------------------------ #
+# SwapOffer —— 交换意向
+# ------------------------------------------------------------------ #
+class SwapOffer(Base):
+    """交换意向表。同一用户对同一订单仅可提交一条意向，重复提交则更新内容。"""
+
+    __tablename__ = "swap_offers"
+    __table_args__ = (
+        UniqueConstraint("order_id", "taker_id", name="uq_swap_offer_order_taker"),
+    )
+
+    offer_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    order_id: Mapped[str] = mapped_column(
+        ForeignKey("swap_orders.order_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    taker_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    item_desc: Mapped[str] = mapped_column(Text, nullable=False, comment="我拿什么交换")
+    images: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False, comment="配图 URL 列表（≤3 张）"
+    )
+    contact: Mapped[str] = mapped_column(String(256), nullable=False, comment="联系方式")
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / accepted / rejected"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )

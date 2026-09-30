@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
-from sqlalchemy import create_engine, func, inspect
+from sqlalchemy import create_engine, func, inspect, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -33,6 +33,8 @@ from comedy_agent.memory.models import (
     SaltHistoryData,
     ScriptData,
     SubmissionData,
+    SwapOfferData,
+    SwapOrderData,
     TipRecordData,
     TokenAccountData,
     TokenConsumptionData,
@@ -53,6 +55,8 @@ from comedy_agent.memory.schema import (
     KnowledgeCard,
     SaltHistory,
     ScriptSubmission,
+    SwapOffer,
+    SwapOrder,
     TipRecord,
     TokenConsumptionRecord,
     UserConversation,
@@ -2579,3 +2583,229 @@ class SQLMemoryStore(MemoryStore):
                 "reviewed_at": app.reviewed_at.isoformat() if app.reviewed_at else None,
                 "reviewer_id": app.reviewer_id,
             }
+
+    # ------------------------------------------------------------------ #
+    # 物品/服务交换平台 (Swap)
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _swap_order_to_data(row: SwapOrder) -> SwapOrderData:
+        """SwapOrder ORM 行转数据类。"""
+        return SwapOrderData(
+            order_id=row.order_id,
+            maker_id=row.maker_id,
+            title=row.title,
+            offer_desc=row.offer_desc,
+            want_desc=row.want_desc,
+            images=row.images or [],
+            status=row.status,
+            featured=row.featured,
+            featured_at=row.featured_at.isoformat() if row.featured_at else None,
+            deal_offer_id=row.deal_offer_id,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+            updated_at=row.updated_at.isoformat() if row.updated_at else None,
+        )
+
+    @staticmethod
+    def _swap_offer_to_data(row: SwapOffer) -> SwapOfferData:
+        """SwapOffer ORM 行转数据类。"""
+        return SwapOfferData(
+            offer_id=row.offer_id,
+            order_id=row.order_id,
+            taker_id=row.taker_id,
+            item_desc=row.item_desc,
+            images=row.images or [],
+            contact=row.contact,
+            status=row.status,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+            updated_at=row.updated_at.isoformat() if row.updated_at else None,
+        )
+
+    def save_swap_order(self, order: SwapOrderData) -> SwapOrderData:
+        """保存或更新交换订单。"""
+        order_id = order.order_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = session.query(SwapOrder).filter_by(order_id=order_id).first()
+            if row is None:
+                row = SwapOrder(
+                    order_id=order_id,
+                    maker_id=order.maker_id,
+                    title=order.title,
+                    offer_desc=order.offer_desc,
+                    want_desc=order.want_desc,
+                    images=order.images,
+                    status=order.status,
+                )
+                session.add(row)
+            else:
+                row.title = order.title
+                row.offer_desc = order.offer_desc
+                row.want_desc = order.want_desc
+                row.images = order.images
+                row.status = order.status
+                if order.deal_offer_id is not None:
+                    row.deal_offer_id = order.deal_offer_id
+                row.updated_at = self._now()
+            session.commit()
+            logger.debug("Saved swap order: %s", order_id)
+            return self._swap_order_to_data(row)
+
+    def get_swap_order(self, order_id: str) -> SwapOrderData | None:
+        """读取指定交换订单。"""
+        with self._new_session() as session:
+            row = session.query(SwapOrder).filter_by(order_id=order_id).first()
+            if row is None:
+                return None
+            return self._swap_order_to_data(row)
+
+    def list_swap_orders(
+        self,
+        status: str | None = None,
+        featured: bool | None = None,
+        maker_id: str | None = None,
+        keyword: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[SwapOrderData]:
+        """列出交换订单，按创建时间倒序。"""
+        with self._new_session() as session:
+            query = session.query(SwapOrder)
+            if status is not None:
+                query = query.filter_by(status=status)
+            if featured is not None:
+                query = query.filter_by(featured=featured)
+            if maker_id is not None:
+                query = query.filter_by(maker_id=maker_id)
+            if keyword:
+                like = f"%{keyword}%"
+                query = query.filter(
+                    or_(
+                        SwapOrder.title.like(like),
+                        SwapOrder.offer_desc.like(like),
+                        SwapOrder.want_desc.like(like),
+                    )
+                )
+            rows = (
+                query.order_by(SwapOrder.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return [self._swap_order_to_data(r) for r in rows]
+
+    def count_swap_orders(
+        self,
+        status: str | None = None,
+        featured: bool | None = None,
+        keyword: str | None = None,
+    ) -> int:
+        """统计交换订单数量。"""
+        with self._new_session() as session:
+            query = session.query(SwapOrder)
+            if status is not None:
+                query = query.filter_by(status=status)
+            if featured is not None:
+                query = query.filter_by(featured=featured)
+            if keyword:
+                like = f"%{keyword}%"
+                query = query.filter(
+                    or_(
+                        SwapOrder.title.like(like),
+                        SwapOrder.offer_desc.like(like),
+                        SwapOrder.want_desc.like(like),
+                    )
+                )
+            return query.count()
+
+    def set_swap_featured(self, order_id: str, featured: bool) -> SwapOrderData | None:
+        """设置订单精选状态。"""
+        with self._new_session() as session:
+            row = session.query(SwapOrder).filter_by(order_id=order_id).first()
+            if row is None:
+                return None
+            row.featured = featured
+            row.featured_at = self._now() if featured else None
+            row.updated_at = self._now()
+            session.commit()
+            logger.debug("Set swap order featured: %s -> %s", order_id, featured)
+            return self._swap_order_to_data(row)
+
+    def save_swap_offer(self, offer: SwapOfferData) -> SwapOfferData:
+        """保存或更新交换意向。offer_id 已存在时仅更新内容，保留原状态。"""
+        offer_id = offer.offer_id or uuid.uuid4().hex[:16]
+        with self._new_session() as session:
+            row = session.query(SwapOffer).filter_by(offer_id=offer_id).first()
+            if row is None:
+                row = SwapOffer(
+                    offer_id=offer_id,
+                    order_id=offer.order_id,
+                    taker_id=offer.taker_id,
+                    item_desc=offer.item_desc,
+                    images=offer.images,
+                    contact=offer.contact or "",
+                    status=offer.status,
+                )
+                session.add(row)
+            else:
+                row.item_desc = offer.item_desc
+                row.images = offer.images
+                row.contact = offer.contact or ""
+                row.updated_at = self._now()
+            session.commit()
+            logger.debug("Saved swap offer: %s", offer_id)
+            return self._swap_offer_to_data(row)
+
+    def get_swap_offer(self, offer_id: str) -> SwapOfferData | None:
+        """读取指定交换意向。"""
+        with self._new_session() as session:
+            row = session.query(SwapOffer).filter_by(offer_id=offer_id).first()
+            if row is None:
+                return None
+            return self._swap_offer_to_data(row)
+
+    def list_swap_offers(
+        self, order_id: str | None = None, taker_id: str | None = None
+    ) -> list[SwapOfferData]:
+        """列出交换意向，按更新时间倒序。"""
+        with self._new_session() as session:
+            query = session.query(SwapOffer)
+            if order_id is not None:
+                query = query.filter_by(order_id=order_id)
+            if taker_id is not None:
+                query = query.filter_by(taker_id=taker_id)
+            rows = query.order_by(SwapOffer.updated_at.desc()).all()
+            return [self._swap_offer_to_data(r) for r in rows]
+
+    def count_swap_offers(self, order_id: str) -> int:
+        """统计指定订单的交换意向数量。"""
+        with self._new_session() as session:
+            return session.query(SwapOffer).filter_by(order_id=order_id).count()
+
+    def accept_swap_offer(self, offer_id: str) -> SwapOrderData | None:
+        """成交：该意向置 accepted，同单其他 pending 意向置 rejected，订单置 deal。"""
+        with self._new_session() as session:
+            offer = session.query(SwapOffer).filter_by(offer_id=offer_id).first()
+            if offer is None:
+                return None
+            order = session.query(SwapOrder).filter_by(order_id=offer.order_id).first()
+            if order is None:
+                return None
+            offer.status = "accepted"
+            offer.updated_at = self._now()
+            others = (
+                session.query(SwapOffer)
+                .filter(
+                    SwapOffer.order_id == order.order_id,
+                    SwapOffer.status == "pending",
+                    SwapOffer.offer_id != offer_id,
+                )
+                .all()
+            )
+            for other in others:
+                other.status = "rejected"
+                other.updated_at = self._now()
+            order.status = "deal"
+            order.deal_offer_id = offer_id
+            order.updated_at = self._now()
+            session.commit()
+            logger.debug("Accepted swap offer: %s (order %s)", offer_id, order.order_id)
+            return self._swap_order_to_data(order)

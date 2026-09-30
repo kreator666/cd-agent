@@ -362,3 +362,38 @@ class BannedWordData(BaseModel):
     category: str | None = Field(default=None, description="分类：political / competitor / vulgar")
     added_by: str | None = Field(default=None, description="添加者用户 ID")
     created_at: datetime | None = Field(default=None, description="创建时间")
+
+
+# ------------------------------------------------------------------ #
+# 物品/服务交换平台 (Swap)
+# ------------------------------------------------------------------ #
+class SwapOrderData(BaseModel):
+    """交换订单数据。"""
+
+    order_id: str | None = Field(default=None, description="订单唯一标识，留空则自动生成")
+    maker_id: str = Field(description="发布者用户 ID")
+    title: str = Field(description="标题")
+    offer_desc: str = Field(description="我提供什么")
+    want_desc: str = Field(description="想换什么")
+    images: list[str] = Field(default_factory=list, description="配图 URL 列表（≤3 张）")
+    status: str = Field(default="open", description="状态：open / deal / closed")
+    featured: bool = Field(default=False, description="是否精选")
+    featured_at: str | None = Field(default=None, description="精选时间")
+    deal_offer_id: str | None = Field(default=None, description="成交的交换意向 ID")
+    created_at: str | None = Field(default=None, description="创建时间")
+    updated_at: str | None = Field(default=None, description="更新时间")
+    offer_count: int = Field(default=0, description="交换意向数（仅输出用，不入库）")
+
+
+class SwapOfferData(BaseModel):
+    """交换意向数据。"""
+
+    offer_id: str | None = Field(default=None, description="意向唯一标识，留空则自动生成")
+    order_id: str = Field(description="所属订单 ID")
+    taker_id: str = Field(description="提交者用户 ID")
+    item_desc: str = Field(description="我拿什么交换")
+    images: list[str] = Field(default_factory=list, description="配图 URL 列表（≤3 张）")
+    contact: str | None = Field(default=None, description="联系方式")
+    status: str = Field(default="pending", description="状态：pending / accepted / rejected")
+    created_at: str | None = Field(default=None, description="创建时间")
+    updated_at: str | None = Field(default=None, description="更新时间")

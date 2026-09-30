@@ -27,6 +27,8 @@ from comedy_agent.memory.models import (
     SaltHistoryData,
     ScriptData,
     SubmissionData,
+    SwapOfferData,
+    SwapOrderData,
     TipRecordData,
     TokenAccountData,
     TokenConsumptionData,
@@ -493,6 +495,57 @@ class UnifiedMemory(MemoryStore):
     # ------------------------------------------------------------------ #
     def get_user_stats(self, user_id: str) -> dict[str, Any]:
         return self._store.get_user_stats(user_id)
+
+    # ------------------------------------------------------------------ #
+    # 物品/服务交换平台 (Swap)
+    # ------------------------------------------------------------------ #
+    def save_swap_order(self, order: SwapOrderData) -> SwapOrderData:
+        return self._store.save_swap_order(order)
+
+    def get_swap_order(self, order_id: str) -> SwapOrderData | None:
+        return self._store.get_swap_order(order_id)
+
+    def list_swap_orders(
+        self,
+        status: str | None = None,
+        featured: bool | None = None,
+        maker_id: str | None = None,
+        keyword: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[SwapOrderData]:
+        return self._store.list_swap_orders(
+            status=status, featured=featured, maker_id=maker_id,
+            keyword=keyword, limit=limit, offset=offset,
+        )
+
+    def count_swap_orders(
+        self,
+        status: str | None = None,
+        featured: bool | None = None,
+        keyword: str | None = None,
+    ) -> int:
+        return self._store.count_swap_orders(status=status, featured=featured, keyword=keyword)
+
+    def set_swap_featured(self, order_id: str, featured: bool) -> SwapOrderData | None:
+        return self._store.set_swap_featured(order_id, featured)
+
+    def save_swap_offer(self, offer: SwapOfferData) -> SwapOfferData:
+        return self._store.save_swap_offer(offer)
+
+    def get_swap_offer(self, offer_id: str) -> SwapOfferData | None:
+        return self._store.get_swap_offer(offer_id)
+
+    def list_swap_offers(
+        self, order_id: str | None = None, taker_id: str | None = None
+    ) -> list[SwapOfferData]:
+        return self._store.list_swap_offers(order_id=order_id, taker_id=taker_id)
+
+    def count_swap_offers(self, order_id: str) -> int:
+        return self._store.count_swap_offers(order_id)
+
+    def accept_swap_offer(self, offer_id: str) -> SwapOrderData | None:
+        return self._store.accept_swap_offer(offer_id)
 
     # ------------------------------------------------------------------ #
     # 高级接口：Token 预算控制的上下文文本

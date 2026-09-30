@@ -1,0 +1,137 @@
+/* ================================================
+   Comedy Swap — 公共样式（与主站 frontend/index.html 设计语言一致）
+   ================================================ */
+
+:root{
+  --bg:#0f0f1a; --card:#16162a; --ink:#f0eef5; --muted:#9892a6; --faint:#6d6880;
+  --lobster:#e94560; --lobster-deep:#c73050; --lobster-soft:rgba(233,69,96,.14);
+  --gold:#f5af19; --gold-light:#ffe082; --gold-soft:rgba(245,175,25,.13);
+  --purple:#6c3ce0; --purple-light:#a78bfa; --purple-soft:rgba(108,60,224,.16);
+  --green:#16c79a; --green-soft:rgba(22,199,154,.14);
+  --line:rgba(255,255,255,.07);
+  --serif:"Noto Serif SC",serif; --sans:"Noto Sans SC",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;letter-spacing:.02em;overflow-x:hidden;min-height:100vh}
+a{color:inherit;text-decoration:none}
+button{font:inherit;cursor:pointer;background:none;border:0;color:inherit}
+img{display:block;max-width:100%}
+::selection{background:var(--gold);color:#0f0f1a}
+
+/* ===== 顶栏 ===== */
+.topbar{position:fixed;inset:0 0 auto 0;height:72px;z-index:50;display:flex;align-items:center;justify-content:space-between;
+  padding:0 clamp(16px,4vw,56px);background:rgba(15,15,26,.78);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+.brand .logo{font-family:var(--serif);font-weight:900;font-size:22px;letter-spacing:.1em;color:var(--ink)}
+.brand .logo em{color:var(--lobster);font-style:normal}
+.brand .sub{font-size:11px;color:var(--muted);letter-spacing:.24em}
+.auth-area{display:flex;align-items:center;gap:14px;font-size:13px}
+.token-pill{padding:5px 14px;border-radius:20px;color:var(--gold);background:var(--gold-soft);border:1px solid rgba(245,175,25,.28);white-space:nowrap;font-weight:500}
+.btn-login{padding:8px 22px;background:linear-gradient(135deg,var(--lobster),var(--lobster-deep));border-radius:22px;color:#fff;font-size:13px;letter-spacing:.08em;font-weight:600;transition:.25s;box-shadow:0 4px 14px rgba(233,69,96,.35)}
+.btn-login:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(233,69,96,.5)}
+.link-me{color:var(--muted);transition:color .2s}
+.link-me:hover{color:var(--ink)}
+.btn-logout{color:var(--faint);font-size:13px;transition:color .2s}
+.btn-logout:hover{color:var(--ink)}
+
+/* ===== 按钮 ===== */
+.btn-primary{padding:12px 32px;background:linear-gradient(135deg,var(--lobster),var(--lobster-deep));color:#fff;border-radius:26px;font-weight:700;font-size:14px;letter-spacing:.08em;transition:.28s;box-shadow:0 6px 20px rgba(233,69,96,.35);display:inline-block}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(233,69,96,.45)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-ghost{padding:12px 32px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:26px;color:var(--ink);font-size:14px;letter-spacing:.08em;transition:.28s;display:inline-block}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-2px)}
+.btn-sm{padding:8px 20px;font-size:13px;border-radius:18px}
+.btn-block{width:100%;text-align:center}
+
+/* ===== 页面主体 ===== */
+.page-wrap{max-width:1160px;margin:0 auto;padding:104px clamp(16px,4vw,48px) 64px;min-height:calc(100vh - 72px)}
+.sec-eyebrow{display:inline-block;font-size:12px;letter-spacing:.3em;font-weight:700;padding:6px 18px;border-radius:999px;margin-bottom:16px;text-indent:.3em}
+.sec-eyebrow.lobster{color:var(--lobster);background:var(--lobster-soft)}
+.sec-eyebrow.gold{color:var(--gold-light);background:var(--gold-soft)}
+.sec-eyebrow.purple{color:var(--purple-light);background:var(--purple-soft)}
+.sec-title{font-family:var(--serif);font-weight:700;font-size:clamp(24px,3.4vw,38px);letter-spacing:.04em}
+
+/* ===== 卡片 ===== */
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;transition:.3s}
+.card:hover{border-color:rgba(233,69,96,.35)}
+
+/* ===== 状态标签 ===== */
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;border-radius:14px;padding:2px 12px;letter-spacing:.04em;white-space:nowrap}
+.tag-open{color:var(--gold-light);background:var(--gold-soft);border:1px solid rgba(245,175,25,.28)}
+.tag-matched{color:#ff8ba0;background:var(--lobster-soft);border:1px solid rgba(233,69,96,.3)}
+.tag-closed{color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.tag-pending{color:var(--gold-light);background:var(--gold-soft)}
+.tag-accepted{color:var(--green);background:var(--green-soft)}
+.tag-rejected,.tag-expired{color:var(--muted);background:rgba(255,255,255,.05)}
+
+/* ===== 空态 / 加载 ===== */
+.empty-state{text-align:center;padding:64px 24px;color:var(--faint);font-size:14px}
+.empty-state .ico{font-size:40px;margin-bottom:12px;opacity:.6}
+.loading-state{text-align:center;padding:48px 24px;color:var(--faint);font-size:13px;letter-spacing:.1em}
+
+/* ===== Toast ===== */
+#toast-box{position:fixed;top:88px;left:50%;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:10px;align-items:center;pointer-events:none}
+.toast{padding:10px 24px;border-radius:22px;font-size:14px;background:var(--card);border:1px solid var(--line);color:var(--ink);
+  box-shadow:0 12px 40px rgba(0,0,0,.45);opacity:0;transform:translateY(-12px);transition:.3s;max-width:80vw}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast-success{border-color:rgba(22,199,154,.45);color:var(--green)}
+.toast-error{border-color:rgba(233,69,96,.45);color:#ff8ba0}
+.toast-warn{border-color:rgba(245,175,25,.45);color:var(--gold-light)}
+
+/* ===== Confirm 弹窗 ===== */
+.confirm-overlay{position:fixed;inset:0;z-index:1500;background:rgba(10,10,18,.66);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px}
+.confirm-box{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px 28px 22px;max-width:400px;width:100%;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.confirm-msg{font-size:15px;line-height:1.8;margin-bottom:22px}
+.confirm-actions{display:flex;justify-content:flex-end;gap:12px}
+
+/* ===== 表单 ===== */
+.field{margin-bottom:20px}
+.field label{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-bottom:8px;letter-spacing:.04em}
+.field .hint{font-size:12px;color:var(--faint);margin-top:6px}
+.field input[type=text],.field input[type=password],.field input[type=search],.field textarea{
+  width:100%;padding:12px 16px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;
+  font-size:15px;color:var(--ink);font-family:inherit;outline:none;transition:.25s;resize:vertical}
+.field input:focus,.field textarea:focus{border-color:var(--lobster);box-shadow:0 0 0 3px rgba(233,69,96,.15)}
+.field input::placeholder,.field textarea::placeholder{color:var(--faint)}
+.char-count{float:right;font-size:12px;color:var(--faint)}
+.char-count.over{color:var(--lobster)}
+
+/* ===== 图片上传 ===== */
+.upload-row{display:flex;gap:12px;flex-wrap:wrap}
+.upload-thumb{position:relative;width:96px;height:96px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.upload-thumb img{width:100%;height:100%;object-fit:cover}
+.upload-thumb .del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.66);color:#fff;font-size:13px;line-height:22px;text-align:center;cursor:pointer;transition:.2s}
+.upload-thumb .del:hover{background:var(--lobster)}
+.upload-add{width:96px;height:96px;border-radius:14px;border:1px dashed var(--faint);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--faint);font-size:22px;cursor:pointer;transition:.25s}
+.upload-add span{font-size:11px;letter-spacing:.06em}
+.upload-add:hover{border-color:var(--gold);color:var(--gold)}
+.upload-add.disabled{opacity:.4;pointer-events:none}
+.upload-loading{position:absolute;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;color:#fff;font-size:11px;letter-spacing:.1em}
+
+/* ===== 图片占位渐变块 ===== */
+.img-ph{width:100%;height:100%;min-height:100%;display:grid;place-items:center;
+  background:linear-gradient(135deg,#221a3a 0%,#16162a 55%,#241224 100%);color:var(--faint);font-size:30px}
+
+/* ===== Tab ===== */
+.tabs{display:inline-flex;gap:0;background:rgba(255,255,255,.04);border-radius:14px;padding:4px;margin-bottom:28px}
+.tab{padding:9px 26px;text-align:center;border-radius:11px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;transition:.25s;border:none;background:transparent}
+.tab:hover:not(.active){color:#ccc}
+.tab.active{background:rgba(233,69,96,.15);color:var(--lobster)}
+
+/* ===== 页脚 ===== */
+.footer{border-top:1px solid var(--line);padding:36px 24px;text-align:center;color:var(--faint);font-size:13px}
+.footer a{color:var(--muted);transition:color .2s}
+.footer a:hover{color:var(--gold)}
+.footer .sep{margin:0 12px}
+
+/* ===== 红点 ===== */
+.dot-badge{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--lobster);color:#fff;font-size:11px;font-weight:700;line-height:20px}
+
+@media(max-width:960px){
+  .brand .sub{display:none}
+}
+@media(max-width:600px){
+  .page-wrap{padding-top:92px}
+}

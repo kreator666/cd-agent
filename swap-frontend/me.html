@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的 — 喜剧换 · Comedy Swap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="swap-common.css">
+<style>
+.me-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:22px;margin-bottom:26px}
+.me-id{font-size:14px;color:var(--muted)}
+.me-id b{color:var(--gold-light);font-weight:600;margin-left:4px}
+.list-stack{display:flex;flex-direction:column;gap:14px}
+.me-item{display:flex;align-items:center;gap:16px;padding:16px 20px;cursor:pointer}
+.me-item:hover{transform:translateY(-2px);border-color:rgba(233,69,96,.35)}
+.me-thumb{width:76px;height:76px;border-radius:14px;overflow:hidden;flex:none;border:1px solid var(--line)}
+.me-thumb img{width:100%;height:100%;object-fit:cover}
+.me-body{flex:1;min-width:0}
+.me-title{font-family:var(--serif);font-weight:700;font-size:16px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-sub{font-size:12.5px;color:var(--faint);margin-top:4px}
+.me-side{display:flex;align-items:center;gap:10px;flex:none}
+.offer-summary{font-size:12.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="index.html">
+    <span class="logo">喜剧<em>换</em></span>
+    <span class="sub">COMEDY SWAP</span>
+  </a>
+  <div class="mid">
+    <a class="btn-primary btn-sm" href="create.html">＋ 发起交换</a>
+  </div>
+  <div class="auth-area" id="auth-area"></div>
+</header>
+
+<main class="page-wrap" style="max-width:860px;">
+  <div class="me-head">
+    <div>
+      <span class="sec-eyebrow purple">🦞 ME</span>
+      <h1 class="sec-title">我的交换</h1>
+      <div class="me-id">当前账号<b id="me-user-id">—</b></div>
+    </div>
+    <button class="btn-ghost btn-sm" onclick="logout()">退出登录</button>
+  </div>
+
+  <div class="tabs" id="me-tabs">
+    <button class="tab active" data-tab="orders" onclick="switchTab(this)">我发起的</button>
+    <button class="tab" data-tab="offers" onclick="switchTab(this)">我参与的</button>
+  </div>
+
+  <div id="me-loading" class="loading-state">加载中…</div>
+  <div id="me-list" class="list-stack"></div>
+  <div id="me-empty" class="empty-state" style="display:none;">
+    <div class="ico">🎭</div>
+    <p id="me-empty-text">这里还空空如也</p>
+  </div>
+</main>
+
+<footer class="footer">
+  <a href="index.html">交换市场</a><span class="sep">·</span>
+  <span>喜剧换 · Comedy Swap</span>
+</footer>
+
+<script src="common.js"></script>
+<script>
+const STATUS_LABEL = { open: '征集中', matched: '已成交', closed: '已关闭' };
+const OFFER_STATUS_LABEL = { pending: '待筛选', accepted: '已成交', rejected: '未中选', expired: '已失效' };
+let curTab = 'orders';
+
+/* 未登录直接跳登录页（带 redirect 回跳） */
+if (!requireAuth()) { /* requireAuth 已跳转 */ }
+
+function statusTag(status) {
+    const map = { open: 'tag-open', matched: 'tag-matched', closed: 'tag-closed' };
+    return `<span class="tag ${map[status] || 'tag-closed'}">${STATUS_LABEL[status] || escapeHtml(status)}</span>`;
+}
+
+function offerStatusTag(status) {
+    const map = { pending: 'tag-pending', accepted: 'tag-accepted', rejected: 'tag-rejected', expired: 'tag-expired' };
+    return `<span class="tag ${map[status] || 'tag-pending'}">${OFFER_STATUS_LABEL[status] || escapeHtml(status)}</span>`;
+}
+
+function thumbHtml(item) {
+    const imgs = item.images || (item.order && item.order.images) || [];
+    if (imgs.length) {
+        return `<img src="${escapeHtml(imgs[0])}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=img-ph style=&quot;height:100%&quot;>🎁</div>'">`;
+    }
+    return `<div class="img-ph" style="height:100%;font-size:24px;">🎁</div>`;
+}
+
+function switchTab(btn) {
+    document.querySelectorAll('#me-tabs .tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    curTab = btn.dataset.tab;
+    loadMe();
+}
+
+async function loadMe() {
+    const loading = document.getElementById('me-loading');
+    const list = document.getElementById('me-list');
+    const empty = document.getElementById('me-empty');
+    loading.style.display = '';
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    try {
+        const res = await apiFetch(curTab === 'orders' ? '/swap/my/orders' : '/swap/my/offers');
+        const data = await res.json();
+        const items = data.items || data.orders || data.offers || data.list || (Array.isArray(data) ? data : []);
+        loading.style.display = 'none';
+        if (!items.length) {
+            document.getElementById('me-empty-text').textContent =
+                curTab === 'orders' ? '你还没有发起过交换' : '你还没有提交过 offer';
+            empty.style.display = '';
+            return;
+        }
+        list.innerHTML = items.map(curTab === 'orders' ? orderItemHtml : offerItemHtml).join('');
+    } catch (e) {
+        loading.style.display = 'none';
+        empty.style.display = '';
+        document.getElementById('me-empty-text').textContent = '加载失败：' + e.message;
+    }
+}
+
+function orderItemHtml(o) {
+    const pending = o.pending_count != null ? o.pending_count : 0;
+    return `
+    <article class="card me-item" onclick="goOrder(${o.order_id ?? o.id})">
+      <div class="me-thumb">${thumbHtml(o)}</div>
+      <div class="me-body">
+        <h3 class="me-title">${escapeHtml(o.title)}</h3>
+        <div class="me-sub">🤝 ${o.offer_count ?? 0} 个 offer${pending ? ` · ${pending} 个待筛选` : ''}</div>
+      </div>
+      <div class="me-side">
+        ${pending ? `<span class="dot-badge" title="待筛选 offer">${pending}</span>` : ''}
+        ${statusTag(o.status)}
+      </div>
+    </article>`;
+}
+
+function offerItemHtml(o) {
+    // my/offers 可能内嵌订单字段，也可能平铺 order_id + order_title
+    const orderId = o.order_id ?? (o.order && (o.order.order_id ?? o.order.id));
+    const title = o.order_title ?? (o.order && o.order.title) ?? ('订单 #' + orderId);
+    return `
+    <article class="card me-item" onclick="goOrder(${orderId})">
+      <div class="me-thumb">${thumbHtml(o.order ? o.order : o)}</div>
+      <div class="me-body">
+        <h3 class="me-title">${escapeHtml(title)}</h3>
+        <div class="offer-summary">我的 offer：${escapeHtml(truncate(o.item_desc, 40) || '—')}</div>
+      </div>
+      <div class="me-side">${offerStatusTag(o.status)}</div>
+    </article>`;
+}
+
+function goOrder(id) {
+    if (id == null || id === 'undefined') return;
+    window.location.href = 'order.html?id=' + encodeURIComponent(id);
+}
+
+document.getElementById('me-user-id').textContent = getCurrentUserId() || '—';
+renderAuthArea();
+loadMe();
+</script>
+</body>
+</html>

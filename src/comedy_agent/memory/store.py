@@ -25,6 +25,8 @@ from comedy_agent.memory.models import (
     SaltHistoryData,
     ScriptData,
     SubmissionData,
+    SwapOfferData,
+    SwapOrderData,
     TipRecordData,
     TokenAccountData,
     TokenConsumptionData,
@@ -795,5 +797,87 @@ class MemoryStore(ABC):
 
         Returns:
             dict: 包含 generations, actor_usage, salt_usage, earnings 的统计字典。
+        """
+        ...
+
+    # ------------------------------------------------------------------ #
+    # 物品/服务交换平台 (Swap)
+    # ------------------------------------------------------------------ #
+    @abstractmethod
+    def save_swap_order(self, order: SwapOrderData) -> SwapOrderData:
+        """保存或更新交换订单。
+
+        Returns:
+            SwapOrderData: 保存后的订单数据（包含自动生成的 order_id）。
+        """
+        ...
+
+    @abstractmethod
+    def get_swap_order(self, order_id: str) -> SwapOrderData | None:
+        """读取指定交换订单。"""
+        ...
+
+    @abstractmethod
+    def list_swap_orders(
+        self,
+        status: str | None = None,
+        featured: bool | None = None,
+        maker_id: str | None = None,
+        keyword: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[SwapOrderData]:
+        """列出交换订单，支持状态/精选/发布者过滤与关键词模糊搜索。
+
+        keyword 匹配 title / offer_desc / want_desc；按创建时间倒序。
+        """
+        ...
+
+    @abstractmethod
+    def count_swap_orders(
+        self,
+        status: str | None = None,
+        featured: bool | None = None,
+        keyword: str | None = None,
+    ) -> int:
+        """统计交换订单数量。"""
+        ...
+
+    @abstractmethod
+    def set_swap_featured(self, order_id: str, featured: bool) -> SwapOrderData | None:
+        """设置订单精选状态，featured_at 置为当前时间或清空。"""
+        ...
+
+    @abstractmethod
+    def save_swap_offer(self, offer: SwapOfferData) -> SwapOfferData:
+        """保存或更新交换意向。
+
+        offer_id 已存在时仅更新内容（item_desc / images / contact），保留原状态。
+        """
+        ...
+
+    @abstractmethod
+    def get_swap_offer(self, offer_id: str) -> SwapOfferData | None:
+        """读取指定交换意向。"""
+        ...
+
+    @abstractmethod
+    def list_swap_offers(
+        self, order_id: str | None = None, taker_id: str | None = None
+    ) -> list[SwapOfferData]:
+        """列出交换意向，支持按订单或提交者过滤，按更新时间倒序。"""
+        ...
+
+    @abstractmethod
+    def count_swap_offers(self, order_id: str) -> int:
+        """统计指定订单的交换意向数量。"""
+        ...
+
+    @abstractmethod
+    def accept_swap_offer(self, offer_id: str) -> SwapOrderData | None:
+        """成交：该意向置 accepted，同单其他 pending 意向置 rejected，订单置 deal。
+
+        Returns:
+            SwapOrderData: 更新后的订单数据，若意向或订单不存在则返回 None。
         """
         ...

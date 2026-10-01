@@ -170,7 +170,7 @@ function coverHtml(order) {
 function orderCardHtml(order) {
     const offers = order.offer_count != null ? order.offer_count : 0;
     return `
-    <article class="card o-card" onclick="goOrder(${order.order_id ?? order.id})">
+    <article class="card o-card" onclick="goOrder('${order.order_id ?? order.id}')">
       <div class="o-cover">${coverHtml(order)}${statusTag(order.status)}</div>
       <div class="o-body">
         <h3 class="o-title">${escapeHtml(order.title)}</h3>
@@ -196,7 +196,7 @@ async function loadFeatured() {
         const items = data.items || data.orders || data.list || (Array.isArray(data) ? data : []);
         if (!items.length) { sec.style.display = 'none'; return; }
         document.getElementById('featured-grid').innerHTML = items.map(o => `
-          <article class="card f-card" onclick="goOrder(${o.order_id ?? o.id})">
+          <article class="card f-card" onclick="goOrder('${o.order_id ?? o.id}')">
             <span class="f-badge">⭐ 精选</span>
             <div class="f-cover">${coverHtml(o)}</div>
             <div class="f-body">

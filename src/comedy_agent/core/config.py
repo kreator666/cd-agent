@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     anyway_min_tip_cents: int = Field(default=100, alias="ANYWAY_MIN_TIP_CENTS")
     anyway_max_tip_cents: int = Field(default=1000000, alias="ANYWAY_MAX_TIP_CENTS")
 
+    # 静态资源部署目录（nginx 服务的 /var/www/frontend，运行时上传的图片需镜像一份才能通过 /static/ 访问）
+    static_deploy_dir: str = Field(default="", alias="STATIC_DEPLOY_DIR")
+
     # 管理员账号（仅支持单一硬编码管理员，密码从环境变量读取）
     admin_user_id: str = Field(default="admin", alias="ADMIN_USER_ID")
     admin_password: str = Field(default="admin", alias="ADMIN_PASSWORD")

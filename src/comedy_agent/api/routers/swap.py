@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Annotated, Any
@@ -16,9 +17,12 @@ from comedy_agent.api.routers.admin import require_admin
 from comedy_agent.api.state import state
 from comedy_agent.auth.dependencies import get_current_user, oauth2_scheme
 from comedy_agent.auth.security import decode_access_token
+from comedy_agent.core.config import settings
 from comedy_agent.memory.models import SwapOfferData, SwapOrderData
 
 router = APIRouter(prefix="/swap", tags=["swap"])
+
+logger = logging.getLogger(__name__)
 
 MAX_SWAP_IMAGES = 3
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -417,5 +421,15 @@ async def upload_swap_image(
     save_name = f"swap_{user_id}_{uuid.uuid4().hex[:8]}{suffix}"
     save_path = images_dir / save_name
     save_path.write_bytes(content)
+
+    # 生产环境 nginx 的 /static/ 指向部署目录（/var/www/frontend），
+    # 运行时上传的文件必须镜像一份到部署目录才能被访问（仓库目录仅供本地开发/测试）
+    if settings.static_deploy_dir:
+        deploy_dir = Path(settings.static_deploy_dir) / "swap_images"
+        try:
+            deploy_dir.mkdir(parents=True, exist_ok=True)
+            (deploy_dir / save_name).write_bytes(content)
+        except OSError as exc:
+            logger.warning("Mirror upload to deploy dir failed: %s", exc)
 
     return {"url": f"/static/swap_images/{save_name}"}

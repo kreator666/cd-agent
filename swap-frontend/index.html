@@ -153,10 +153,10 @@ let curStatus = '';
 let hasMore = true;
 let loading = false;
 
-const STATUS_LABEL = { open: '征集中', matched: '已成交', closed: '已关闭' };
+const STATUS_LABEL = { open: '征集中', deal: '已成交', closed: '已关闭' };
 
 function statusTag(status) {
-    const map = { open: 'tag-open', matched: 'tag-matched', closed: 'tag-closed' };
+    const map = { open: 'tag-open', deal: 'tag-matched', closed: 'tag-closed' };
     return `<span class="tag ${map[status] || 'tag-closed'}">${STATUS_LABEL[status] || escapeHtml(status)}</span>`;
 }
 

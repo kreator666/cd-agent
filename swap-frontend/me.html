@@ -67,7 +67,7 @@
 
 <script src="common.js"></script>
 <script>
-const STATUS_LABEL = { open: '征集中', matched: '已成交', closed: '已关闭' };
+const STATUS_LABEL = { open: '征集中', deal: '已成交', closed: '已关闭' };
 const OFFER_STATUS_LABEL = { pending: '待筛选', accepted: '已成交', rejected: '未中选', expired: '已失效' };
 let curTab = 'orders';
 
@@ -75,7 +75,7 @@ let curTab = 'orders';
 if (!requireAuth()) { /* requireAuth 已跳转 */ }
 
 function statusTag(status) {
-    const map = { open: 'tag-open', matched: 'tag-matched', closed: 'tag-closed' };
+    const map = { open: 'tag-open', deal: 'tag-matched', closed: 'tag-closed' };
     return `<span class="tag ${map[status] || 'tag-closed'}">${STATUS_LABEL[status] || escapeHtml(status)}</span>`;
 }
 
@@ -128,7 +128,7 @@ async function loadMe() {
 function orderItemHtml(o) {
     const pending = o.pending_count != null ? o.pending_count : 0;
     return `
-    <article class="card me-item" onclick="goOrder(${o.order_id ?? o.id})">
+    <article class="card me-item" onclick="goOrder('${o.order_id ?? o.id}')">
       <div class="me-thumb">${thumbHtml(o)}</div>
       <div class="me-body">
         <h3 class="me-title">${escapeHtml(o.title)}</h3>
@@ -146,7 +146,7 @@ function offerItemHtml(o) {
     const orderId = o.order_id ?? (o.order && (o.order.order_id ?? o.order.id));
     const title = o.order_title ?? (o.order && o.order.title) ?? ('订单 #' + orderId);
     return `
-    <article class="card me-item" onclick="goOrder(${orderId})">
+    <article class="card me-item" onclick="goOrder('${orderId}')">
       <div class="me-thumb">${thumbHtml(o.order ? o.order : o)}</div>
       <div class="me-body">
         <h3 class="me-title">${escapeHtml(title)}</h3>

@@ -177,7 +177,7 @@ if (!ORDER_ID) {
     throw new Error('missing id');
 }
 
-const STATUS_LABEL = { open: '征集中', matched: '已成交', closed: '已关闭' };
+const STATUS_LABEL = { open: '征集中', deal: '已成交', closed: '已关闭' };
 const OFFER_STATUS_LABEL = { pending: '待筛选', accepted: '已成交', rejected: '未中选', expired: '已失效' };
 
 let order = null;
@@ -224,7 +224,8 @@ function render() {
 
     const myId = getCurrentUserId();
     const offers = Array.isArray(order.offers) ? order.offers : null;
-    isMaker = !!(myId && order.maker_id && String(order.maker_id) === String(myId)) || offers !== null;
+    // 仅按 maker_id 判断发布者；成交 taker 也会拿到 offers，不能据此判定为 maker
+    isMaker = !!(myId && order.maker_id && String(order.maker_id) === String(myId));
 
     // admin 精选按钮（始终尝试显示，点击后 403 则隐藏）
     document.getElementById('feature-btn').style.display = '';
@@ -243,10 +244,10 @@ function render() {
     } else if (isMaker && offers) {
         show('side-maker');
         renderMakerOffers(offers);
-    } else if (order.status === 'matched') {
-        // 成交双方：maker 已在上面分支；这里是成交 taker（拿不到 offers 时）
+    } else if (order.status === 'deal') {
+        // 成交双方：maker 已在上面分支；这里是成交 taker（后端会带成交 offer 和明文联系方式）
         show('side-deal');
-        renderDealCard(null);
+        renderDealCard(offers ? offers.find(o => o.status === 'accepted') : null);
     } else if (order.status === 'open') {
         show('side-open');
         renderOfferForm();
@@ -371,7 +372,7 @@ function renderMakerOffers(offers) {
           <div class="o-desc">${escapeHtml(o.item_desc || '—')}</div>
           ${imgs.length ? `<div class="o-imgs">${imgs.map(u => `<img src="${escapeHtml(u)}" alt="" onclick="window.open('${escapeHtml(u)}','_blank')">`).join('')}</div>` : ''}
           <div class="o-contact"><span>联系方式</span>${escapeHtml(o.contact || '—')}</div>
-          ${pending ? `<div class="offer-actions"><button class="btn-primary btn-sm" onclick="acceptOffer(${o.offer_id ?? o.id})">✓ 选这个成交</button></div>` : ''}
+          ${pending ? `<div class="offer-actions"><button class="btn-primary btn-sm" onclick="acceptOffer('${o.offer_id ?? o.id}')">✓ 选这个成交</button></div>` : ''}
         </div>`;
     }).join('');
 }

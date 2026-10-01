@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from comedy_agent.api.state import state
+from comedy_agent.api.static_mirror import mirror_upload
 from comedy_agent.auth.dependencies import get_current_user
 from comedy_agent.core.config import settings
 from comedy_agent.services.crypto_wallet import (
@@ -247,6 +248,8 @@ async def upload_avatar(
 
     content = await file.read()
     save_path.write_bytes(content)
+    # 镜像到部署目录（生产 nginx /static/ 指向），未配置 STATIC_DEPLOY_DIR 则跳过
+    mirror_upload("avatars", save_name, content)
 
     avatar_url = f"/static/avatars/{save_name}"
     # 同时更新用户资料中的头像 URL
@@ -316,6 +319,8 @@ async def update_tipping_config(
         save_name = f"{user_id}{suffix}"
         save_path = qr_dir / save_name
         save_path.write_bytes(content)
+        # 镜像到部署目录（生产 nginx /static/ 指向），未配置 STATIC_DEPLOY_DIR 则跳过
+        mirror_upload("qr_codes", save_name, content)
         qr_url = f"/static/qr_codes/{save_name}"
 
     user = state.memory.update_user_profile(

@@ -88,6 +88,16 @@
      - `video-workbench.html` 为「重新生成此图」按钮增加唯一 id，点击后显示「生成中...」并禁用，避免重复提交。
      - `video_generator.py` 的 `regenerate_scene_image()` 增加 try/except，生成失败时自动降级为纯色占位图，确保编辑接口始终返回成功。
 
+7. **修复画面资产 5 个图仍不能显示（路径重复叠加）**（Commit `f2315fc`）
+   - 原因：存储路径与重建路径的「根目录」不一致。
+     - `_rel_path()` 以 `video_output_dir` 为根，存成 `job_id/images/000.png`。
+     - `reconstruct_generator()` 却以 `gen.output_dir`（即 `video_output_dir/job_id`）为根再拼一次，导致每次编辑/重新生成都会多叠加一层 `job_id`，最终出现 `job_id/job_id/.../images/001.png` 这种嵌套路径而 404。
+   - 方案：
+     - 增加 `_canonical_rel_image_path()` 工具，把重复叠加的 `job_id` 规范化为一层。
+     - `reconstruct_generator()` 改用 `video_output_dir` 作为相对路径根目录恢复绝对路径。
+     - `video.py` 的 `_normalize_storyboard()` 传入 `job_id`，对绝对路径和已相对路径都统一做规范化，保证前端拿到的始终是 `job_id/images/000.png`。
+   - 已对本地的历史任务 `202fde540feb4559` 等执行数据清理，将嵌套路径恢复为规范路径。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

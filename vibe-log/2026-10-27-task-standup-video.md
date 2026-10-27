@@ -36,6 +36,20 @@
 - **Branch**: `v3_new`
 - **Remote**: `origin/v3_new`
 
+## 后续修复与补充
+1. **修复视频无法播放/下载**（Commit `22ef921`）
+   - 原因：`/video/jobs/{job_id}/download` 需要鉴权，浏览器 `<video>` 标签与下载链接无法携带 Token。
+   - 方案：在 `server.py` 挂载 `/static/video` 到 `video_output_dir`，`video.py` 统一返回 `/static/video/...` URL。
+
+2. **新增「我的视频」列表页并避免重复生成**（Commit `d0db6e2`）
+   - 新增 `frontend/video-list.html`，展示所有视频任务，支持播放、下载、重新生成。
+   - `eval.html` 结果卡片根据该段子是否已有视频任务动态显示：
+     - 已完成 → 「📹 查看视频」跳转到列表
+     - 生成中 → 「⏳ 视频生成中」跳转到列表
+     - 未生成 → 「🎬 生成视频」进入工作台
+   - `video-workbench.html` 顶部与侧边栏增加「我的视频」入口。
+   - `VideoJob` 增加与 `EvalResult` 的关联，`/video/jobs` 返回 `result_content` 便于列表展示原文。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

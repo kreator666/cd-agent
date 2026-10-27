@@ -630,7 +630,8 @@ function renderScriptReview() {
 function imageUrl(relPath) {
   if (!relPath) return '';
   if (relPath.startsWith('http://') || relPath.startsWith('https://') || relPath.startsWith('/')) return relPath;
-  return `/static/video/${currentJob.job_id}/${relPath}`;
+  // relPath 已经是相对于 video_output_dir 的路径（如 job_id/images/000.png），直接拼到 /static/video/
+  return `/static/video/${relPath}`;
 }
 
 function renderAssetsReview() {
@@ -653,7 +654,7 @@ function renderAssetsReview() {
           <textarea id="asset-prompt-${s.order}">${escapeHtml(s.image_prompt || '')}</textarea>
         </div>
         <div class="scene-actions">
-          <button class="btn-orange" onclick="regenerateImage(${s.order})">🔄 重新生成此图</button>
+          <button id="regen-btn-${s.order}" class="btn-orange" onclick="regenerateImage(${s.order})">🔄 重新生成此图</button>
         </div>
       </div>
     `;
@@ -749,16 +750,28 @@ async function saveAssets() {
 }
 
 async function regenerateImage(order) {
-  const scenes = [];
-  const list = (currentJob.storyboard && currentJob.storyboard.scenes) || [];
-  for (const s of list) {
-    scenes.push({
-      order: s.order,
-      image_prompt: document.getElementById(`asset-prompt-${s.order}`).value,
-      regenerate: s.order === order,
-    });
+  const btn = document.getElementById(`regen-btn-${order}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '生成中...';
   }
-  await editStage('assets', {scenes});
+  try {
+    const scenes = [];
+    const list = (currentJob.storyboard && currentJob.storyboard.scenes) || [];
+    for (const s of list) {
+      scenes.push({
+        order: s.order,
+        image_prompt: document.getElementById(`asset-prompt-${s.order}`).value,
+        regenerate: s.order === order,
+      });
+    }
+    await editStage('assets', {scenes});
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 重新生成此图';
+    }
+  }
 }
 
 async function saveStoryboard() {

@@ -384,12 +384,17 @@ class VideoGenerator:
         return target
 
     def regenerate_scene_image(self, order: int) -> None:
-        """重新生成指定镜头的图片。"""
+        """重新生成指定镜头的图片，失败时降级为占位图。"""
         scene = self._get_scene(order)
         image_dir = self.output_dir / "images"
         image_dir.mkdir(parents=True, exist_ok=True)
-        local_path = self._generate_scene_image(scene, image_dir)
-        scene.image_path = str(local_path)
+        try:
+            local_path = self._generate_scene_image(scene, image_dir)
+            scene.image_path = str(local_path)
+        except Exception:
+            logger.exception("[video-%s] 镜头 %s 重新生成图片失败，使用占位图", self.job_id, order)
+            placeholder = self._create_placeholder_image(image_dir, order)
+            scene.image_path = str(placeholder)
 
     def set_scene_image(self, order: int, image_path: str) -> None:
         """设置指定镜头使用本地/上传图片。"""

@@ -205,7 +205,8 @@ function renderCard(j) {
 function imageUrl(jobId, relPath) {
   if (!relPath) return '';
   if (relPath.startsWith('http://') || relPath.startsWith('https://') || relPath.startsWith('/')) return relPath;
-  return `/static/video/${jobId}/${relPath}`;
+  // relPath 已经是相对于 video_output_dir 的路径（如 job_id/images/000.png）
+  return `/static/video/${relPath}`;
 }
 
 function escapeHtml(text) {

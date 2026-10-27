@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     qwen_api_key: str = Field(default="", alias="DASHSCOPE_API_KEY")
     moonshot_api_key: str = Field(default="", alias="MOONSHOT_API_KEY")
     wj_api_key: str = Field(default="", alias="WJ_API_KEY")
+    ai302_api_key: str = Field(default="", alias="AI302_API_KEY")
     wj_base_url: str = Field(
         default="https://maas-openapi.wanjiedata.com/api/v1", alias="WJ_BASE_URL"
     )
@@ -92,6 +93,16 @@ class Settings(BaseSettings):
 
     # 静态资源部署目录（nginx 服务的 /var/www/frontend，运行时上传的图片需镜像一份才能通过 /static/ 访问）
     static_deploy_dir: str = Field(default="", alias="STATIC_DEPLOY_DIR")
+
+    # 脱口秀视频生成
+    video_output_dir: Path = Field(
+        default=Path(__file__).resolve().parents[3] / "data" / "uploads" / "video",
+        alias="VIDEO_OUTPUT_DIR",
+    )
+    video_bgm_dir: Path = Field(
+        default=Path(__file__).resolve().parents[3] / "data" / "assets" / "bgm",
+        alias="VIDEO_BGM_DIR",
+    )
 
     # 管理员账号（仅支持单一硬编码管理员，密码从环境变量读取）
     admin_user_id: str = Field(default="admin", alias="ADMIN_USER_ID")

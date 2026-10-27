@@ -374,6 +374,37 @@ async def create_eval_session(
     )
 
 
+@router.get("/results/{result_id}", response_model=EvalResultItem)
+async def get_eval_result(
+    result_id: str,
+    user_id: str = Depends(get_current_user),
+) -> EvalResultItem:
+    """获取单个评测结果详情。"""
+    with _db_session() as session:
+        result = (
+            session.query(EvalResult)
+            .join(EvalSession)
+            .filter(EvalResult.result_id == result_id, EvalSession.user_id == user_id)
+            .first()
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+        return EvalResultItem(
+            id=result.result_id,
+            section_id=result.section_id,
+            section_title=result.section_title,
+            combo_id=result.combo_id,
+            combo_sections=result.combo_sections,
+            content=result.content,
+            status=result.status,
+            rating=result.rating,
+            is_published=result.is_published,
+            model=result.model,
+            created_at=result.created_at.isoformat() if result.created_at else "",
+            completed_at=result.completed_at.isoformat() if result.completed_at else None,
+        )
+
+
 @router.get("/sessions/{session_id}", response_model=EvalSessionResponse)
 async def get_eval_session(
     session_id: str,

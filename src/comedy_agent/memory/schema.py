@@ -943,6 +943,66 @@ class EvalResult(Base):
 
 
 # ------------------------------------------------------------------ #
+# VideoJob —— 脱口秀视频生成任务
+# ------------------------------------------------------------------ #
+class VideoJob(Base):
+    """脱口秀视频生成任务表。"""
+
+    __tablename__ = "video_jobs"
+
+    job_id: Mapped[str] = mapped_column(
+        String(64), primary_key=True, default=lambda: uuid.uuid4().hex[:16]
+    )
+    result_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_results.result_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user_profiles.user_id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, comment="pending / running / done / failed"
+    )
+    stage: Mapped[str] = mapped_column(
+        String(16), default="script", nullable=False, comment="当前阶段: script / assets / storyboard / video / post"
+    )
+    stages: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False, comment="各阶段状态与产物"
+    )
+    script_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="分镜脚本"
+    )
+    asset_urls: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True, comment="生成的图片 URL 或本地路径列表"
+    )
+    storyboard_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="分镜板数据"
+    )
+    video_path: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="无声视频本地路径"
+    )
+    final_video_path: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="带配音的最终视频本地路径"
+    )
+    tts_path: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="TTS 音频本地路径"
+    )
+    config_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, comment="用户选择的风格、配音、BGM 等配置"
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+# ------------------------------------------------------------------ #
 # JokeRating —— 广场段子的路人评分
 # ------------------------------------------------------------------ #
 class JokeRating(Base):

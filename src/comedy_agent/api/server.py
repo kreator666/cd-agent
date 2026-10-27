@@ -40,6 +40,7 @@ from comedy_agent.api.routers.submissions import router as submissions_router
 from comedy_agent.api.routers.swap import router as swap_router
 from comedy_agent.api.routers.tips import router as tips_router
 from comedy_agent.api.routers.users import router as users_router
+from comedy_agent.api.routers.video import router as video_router
 from comedy_agent.api.routers.wallet import router as wallet_router
 from comedy_agent.auth import get_current_user, router as auth_router
 from comedy_agent.core.config import settings
@@ -387,6 +388,7 @@ app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(export_router)
 app.include_router(eval_router)
+app.include_router(video_router)
 app.include_router(publish_router)
 app.include_router(tips_router)
 app.include_router(crypto_tips_router)

@@ -583,6 +583,7 @@ function renderResultCard(r) {
         <div style="display:flex;gap:8px;align-items:center;">
           ${r.status === 'done' && !r.is_published ? `<button class="publish-btn" onclick="publishResult('${r.id}')">发布到广场</button>` : ''}
           ${r.status === 'done' ? `<button class="publish-btn secondary" onclick="openCoachModal('${r.id}')">打磨</button>` : ''}
+          ${r.status === 'done' ? `<button class="publish-btn secondary" onclick="goVideoWorkbench('${r.id}')">🎬 生成视频</button>` : ''}
           ${r.is_published ? `<span class="published-badge">已在广场</span><button class="publish-btn secondary" onclick="unpublishResult('${r.id}')">取消发布</button>` : ''}
           ${r.content ? `<button class="copy-btn" onclick="copyResult('${r.id}')">复制</button>` : ''}
         </div>
@@ -654,6 +655,10 @@ async function unpublishResult(id) {
 }
 
 let currentCoachResultId = null;
+
+function goVideoWorkbench(resultId) {
+  window.location.href = `/static/video-workbench.html?result_id=${encodeURIComponent(resultId)}&_=` + Date.now();
+}
 
 function openCoachModal(resultId) {
   currentCoachResultId = resultId;

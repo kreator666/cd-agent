@@ -248,12 +248,13 @@ requireAuth();
 
 const params = new URLSearchParams(window.location.search);
 const resultId = params.get('result_id');
+const jobId = params.get('job_id');
 let currentJob = null;
 let pollTimer = null;
 let isRunning = false;
 
-if (!resultId) {
-  alert('缺少 result_id');
+if (!resultId && !jobId) {
+  alert('缺少 result_id 或 job_id');
   goEval();
 }
 
@@ -300,12 +301,31 @@ function initVoiceSelector() {
 
 async function loadScript() {
   try {
+    if (currentJob && currentJob.result_content) {
+      document.getElementById('script-preview').textContent = currentJob.result_content;
+      return;
+    }
+    if (!resultId) return;
     const res = await apiFetch(`/eval/results/${resultId}`);
     if (!res.ok) throw new Error('加载段子失败');
     const data = await res.json();
     document.getElementById('script-preview').textContent = data.content || '（无内容）';
   } catch (err) {
     document.getElementById('script-preview').textContent = '加载失败：' + err.message;
+  }
+}
+
+async function loadJob(id) {
+  try {
+    const res = await apiFetch(`/video/jobs/${id}`);
+    if (!res.ok) throw new Error('加载任务失败');
+    currentJob = await res.json();
+    renderTimeline();
+    updateStartButton();
+    renderCurrentReview();
+    await loadScript();
+  } catch (err) {
+    setError(err.message);
   }
 }
 
@@ -339,22 +359,109 @@ function setSuccess(msg) {
 
 function setRunning(running) {
   isRunning = running;
+  updateStartButton();
+}
+
+function updateStartButton() {
   const btn = document.getElementById('start-btn');
-  btn.disabled = running;
-  btn.textContent = running ? '生成中...' : '开始第一步：剧本分镜';
+  if (isRunning) {
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+    return;
+  }
+  if (!currentJob) {
+    btn.disabled = false;
+    btn.textContent = '开始第一步：剧本分镜';
+    btn.onclick = startFirstStage;
+    return;
+  }
+  const current = getCurrentStage();
+  if (!current) {
+    // 全部完成
+    btn.disabled = false;
+    btn.textContent = '重新生成最终视频';
+    btn.onclick = () => runStage('post');
+  } else if (current === 'script') {
+    btn.disabled = false;
+    btn.textContent = '开始第一步：剧本分镜';
+    btn.onclick = () => runStage('script');
+  } else {
+    btn.disabled = false;
+    btn.textContent = `继续：${_stageLabel(current)}`;
+    btn.onclick = () => runStage(current);
+  }
+}
+
+function getStageStatus(name) {
+  if (!currentJob || !currentJob.stages) return 'pending';
+  const s = currentJob.stages.find(x => x.name === name);
+  return s ? s.status : 'pending';
+}
+
+function getCurrentStage() {
+  // 返回第一个未完成的阶段，null 表示全部完成
+  for (const name of ['script','assets','storyboard','video','post']) {
+    if (getStageStatus(name) !== 'done') return name;
+  }
+  return null;
+}
+
+function getReviewStage() {
+  // 返回最近一个已完成、且下一阶段未完成的阶段，用于展示审核面板
+  let lastDone = null;
+  for (const name of ['script','assets','storyboard','video','post']) {
+    if (getStageStatus(name) === 'done') {
+      lastDone = name;
+    } else {
+      break;
+    }
+  }
+  return lastDone;
+}
+
+function renderCurrentReview() {
+  if (!currentJob) return;
+  const reviewStage = getReviewStage();
+  if (reviewStage) {
+    renderStageReview(reviewStage);
+    return;
+  }
+  const current = getCurrentStage();
+  if (current === 'script') {
+    // 任务已创建但剧本分镜未跑，显示初始提示
+    document.getElementById('preview-body').innerHTML = `
+      <div class="empty-state">
+        <div class="big">🎬</div>
+        <p>任务已创建，点击左侧「开始第一步：剧本分镜」开始生成。</p>
+      </div>
+    `;
+  } else if (current) {
+    document.getElementById('preview-body').innerHTML = `
+      <div class="empty-state">
+        <div class="big">⏳</div>
+        <p>当前阶段：${_stageLabel(current)}</p>
+        <button class="btn-orange" onclick="runStage('${current}')">继续生成</button>
+      </div>
+    `;
+  } else {
+    renderStageReview('post');
+  }
 }
 
 async function startFirstStage() {
-  if (isRunning || currentJob) return;
+  if (isRunning) return;
   setError('');
   setRunning(true);
   try {
-    // 创建任务并自动跑第一阶段
-    const createRes = await apiFetch('/video/jobs', {method:'POST', body:JSON.stringify(getConfig())});
-    const jobData = await createRes.json();
-    if (!createRes.ok) throw new Error(jobData.detail || '创建任务失败');
-    currentJob = jobData;
+    if (!currentJob) {
+      // 创建任务并自动跑第一阶段
+      const createRes = await apiFetch('/video/jobs', {method:'POST', body:JSON.stringify(getConfig())});
+      const jobData = await createRes.json();
+      if (!createRes.ok) throw new Error(jobData.detail || '创建任务失败');
+      currentJob = jobData;
+    }
     renderTimeline();
+    updateStartButton();
     await runStage('script');
   } catch (err) {
     setError(err.message);
@@ -375,6 +482,7 @@ async function runStage(stageName) {
     if (!res.ok) throw new Error(data.detail || '阶段执行失败');
     currentJob = data;
     renderTimeline();
+    updateStartButton();
     renderStageReview(stageName);
   } catch (err) {
     setError(err.message);
@@ -435,6 +543,8 @@ async function refreshJob() {
     if (res.ok) {
       currentJob = await res.json();
       renderTimeline();
+      updateStartButton();
+      renderCurrentReview();
     }
   } catch (err) {
     console.error('刷新任务失败', err);
@@ -682,7 +792,11 @@ function escapeHtml(text) {
 }
 
 initVoiceSelector();
-loadScript();
+if (jobId) {
+  loadJob(jobId);
+} else {
+  loadScript();
+}
 </script>
 </body>
 </html>

@@ -178,11 +178,11 @@ function renderCard(j) {
   } else if (j.status === 'running' || j.status === 'pending') {
     actions = `
       <button class="btn-secondary" disabled>生成中...</button>
-      <a class="btn-secondary" href="/static/video-workbench.html?result_id=${encodeURIComponent(j.result_id)}">查看进度</a>
+      <a class="btn-secondary" href="/static/video-workbench.html?job_id=${encodeURIComponent(j.job_id)}">查看进度</a>
     `;
   } else {
     actions = `
-      <a class="btn-primary" href="/static/video-workbench.html?result_id=${encodeURIComponent(j.result_id)}">重新生成</a>
+      <a class="btn-primary" href="/static/video-workbench.html?job_id=${encodeURIComponent(j.job_id)}">重新生成</a>
     `;
   }
 

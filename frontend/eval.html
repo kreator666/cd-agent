@@ -687,7 +687,7 @@ function renderVideoButton(r) {
     return `<a class="publish-btn secondary" href="/static/video-list.html?result_id=${encodeURIComponent(r.id)}">📹 查看视频</a>`;
   }
   if (vj && (vj.status === 'running' || vj.status === 'pending')) {
-    return `<a class="publish-btn secondary" href="/static/video-list.html?result_id=${encodeURIComponent(r.id)}">⏳ 视频生成中</a>`;
+    return `<a class="publish-btn secondary" href="/static/video-workbench.html?job_id=${encodeURIComponent(vj.job_id)}">⏳ 视频生成中</a>`;
   }
   return `<button class="publish-btn secondary" onclick="goVideoWorkbench('${r.id}')">🎬 生成视频</button>`;
 }

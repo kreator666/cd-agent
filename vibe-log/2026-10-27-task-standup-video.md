@@ -64,6 +64,14 @@
      - `POST /video/jobs/{job_id}/stage/{stage_name}/ai-modify`
    - 配音音色扩展为 19 种，并分组为「女声 / 男声 / 搞笑/特色」。
 
+4. **修复画面资产图片无法显示**（Commit `fc6c777`）
+   - 原因：数据库和 storyboard_json 中存的是本地绝对路径（如 `D:\agent\...\images\000.png`），浏览器无法直接访问。
+   - 方案：
+     - `video_generator.py` 存储相对路径（如 `images/000.png`）。
+     - `video.py` 对已有任务的绝对路径做归一化。
+     - 前端通过 `/static/video/{job_id}/{相对路径}` 访问图片。
+   - 同步修复 `video-list.html` 列表页分镜缩略图。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

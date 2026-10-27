@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -186,6 +187,26 @@ class VideoGenerator:
     def _set_stage(self, stage: str, status: str, message: str = "") -> None:
         self._stage_status[stage] = {"status": status, "message": message}
         logger.info("[video-%s] stage=%s status=%s %s", self.job_id, stage, status, message)
+
+    @staticmethod
+    def _run_async_sync(coro: Any) -> Any:
+        """在独立线程里运行异步协程，兼容同步与事件循环内调用。"""
+        result: Any = None
+        exception: BaseException | None = None
+
+        def target() -> None:
+            nonlocal result, exception
+            try:
+                result = asyncio.run(coro)
+            except BaseException as exc:
+                exception = exc
+
+        thread = threading.Thread(target=target)
+        thread.start()
+        thread.join()
+        if exception is not None:
+            raise exception
+        return result
 
     def stage_summary(self) -> list[dict[str, Any]]:
         return [
@@ -519,13 +540,15 @@ class VideoGenerator:
         """为无声视频添加配音（Stage 5）。"""
         silent_path = self.output_dir / "silent.mp4"
         if not silent_path.exists():
-            raise FileNotFoundError("无声视频不存在，请先执行视频合成阶段")
+            # 旧任务或中间文件缺失时，先补合成无声视频
+            self._set_stage("video", "running", "无声视频缺失，先重新合成")
+            silent_path = self.compose_silent_video()
 
         self._set_stage("post", "running", "正在生成配音并合成最终视频")
 
         # 生成 TTS
         if self.config.tts_enabled:
-            asyncio.run(self.generate_tts())
+            self._run_async_sync(self.generate_tts())
 
         video = VideoFileClip(str(silent_path))
 

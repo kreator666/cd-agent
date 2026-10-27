@@ -50,6 +50,20 @@
    - `video-workbench.html` 顶部与侧边栏增加「我的视频」入口。
    - `VideoJob` 增加与 `EvalResult` 的关联，`/video/jobs` 返回 `result_content` 便于列表展示原文。
 
+3. **视频工作台分阶段执行 + AI 修改 + 更多音色**（Commit `0cb7817`）
+   - 将视频生成拆分为 5 个可独立执行的节点：剧本分镜 → 画面资产 → 分镜预览 → 视频合成 → 后期配音。
+   - 每个节点完成后自动暂停，工作台显示审核面板：
+     - 剧本分镜：可编辑文案与画面提示词，支持 AI 优化。
+     - 画面资产：可编辑提示词、单镜头重新生成，支持 AI 优化。
+     - 分镜预览：可调整每个镜头时长。
+     - 视频合成：预览无声视频。
+     - 后期配音：可切换音色并重新配音，下载成片。
+   - 新增后端接口：
+     - `POST /video/jobs/{job_id}/stage/{stage_name}/run`
+     - `POST /video/jobs/{job_id}/stage/{stage_name}/edit`
+     - `POST /video/jobs/{job_id}/stage/{stage_name}/ai-modify`
+   - 配音音色扩展为 19 种，并分组为「女声 / 男声 / 搞笑/特色」。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

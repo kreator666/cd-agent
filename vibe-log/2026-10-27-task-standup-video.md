@@ -72,6 +72,13 @@
      - 前端通过 `/static/video/{job_id}/{相对路径}` 访问图片。
    - 同步修复 `video-list.html` 列表页分镜缩略图。
 
+5. **修复工作台进度丢失并始终显示 5 步时间线**（Commit `8bb51f8`）
+   - 原因：从「查看进度」进入工作台时只带 `result_id`，工作台会创建新任务并从第一步开始。
+   - 方案：
+     - `video-workbench.html` 支持 `job_id` 参数，进入后加载已有任务并定位到当前阶段。
+     - 左侧配置面板始终显示 5 个阶段时间线，通过颜色区分 done / active / pending。
+     - `eval.html` 与 `video-list.html` 的「查看进度」链接改为 `video-workbench.html?job_id=...`。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

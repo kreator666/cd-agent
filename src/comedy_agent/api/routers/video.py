@@ -129,7 +129,7 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
         rel = Path(job.final_video_path).relative_to(Path(settings.video_output_dir))
         video_url = f"/static/video/{rel.as_posix()}"
 
-    storyboard = _normalize_storyboard(job.storyboard_json)
+    storyboard = _normalize_storyboard(job.storyboard_json, job.job_id)
 
     return VideoJobResponse(
         job_id=job.job_id,
@@ -147,8 +147,10 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
     )
 
 
-def _normalize_storyboard(storyboard: dict[str, Any] | None) -> dict[str, Any] | None:
-    """将 storyboard 中的绝对图片路径统一转为相对于 video_output_dir 的路径。"""
+def _normalize_storyboard(
+    storyboard: dict[str, Any] | None, job_id: str
+) -> dict[str, Any] | None:
+    """将 storyboard 中的图片路径统一转为规范化的相对 video_output_dir 的路径。"""
     if not storyboard:
         return storyboard
     output_dir = Path(settings.video_output_dir)
@@ -158,11 +160,17 @@ def _normalize_storyboard(storyboard: dict[str, Any] | None) -> dict[str, Any] |
         scene = dict(s)
         img = scene.get("image_path")
         if img:
-            try:
-                scene["image_path"] = Path(img).relative_to(output_dir).as_posix()
-            except ValueError:
-                # 已经是相对路径或不在输出目录下，保持原样
-                scene["image_path"] = img
+            rel = None
+            if Path(img).is_absolute():
+                try:
+                    rel = Path(img).relative_to(output_dir).as_posix()
+                except ValueError:
+                    pass
+            else:
+                rel = img
+            if rel is not None:
+                rel = VideoGenerator._canonical_rel_image_path(job_id, rel)
+                scene["image_path"] = rel
         scenes.append(scene)
     normalized["scenes"] = scenes
     return normalized

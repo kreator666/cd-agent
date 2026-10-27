@@ -226,6 +226,14 @@ class VideoGenerator:
         except ValueError:
             return path
 
+    @staticmethod
+    def _canonical_rel_image_path(job_id: str, rel_path: str) -> str:
+        """将可能重复叠加了 job_id 的相对路径规范化为一层。"""
+        parts = list(Path(rel_path).parts)
+        while len(parts) >= 2 and parts[0] == job_id and parts[1] == job_id:
+            parts.pop(0)
+        return Path(*parts).as_posix()
+
     def asset_urls(self) -> list[str]:
         """当前已生成的图片路径列表（相对路径）。"""
         return [self._rel_path(s.image_path) for s in self.scenes if s.image_path]
@@ -852,10 +860,18 @@ def reconstruct_generator(job: Any) -> VideoGenerator:
 
     if scenes_data:
         gen.load_scenes(scenes_data)
-        # storyboard_json 中存的是相对路径，恢复为绝对路径便于后续使用
+        # storyboard_json 中存的是相对 video_output_dir 的路径（如 job_id/images/000.png），
+        # 恢复为绝对路径便于后续使用。需要先把重复叠加的 job_id 规范化。
+        video_output_dir = Path(settings.video_output_dir)
         for s in gen.scenes:
             if s.image_path and not Path(s.image_path).is_absolute():
-                s.image_path = str(gen.output_dir / s.image_path)
+                rel = gen._canonical_rel_image_path(gen.job_id, s.image_path)
+                rel_path = Path(rel)
+                if rel_path.parts and rel_path.parts[0] == gen.job_id:
+                    s.image_path = str(video_output_dir / rel_path)
+                else:
+                    # 旧数据可能只保存了 images/000.png，按 job 目录处理
+                    s.image_path = str(gen.output_dir / rel_path)
 
     # 恢复阶段状态
     for st in job.stages or []:

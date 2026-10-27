@@ -163,7 +163,7 @@ function renderCard(j) {
     : `<div class="placeholder">${statusText}${j.stage ? `<br><span style="font-size:11px">阶段：${escapeHtml(j.stage)}</span>` : ''}</div>`;
 
   const sceneImages = (j.storyboard && j.storyboard.scenes)
-    ? j.storyboard.scenes.filter(s => s.image_path).slice(0, 4).map(s => `<img src="${escapeHtml(s.image_path)}" alt="">`).join('')
+    ? j.storyboard.scenes.filter(s => s.image_path).slice(0, 4).map(s => `<img src="${escapeHtml(imageUrl(j.job_id, s.image_path))}" alt="">`).join('')
     : '';
 
   const content = j.result_content || '（无段子内容）';
@@ -200,6 +200,12 @@ function renderCard(j) {
       </div>
     </div>
   `;
+}
+
+function imageUrl(jobId, relPath) {
+  if (!relPath) return '';
+  if (relPath.startsWith('http://') || relPath.startsWith('https://') || relPath.startsWith('/')) return relPath;
+  return `/static/video/${jobId}/${relPath}`;
 }
 
 function escapeHtml(text) {

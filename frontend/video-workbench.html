@@ -517,6 +517,12 @@ function renderScriptReview() {
   return html;
 }
 
+function imageUrl(relPath) {
+  if (!relPath) return '';
+  if (relPath.startsWith('http://') || relPath.startsWith('https://') || relPath.startsWith('/')) return relPath;
+  return `/static/video/${currentJob.job_id}/${relPath}`;
+}
+
 function renderAssetsReview() {
   const scenes = (currentJob.storyboard && currentJob.storyboard.scenes) || [];
   let html = `
@@ -531,7 +537,7 @@ function renderAssetsReview() {
     html += `
       <div class="scene-card">
         <div class="scene-card-header"><span class="scene-card-title">镜头 ${s.order + 1}</span></div>
-        <img class="scene-img" src="${escapeHtml(s.image_path || '')}" alt="镜头${s.order+1}" onerror="this.style.opacity=0.3">
+        <img class="scene-img" src="${escapeHtml(imageUrl(s.image_path))}" alt="镜头${s.order+1}" onerror="this.style.opacity=0.3">
         <div class="scene-field">
           <label>画面提示词</label>
           <textarea id="asset-prompt-${s.order}">${escapeHtml(s.image_prompt || '')}</textarea>
@@ -559,7 +565,7 @@ function renderStoryboardReview() {
     html += `
       <div class="scene-card">
         <div class="scene-card-header"><span class="scene-card-title">镜头 ${s.order + 1}</span></div>
-        <img class="scene-img" src="${escapeHtml(s.image_path || '')}" alt="镜头${s.order+1}" onerror="this.style.opacity=0.3">
+        <img class="scene-img" src="${escapeHtml(imageUrl(s.image_path))}" alt="镜头${s.order+1}" onerror="this.style.opacity=0.3">
         <div class="scene-field">
           <label>时长（秒）</label>
           <input type="number" id="duration-${s.order}" value="${(s.duration || 3).toFixed(1)}" step="0.5" min="1">

@@ -129,6 +129,8 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
         rel = Path(job.final_video_path).relative_to(Path(settings.video_output_dir))
         video_url = f"/static/video/{rel.as_posix()}"
 
+    storyboard = _normalize_storyboard(job.storyboard_json)
+
     return VideoJobResponse(
         job_id=job.job_id,
         result_id=job.result_id,
@@ -137,12 +139,33 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
         stages=[StageItem(**s) for s in stages],
         video_url=video_url,
         final_video_path=job.final_video_path,
-        storyboard=job.storyboard_json,
+        storyboard=storyboard,
         result_content=job.result.content if job.result is not None else None,
         error=job.error,
         created_at=job.created_at.isoformat() if job.created_at else "",
         updated_at=job.updated_at.isoformat() if job.updated_at else "",
     )
+
+
+def _normalize_storyboard(storyboard: dict[str, Any] | None) -> dict[str, Any] | None:
+    """将 storyboard 中的绝对图片路径统一转为相对于 video_output_dir 的路径。"""
+    if not storyboard:
+        return storyboard
+    output_dir = Path(settings.video_output_dir)
+    normalized: dict[str, Any] = dict(storyboard)
+    scenes: list[dict[str, Any]] = []
+    for s in normalized.get("scenes", []):
+        scene = dict(s)
+        img = scene.get("image_path")
+        if img:
+            try:
+                scene["image_path"] = Path(img).relative_to(output_dir).as_posix()
+            except ValueError:
+                # 已经是相对路径或不在输出目录下，保持原样
+                scene["image_path"] = img
+        scenes.append(scene)
+    normalized["scenes"] = scenes
+    return normalized
 
 
 def _stage_label(name: str) -> str:

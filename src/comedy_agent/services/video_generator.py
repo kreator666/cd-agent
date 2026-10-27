@@ -217,19 +217,28 @@ class VideoGenerator:
             ]
         }
 
+    def _rel_path(self, path: str | None) -> str | None:
+        """将绝对路径转为相对于 video_output_dir 的路径，便于前端通过 /static/video 访问。"""
+        if not path:
+            return None
+        try:
+            return Path(path).relative_to(Path(settings.video_output_dir)).as_posix()
+        except ValueError:
+            return path
+
     def asset_urls(self) -> list[str]:
-        """当前已生成的图片路径列表。"""
-        return [s.image_path for s in self.scenes if s.image_path]
+        """当前已生成的图片路径列表（相对路径）。"""
+        return [self._rel_path(s.image_path) for s in self.scenes if s.image_path]
 
     def storyboard_json(self) -> dict[str, Any]:
-        """当前分镜板 JSON。"""
+        """当前分镜板 JSON（图片使用相对路径）。"""
         return {
             "scenes": [
                 {
                     "order": s.order,
                     "text": s.text,
                     "image_prompt": s.image_prompt,
-                    "image_path": s.image_path,
+                    "image_path": self._rel_path(s.image_path),
                     "duration": s.duration,
                 }
                 for s in self.scenes
@@ -838,6 +847,10 @@ def reconstruct_generator(job: Any) -> VideoGenerator:
 
     if scenes_data:
         gen.load_scenes(scenes_data)
+        # storyboard_json 中存的是相对路径，恢复为绝对路径便于后续使用
+        for s in gen.scenes:
+            if s.image_path and not Path(s.image_path).is_absolute():
+                s.image_path = str(gen.output_dir / s.image_path)
 
     # 恢复阶段状态
     for st in job.stages or []:

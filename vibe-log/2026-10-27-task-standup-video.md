@@ -98,6 +98,13 @@
      - `video.py` 的 `_normalize_storyboard()` 传入 `job_id`，对绝对路径和已相对路径都统一做规范化，保证前端拿到的始终是 `job_id/images/000.png`。
    - 已对本地的历史任务 `202fde540feb4559` 等执行数据清理，将嵌套路径恢复为规范路径。
 
+8. **修复点击「后期配音」报错 `asyncio.run() cannot be called from a running event loop`**（Commit `4f5f083`）
+   - 原因：`add_post_audio()` 内部调用 `asyncio.run(self.generate_tts())`，而 `POST /video/jobs/{job_id}/stage/{stage_name}/run` 是 FastAPI 的异步路由，已经处于运行中的事件循环内，`asyncio.run()` 被禁止嵌套调用。
+   - 方案：
+     - 新增 `_run_async_sync()` 工具，在独立线程中执行 `asyncio.run(coro)`，既兼容同步调用方，也兼容事件循环内调用。
+     - `add_post_audio()` 改用 `_run_async_sync(self.generate_tts())`。
+     - 若旧任务缺少 `silent.mp4`，post 阶段自动先补合成无声视频，而不是直接报错。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

@@ -1,6 +1,6 @@
 """脱口秀视频生成路由。
 
-提供创建任务、查询进度、获取产物与下载视频的能力。
+提供创建任务、分阶段运行、人工编辑、AI 辅助修改与列表查询的能力。
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -20,11 +20,18 @@ from comedy_agent.api.state import state
 from comedy_agent.auth import get_current_user
 from comedy_agent.core.config import settings
 from comedy_agent.memory.schema import EvalResult, EvalSession, VideoJob
-from comedy_agent.services.video_generator import VideoConfig, VideoGenerator, config_from_dict
+from comedy_agent.services.video_generator import (
+    VideoConfig,
+    VideoGenerator,
+    config_from_dict,
+    reconstruct_generator,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/video", tags=["video"])
+
+STAGE_ORDER = ["script", "assets", "storyboard", "video", "post"]
 
 
 # --------------------------------------------------------------------------- #
@@ -76,6 +83,20 @@ class VideoListResponse(BaseModel):
     jobs: list[VideoJobResponse]
 
 
+class StageEditRequest(BaseModel):
+    """编辑阶段数据请求。"""
+
+    scenes: list[dict[str, Any]] | None = None
+    tts_voice: str | None = None
+    durations: dict[str, float] | None = None
+
+
+class StageAiModifyRequest(BaseModel):
+    """AI 辅助修改请求。"""
+
+    instruction: str = Field(default="", description="优化指令")
+
+
 # --------------------------------------------------------------------------- #
 # 数据库会话辅助
 # --------------------------------------------------------------------------- #
@@ -96,7 +117,7 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
             if isinstance(job.stages, list)
             else [
                 {"name": k, "label": _stage_label(k), "status": "pending", "message": ""}
-                for k in ["script", "assets", "storyboard", "video", "post"]
+                for k in STAGE_ORDER
             ]
         )
     except Exception:
@@ -143,10 +164,9 @@ def _stage_label(name: str) -> str:
 @router.post("/jobs", response_model=VideoJobResponse)
 async def create_video_job(
     request: VideoCreateRequest,
-    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user),
 ) -> VideoJobResponse:
-    """创建脱口秀视频生成任务。"""
+    """创建脱口秀视频生成任务（分阶段执行，不自动跑完全部流程）。"""
     with _db_session() as session:
         result = (
             session.query(EvalResult)
@@ -161,7 +181,6 @@ async def create_video_job(
 
         job_id = uuid.uuid4().hex[:16]
         now = datetime.utcnow()
-        script_text = result.content or ""
 
         job = VideoJob(
             job_id=job_id,
@@ -171,7 +190,7 @@ async def create_video_job(
             stage="script",
             stages=[
                 {"name": k, "label": _stage_label(k), "status": "pending", "message": ""}
-                for k in ["script", "assets", "storyboard", "video", "post"]
+                for k in STAGE_ORDER
             ],
             config_json=request.model_dump(),
             created_at=now,
@@ -179,18 +198,7 @@ async def create_video_job(
         )
         session.add(job)
         session.commit()
-        response = _job_to_response(job)
-
-    background_tasks.add_task(
-        _run_video_generation,
-        job_id=job_id,
-        result_id=request.result_id,
-        user_id=user_id,
-        script_text=script_text,
-        config=request.model_dump(),
-    )
-
-    return response
+        return _job_to_response(job)
 
 
 @router.get("/jobs/{job_id}", response_model=VideoJobResponse)
@@ -215,7 +223,7 @@ async def download_video(
     job_id: str,
     user_id: str = Depends(get_current_user),
 ) -> Any:
-    """下载生成的视频。"""
+    """下载生成的视频（保留鉴权接口，供显式下载场景使用）。"""
     from fastapi.responses import FileResponse
 
     with _db_session() as session:
@@ -255,8 +263,21 @@ async def list_video_jobs(
 
 
 # --------------------------------------------------------------------------- #
-# 后台生成任务
+# 分阶段执行 / 编辑 / AI 修改
 # --------------------------------------------------------------------------- #
+
+
+def _load_job(job_id: str, user_id: str) -> VideoJob:
+    """加载并校验任务归属。"""
+    with _db_session() as session:
+        job = (
+            session.query(VideoJob)
+            .filter(VideoJob.job_id == job_id, VideoJob.user_id == user_id)
+            .first()
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        return job
 
 
 def _update_job(
@@ -271,6 +292,7 @@ def _update_job(
     video_path: str | None = None,
     final_video_path: str | None = None,
     tts_path: str | None = None,
+    config_json: dict[str, Any] | None = None,
     error: str | None = None,
 ) -> None:
     """更新任务状态与产物。"""
@@ -291,13 +313,14 @@ def _update_job(
                 job.asset_urls = asset_urls
             if storyboard_json is not None:
                 job.storyboard_json = storyboard_json
-                # 分镜数据同时写入 storyboard
             if video_path is not None:
                 job.video_path = video_path
             if final_video_path is not None:
                 job.final_video_path = final_video_path
             if tts_path is not None:
                 job.tts_path = tts_path
+            if config_json is not None:
+                job.config_json = config_json
             if error is not None:
                 job.error = error
             job.updated_at = datetime.utcnow()
@@ -306,70 +329,166 @@ def _update_job(
         logger.exception("[video-%s] 更新任务状态失败", job_id)
 
 
-def _run_video_generation(
+def _sync_generator_state(gen: VideoGenerator, job_id: str) -> None:
+    """将生成器当前状态同步到数据库。"""
+    _update_job(
+        job_id,
+        script_json=gen.script_json(),
+        asset_urls=gen.asset_urls(),
+        storyboard_json=gen.storyboard_json(),
+        stages=gen.stage_summary(),
+    )
+
+
+@router.post("/jobs/{job_id}/stage/{stage_name}/run", response_model=VideoJobResponse)
+async def run_stage(
     job_id: str,
-    result_id: str,
-    user_id: str,
-    script_text: str,
-    config: dict[str, Any],
-) -> None:
-    """后台执行视频生成。"""
+    stage_name: str,
+    user_id: str = Depends(get_current_user),
+) -> VideoJobResponse:
+    """运行指定阶段。"""
+    if stage_name not in STAGE_ORDER:
+        raise HTTPException(status_code=400, detail=f"未知阶段: {stage_name}")
+
+    job = _load_job(job_id, user_id)
     try:
-        _update_job(job_id, status="running", stage="script")
+        _update_job(job_id, status="running")
+        gen = reconstruct_generator(job)
 
-        video_config = config_from_dict(config)
-        generator = VideoGenerator(
-            job_id=job_id,
-            result_id=result_id,
-            user_id=user_id,
-            script_text=script_text,
-            config=video_config,
-        )
+        if stage_name == "script":
+            gen.split_script()
+            _sync_generator_state(gen, job_id)
+            _update_job(job_id, stage="script", status="pending")
 
-        # 剧本分镜
-        generator.split_script()
-        _update_job(
-            job_id,
-            stage="script",
-            stages=generator.stage_summary(),
-            script_json={"scenes": [{"text": s.text, "order": s.order} for s in generator.scenes]},
-        )
+        elif stage_name == "assets":
+            if not gen.scenes:
+                gen.split_script()
+            gen.generate_assets()
+            _sync_generator_state(gen, job_id)
+            _update_job(job_id, stage="assets", status="pending")
 
-        # 画面资产
-        generator.generate_assets()
-        _update_job(
-            job_id,
-            stage="assets",
-            stages=generator.stage_summary(),
-            asset_urls=[s.image_path for s in generator.scenes if s.image_path],
-        )
+        elif stage_name == "storyboard":
+            if not gen.scenes:
+                gen.split_script()
+                gen.generate_assets()
+            gen.build_storyboard()
+            _sync_generator_state(gen, job_id)
+            _update_job(job_id, stage="storyboard", status="pending")
 
-        # 分镜预览
-        storyboard = generator.build_storyboard()
-        _update_job(
-            job_id,
-            stage="storyboard",
-            stages=generator.stage_summary(),
-            storyboard_json=storyboard,
-        )
+        elif stage_name == "video":
+            if not gen.scenes:
+                gen.split_script()
+                gen.generate_assets()
+                gen.build_storyboard()
+            silent_path = gen.compose_silent_video()
+            _sync_generator_state(gen, job_id)
+            _update_job(
+                job_id,
+                stage="video",
+                status="pending",
+                video_path=str(silent_path),
+            )
 
-        # 视频合成 + 后期
-        final_path = generator.compose_video()
-        _update_job(
-            job_id,
-            status="done",
-            stage="post",
-            stages=generator.stage_summary(),
-            final_video_path=str(final_path),
-        )
+        elif stage_name == "post":
+            final_path = gen.add_post_audio()
+            _sync_generator_state(gen, job_id)
+            _update_job(
+                job_id,
+                status="done",
+                stage="post",
+                final_video_path=str(final_path),
+                video_path=str(gen.output_dir / "silent.mp4"),
+            )
+            if settings.static_deploy_dir:
+                _mirror_to_static(final_path)
 
-        # 若配置了静态部署目录，则镜像一份供 /static/ 访问
-        if settings.static_deploy_dir:
-            _mirror_to_static(final_path)
-
+        return _job_to_response(_load_job(job_id, user_id))
     except Exception as exc:
-        logger.exception("[video-%s] 视频生成失败", job_id)
-        _update_job(job_id, status="failed", stage="post", error=f"{type(exc).__name__}: {exc}")
+        logger.exception("[video-%s] 阶段 %s 运行失败", job_id, stage_name)
+        _update_job(job_id, status="failed", error=f"{type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/jobs/{job_id}/stage/{stage_name}/edit", response_model=VideoJobResponse)
+async def edit_stage(
+    job_id: str,
+    stage_name: str,
+    request: StageEditRequest,
+    user_id: str = Depends(get_current_user),
+) -> VideoJobResponse:
+    """人工编辑指定阶段产物。"""
+    if stage_name not in STAGE_ORDER:
+        raise HTTPException(status_code=400, detail=f"未知阶段: {stage_name}")
+
+    job = _load_job(job_id, user_id)
+    try:
+        gen = reconstruct_generator(job)
+
+        if stage_name == "script" and request.scenes:
+            for item in request.scenes:
+                order = int(item.get("order", -1))
+                if order < 0:
+                    continue
+                if "text" in item:
+                    gen.update_scene_text(order, item["text"])
+                if "image_prompt" in item:
+                    gen.update_scene_prompt(order, item["image_prompt"])
+
+        elif stage_name == "assets" and request.scenes:
+            for item in request.scenes:
+                order = int(item.get("order", -1))
+                if order < 0:
+                    continue
+                if "image_prompt" in item:
+                    gen.update_scene_prompt(order, item["image_prompt"])
+                if item.get("regenerate"):
+                    gen.regenerate_scene_image(order)
+                if item.get("image_path"):
+                    gen.set_scene_image(order, item["image_path"])
+
+        elif stage_name == "storyboard" and request.durations:
+            for order_str, duration in (request.durations or {}).items():
+                gen.set_scene_duration(int(order_str), float(duration))
+
+        elif stage_name == "post" and request.tts_voice:
+            gen.set_tts_voice(request.tts_voice)
+            _update_job(job_id, config_json=gen.config.__dict__)
+
+        _sync_generator_state(gen, job_id)
+        return _job_to_response(_load_job(job_id, user_id))
+    except Exception as exc:
+        logger.exception("[video-%s] 阶段 %s 编辑失败", job_id, stage_name)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/jobs/{job_id}/stage/{stage_name}/ai-modify", response_model=VideoJobResponse)
+async def ai_modify_stage(
+    job_id: str,
+    stage_name: str,
+    request: StageAiModifyRequest,
+    user_id: str = Depends(get_current_user),
+) -> VideoJobResponse:
+    """使用 AI 辅助修改指定阶段产物。"""
+    if stage_name not in ("script", "assets"):
+        raise HTTPException(status_code=400, detail="仅支持 script / assets 阶段的 AI 修改")
+
+    job = _load_job(job_id, user_id)
+    try:
+        gen = reconstruct_generator(job)
+        if stage_name == "script":
+            gen.ai_modify_script(request.instruction)
+        elif stage_name == "assets":
+            gen.ai_modify_assets(request.instruction)
+        _sync_generator_state(gen, job_id)
+        return _job_to_response(_load_job(job_id, user_id))
+    except Exception as exc:
+        logger.exception("[video-%s] 阶段 %s AI 修改失败", job_id, stage_name)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# --------------------------------------------------------------------------- #
+# 工具
+# --------------------------------------------------------------------------- #
 
 
 def _mirror_to_static(video_path: Path) -> None:

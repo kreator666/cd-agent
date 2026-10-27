@@ -1,7 +1,11 @@
 """脱口秀视频生成服务。
 
 基于 302.AI 文生图 + edge-tts + MoviePy 的轻量流水线：
-剧本分镜 -> 生成插画 -> 生成配音 -> 合成视频 -> 输出成片。
+剧本分镜 -> 生成插画 -> 生成分镜板 -> 合成无声视频 -> 后期配音 -> 输出成片。
+
+新增能力：
+- 每个阶段可独立运行、人工审核修改、AI 辅助修改。
+- 支持更多 edge-tts 音色，包括搞笑/特色音色。
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from moviepy import (
     CompositeVideoClip,
     ImageClip,
     TextClip,
+    VideoFileClip,
     concatenate_videoclips,
 )
 from PIL import Image
@@ -63,6 +68,33 @@ STYLE_PRESETS: dict[str, dict[str, str]] = {
         "accent_color": "#FF764A",
     },
 }
+
+# 常用中文 edge-tts 音色（含搞笑/特色）
+TTS_VOICES: list[dict[str, str]] = [
+    # 女声
+    {"value": "zh-CN-XiaoxiaoNeural", "label": "晓晓（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaoyiNeural", "label": "晓伊（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaochenNeural", "label": "晓辰（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaohanNeural", "label": "晓涵（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaomengNeural", "label": "晓梦（女声·卡通）", "group": "女声"},
+    {"value": "zh-CN-XiaomoNeural", "label": "晓墨（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaoruiNeural", "label": "晓睿（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaoshuangNeural", "label": "晓双（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaoxuanNeural", "label": "晓萱（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaoyanNeural", "label": "晓颜（女声）", "group": "女声"},
+    {"value": "zh-CN-XiaozhenNeural", "label": "晓甄（女声）", "group": "女声"},
+    # 男声
+    {"value": "zh-CN-YunxiNeural", "label": "云希（男声）", "group": "男声"},
+    {"value": "zh-CN-YunjianNeural", "label": "云健（男声·新闻）", "group": "男声"},
+    {"value": "zh-CN-YunfengNeural", "label": "云枫（男声）", "group": "男声"},
+    {"value": "zh-CN-YunhaoNeural", "label": "云皓（男声）", "group": "男声"},
+    {"value": "zh-CN-YunyeNeural", "label": "云野（男声）", "group": "男声"},
+    {"value": "zh-CN-YunzeNeural", "label": "云泽（男声）", "group": "男声"},
+    # 搞笑/特色
+    {"value": "zh-CN-XiaoyouNeural", "label": "晓悠（女童·可爱）", "group": "搞笑/特色"},
+    {"value": "zh-CN-YunxiaNeural", "label": "云夏（男声·少年）", "group": "搞笑/特色"},
+    {"value": "zh-CN-XiaoxiaoNeural", "label": "晓晓（女声·加快语速更搞笑）", "group": "搞笑/特色"},
+]
 
 
 def _find_chinese_font() -> str:
@@ -173,14 +205,64 @@ class VideoGenerator:
         return labels.get(name, name)
 
     # ------------------------------------------------------------------ #
+    # 序列化 / 反序列化（支持中断后继续编辑）
+    # ------------------------------------------------------------------ #
+
+    def script_json(self) -> dict[str, Any]:
+        """当前分镜脚本 JSON。"""
+        return {
+            "scenes": [
+                {"text": s.text, "image_prompt": s.image_prompt, "order": s.order}
+                for s in self.scenes
+            ]
+        }
+
+    def asset_urls(self) -> list[str]:
+        """当前已生成的图片路径列表。"""
+        return [s.image_path for s in self.scenes if s.image_path]
+
+    def storyboard_json(self) -> dict[str, Any]:
+        """当前分镜板 JSON。"""
+        return {
+            "scenes": [
+                {
+                    "order": s.order,
+                    "text": s.text,
+                    "image_prompt": s.image_prompt,
+                    "image_path": s.image_path,
+                    "duration": s.duration,
+                }
+                for s in self.scenes
+            ],
+            "config": {
+                "style": self.config.style,
+                "tts_enabled": self.config.tts_enabled,
+                "pace": self.config.pace,
+            },
+        }
+
+    def load_scenes(self, scenes_data: list[dict[str, Any]]) -> None:
+        """从外部数据加载/覆盖镜头列表（用于编辑后恢复）。"""
+        self.scenes = []
+        for item in scenes_data:
+            self.scenes.append(
+                Scene(
+                    text=item.get("text", ""),
+                    image_prompt=item.get("image_prompt", ""),
+                    image_path=item.get("image_path"),
+                    audio_path=item.get("audio_path"),
+                    duration=item.get("duration", 3.0),
+                    order=int(item.get("order", 0)),
+                )
+            )
+        self.scenes.sort(key=lambda s: s.order)
+
+    # ------------------------------------------------------------------ #
     # Stage 1: 剧本分镜
     # ------------------------------------------------------------------ #
 
     def split_script(self) -> list[Scene]:
-        """把段子文本切分为多个镜头。
-
-        先按句子切分，再按 max_scenes 合并，保证每个镜头都有完整语义。
-        """
+        """把段子文本切分为多个镜头。"""
         self._set_stage("script", "running", "正在拆分剧本")
         if not self.script_text:
             raise ValueError("段子内容为空")
@@ -240,15 +322,7 @@ class VideoGenerator:
         paths: list[str] = []
         for scene in self.scenes:
             try:
-                urls = self.ai302.generate_image(
-                    scene.image_prompt,
-                    model="gpt-image-2",
-                    size="1024x1024",
-                    save_dir=image_dir,
-                )
-                # 取第一个结果；如果是 URL 则下载到本地
-                first = urls[0]
-                local_path = self._ensure_local_image(first, image_dir, scene.order)
+                local_path = self._generate_scene_image(scene, image_dir)
                 scene.image_path = str(local_path)
                 paths.append(scene.image_path)
             except Exception as exc:
@@ -260,6 +334,17 @@ class VideoGenerator:
 
         self._set_stage("assets", "done", f"生成 {len(paths)} 张插画")
         return paths
+
+    def _generate_scene_image(self, scene: Scene, image_dir: Path) -> Path:
+        """为单个镜头生成图片并返回本地路径。"""
+        urls = self.ai302.generate_image(
+            scene.image_prompt,
+            model="gpt-image-2",
+            size="1024x1024",
+            save_dir=image_dir,
+        )
+        first = urls[0]
+        return self._ensure_local_image(first, image_dir, scene.order)
 
     def _ensure_local_image(self, source: str, image_dir: Path, idx: int) -> Path:
         """将 URL 或 base64 图片保存为本地文件。"""
@@ -289,6 +374,32 @@ class VideoGenerator:
         img.save(target)
         return target
 
+    def regenerate_scene_image(self, order: int) -> None:
+        """重新生成指定镜头的图片。"""
+        scene = self._get_scene(order)
+        image_dir = self.output_dir / "images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        local_path = self._generate_scene_image(scene, image_dir)
+        scene.image_path = str(local_path)
+
+    def set_scene_image(self, order: int, image_path: str) -> None:
+        """设置指定镜头使用本地/上传图片。"""
+        scene = self._get_scene(order)
+        src = Path(image_path)
+        if not src.exists():
+            raise ValueError(f"图片不存在: {image_path}")
+        image_dir = self.output_dir / "images"
+        image_dir.mkdir(parents=True, exist_ok=True)
+        target = image_dir / f"{order:03d}.png"
+        shutil.copy(src, target)
+        scene.image_path = str(target)
+
+    def _get_scene(self, order: int) -> Scene:
+        for s in self.scenes:
+            if s.order == order:
+                return s
+        raise ValueError(f"镜头 {order} 不存在")
+
     # ------------------------------------------------------------------ #
     # Stage 3: 分镜预览
     # ------------------------------------------------------------------ #
@@ -299,24 +410,13 @@ class VideoGenerator:
         if not self.scenes or not self.scenes[0].image_path:
             self.generate_assets()
 
-        storyboard = {
-            "scenes": [
-                {
-                    "order": s.order,
-                    "text": s.text,
-                    "image_path": s.image_path,
-                    "duration": s.duration,
-                }
-                for s in self.scenes
-            ],
-            "config": {
-                "style": self.config.style,
-                "tts_enabled": self.config.tts_enabled,
-                "pace": self.config.pace,
-            },
-        }
         self._set_stage("storyboard", "done", "分镜生成完成")
-        return storyboard
+        return self.storyboard_json()
+
+    def set_scene_duration(self, order: int, duration: float) -> None:
+        """设置单个镜头时长。"""
+        scene = self._get_scene(order)
+        scene.duration = max(float(duration), 1.0)
 
     # ------------------------------------------------------------------ #
     # Stage 4 & 5: 视频合成 + 后期配音
@@ -361,17 +461,14 @@ class VideoGenerator:
         wps = pace_map.get(self.config.pace, 3.5)
         return max(chars / wps, 2.0)
 
-    def compose_video(self) -> Path:
-        """合成最终视频。"""
+    def compose_silent_video(self) -> Path:
+        """合成不含音频的视频（Stage 4）。"""
         self._set_stage("video", "running", "正在合成无声视频")
         if not self.scenes or not self.scenes[0].image_path:
             self.generate_assets()
 
-        # 先生成配音并计算时长
-        if self.config.tts_enabled:
-            asyncio.run(self.generate_tts())
-
         for scene in self.scenes:
+            # 无声视频阶段按字数估算时长，避免后续配音拖影
             scene.duration = self._calculate_duration(scene)
 
         clips: list[Any] = []
@@ -380,6 +477,54 @@ class VideoGenerator:
             clips.append(clip)
 
         video = concatenate_videoclips(clips, method="compose")
+        silent_path = self.output_dir / "silent.mp4"
+        video.write_videofile(
+            str(silent_path),
+            fps=FPS,
+            codec="libx264",
+            audio_codec="aac",
+            logger=None,
+            threads=2,
+        )
+        video.close()
+        for clip in clips:
+            clip.close()
+
+        self._set_stage("video", "done", f"无声视频已保存: {silent_path}")
+        return silent_path
+
+    def add_post_audio(self) -> Path:
+        """为无声视频添加配音（Stage 5）。"""
+        silent_path = self.output_dir / "silent.mp4"
+        if not silent_path.exists():
+            raise FileNotFoundError("无声视频不存在，请先执行视频合成阶段")
+
+        self._set_stage("post", "running", "正在生成配音并合成最终视频")
+
+        # 生成 TTS
+        if self.config.tts_enabled:
+            asyncio.run(self.generate_tts())
+
+        video = VideoFileClip(str(silent_path))
+
+        # 添加配音
+        if self.config.tts_enabled:
+            audio_clips: list[Any] = []
+            cursor = 0.0
+            for scene in self.scenes:
+                if scene.audio_path and Path(scene.audio_path).exists():
+                    try:
+                        audio = AudioFileClip(scene.audio_path)
+                        # 将每段音频放到对应镜头的时间位置
+                        audio = audio.with_start(cursor)
+                        audio_clips.append(audio)
+                    except Exception:
+                        logger.exception("[video-%s] 镜头 %s 音频加载失败", self.job_id, scene.order)
+                cursor += scene.duration
+
+            if audio_clips:
+                composite_audio = CompositeAudioClip(audio_clips)
+                video = video.with_audio(composite_audio)
 
         # 添加 BGM（如有）
         if self.config.bgm_enabled and self.config.bgm_path and Path(self.config.bgm_path).exists():
@@ -403,11 +548,14 @@ class VideoGenerator:
             threads=2,
         )
         video.close()
-        for clip in clips:
-            clip.close()
 
-        self._set_stage("video", "done", f"视频已保存: {final_path}")
         self._set_stage("post", "done", "后期配音完成")
+        return final_path
+
+    def compose_video(self) -> Path:
+        """一次性合成含配音的最终视频（兼容旧版 run）。"""
+        silent_path = self.compose_silent_video()
+        final_path = self.add_post_audio()
         return final_path
 
     def _build_scene_clip(self, scene: Scene) -> CompositeVideoClip:
@@ -476,15 +624,6 @@ class VideoGenerator:
 
         scene_clip = CompositeVideoClip(layers, size=(VIDEO_WIDTH, VIDEO_HEIGHT))
         scene_clip = scene_clip.with_duration(scene.duration)
-
-        # 添加配音
-        if scene.audio_path and Path(scene.audio_path).exists():
-            try:
-                audio = AudioFileClip(scene.audio_path)
-                scene_clip = scene_clip.with_audio(audio)
-            except Exception:
-                logger.exception("[video-%s] 镜头 %s 音频加载失败", self.job_id, scene.order)
-
         return scene_clip
 
     @staticmethod
@@ -509,7 +648,107 @@ class VideoGenerator:
         return np.full((height, width, 3), rgb, dtype=np.uint8)
 
     # ------------------------------------------------------------------ #
-    # 完整流水线
+    # 人工编辑
+    # ------------------------------------------------------------------ #
+
+    def update_scene_text(self, order: int, text: str) -> None:
+        """修改镜头文案。"""
+        scene = self._get_scene(order)
+        scene.text = text.strip()
+
+    def update_scene_prompt(self, order: int, prompt: str) -> None:
+        """修改镜头画面提示词。"""
+        scene = self._get_scene(order)
+        scene.image_prompt = prompt.strip()
+
+    def set_tts_voice(self, voice: str) -> None:
+        """修改配音音色。"""
+        self.config.tts_voice = voice
+
+    # ------------------------------------------------------------------ #
+    # AI 辅助修改
+    # ------------------------------------------------------------------ #
+
+    def _llm(self) -> Any:
+        """获取一个轻量 LLM 用于 AI 修改。"""
+        from comedy_agent.models.factory import ModelFactory
+
+        return ModelFactory.get_model(task_type="fast")
+
+    @staticmethod
+    def _extract_json(text: str) -> Any:
+        """从 LLM 返回文本中提取 JSON。"""
+        text = text.strip()
+        if text.startswith("```"):
+            # 去掉 markdown code block
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:].strip()
+        return json.loads(text)
+
+    def ai_modify_script(self, instruction: str) -> list[dict[str, Any]]:
+        """使用 AI 根据用户指令优化分镜文案与画面提示词。"""
+        self._set_stage("script", "running", "AI 正在优化分镜")
+        current = [
+            {"order": s.order, "text": s.text, "image_prompt": s.image_prompt}
+            for s in self.scenes
+        ]
+        prompt = (
+            "你是一位短视频分镜导演。当前脱口秀分镜如下：\n"
+            f"{json.dumps(current, ensure_ascii=False, indent=2)}\n\n"
+            f"用户优化指令：{instruction or '让画面更生动、提示词更具体'}\n\n"
+            "请返回 JSON 数组，每个元素包含 order、text（该镜头文案）、image_prompt（画面提示词）。"
+            "不要返回任何其他内容。"
+        )
+        try:
+            resp = self._llm().invoke(prompt)
+            content = getattr(resp, "content", str(resp))
+            data = self._extract_json(content)
+            for item in data:
+                order = int(item.get("order", -1))
+                if order < 0:
+                    continue
+                scene = self._get_scene(order)
+                scene.text = item.get("text", scene.text).strip()
+                scene.image_prompt = item.get("image_prompt", scene.image_prompt).strip()
+            self._set_stage("script", "done", "AI 已优化分镜")
+            return current
+        except Exception as exc:
+            logger.exception("[video-%s] AI 优化分镜失败", self.job_id)
+            raise RuntimeError(f"AI 优化分镜失败: {exc}")
+
+    def ai_modify_assets(self, instruction: str) -> list[dict[str, Any]]:
+        """使用 AI 根据用户指令优化画面提示词。"""
+        self._set_stage("assets", "running", "AI 正在优化画面提示词")
+        current = [
+            {"order": s.order, "text": s.text, "image_prompt": s.image_prompt}
+            for s in self.scenes
+        ]
+        prompt = (
+            "你是一位 AI 绘画提示词工程师。当前镜头文案与提示词如下：\n"
+            f"{json.dumps(current, ensure_ascii=False, indent=2)}\n\n"
+            f"用户优化指令：{instruction or '让画面更有趣、更符合脱口秀氛围'}\n\n"
+            "请返回 JSON 数组，每个元素包含 order 和 image_prompt（优化后的提示词）。"
+            "不要返回任何其他内容。"
+        )
+        try:
+            resp = self._llm().invoke(prompt)
+            content = getattr(resp, "content", str(resp))
+            data = self._extract_json(content)
+            for item in data:
+                order = int(item.get("order", -1))
+                if order < 0:
+                    continue
+                scene = self._get_scene(order)
+                scene.image_prompt = item.get("image_prompt", scene.image_prompt).strip()
+            self._set_stage("assets", "done", "AI 已优化画面提示词")
+            return current
+        except Exception as exc:
+            logger.exception("[video-%s] AI 优化画面提示词失败", self.job_id)
+            raise RuntimeError(f"AI 优化画面提示词失败: {exc}")
+
+    # ------------------------------------------------------------------ #
+    # 完整流水线（兼容旧版）
     # ------------------------------------------------------------------ #
 
     def run(self) -> Path:
@@ -532,3 +771,79 @@ def config_from_dict(data: dict[str, Any]) -> VideoConfig:
         pace=data.get("pace", "normal"),
         max_scenes=int(data.get("max_scenes", 5)),
     )
+
+
+def reconstruct_generator(job: Any) -> VideoGenerator:
+    """从 VideoJob ORM 重建 VideoGenerator（支持中断后继续编辑）。"""
+    from comedy_agent.memory.schema import VideoJob
+
+    if not isinstance(job, VideoJob):
+        raise TypeError("job 必须是 VideoJob 实例")
+
+    config = config_from_dict(job.config_json or {})
+    script_text = ""
+    if job.result is not None:
+        script_text = job.result.content or ""
+
+    gen = VideoGenerator(
+        job_id=job.job_id,
+        result_id=job.result_id,
+        user_id=job.user_id,
+        script_text=script_text,
+        config=config,
+        output_dir=Path(settings.video_output_dir) / job.job_id,
+    )
+
+    # 优先用 storyboard_json 恢复，其次用 script_json
+    scenes_data: list[dict[str, Any]] = []
+    storyboard = job.storyboard_json or {}
+    script = job.script_json or {}
+    if storyboard.get("scenes"):
+        for s in storyboard["scenes"]:
+            scenes_data.append(
+                {
+                    "text": s.get("text", ""),
+                    "image_prompt": "",
+                    "image_path": s.get("image_path"),
+                    "duration": s.get("duration", 3.0),
+                    "order": s.get("order", 0),
+                }
+            )
+    elif script.get("scenes"):
+        for s in script["scenes"]:
+            scenes_data.append(
+                {
+                    "text": s.get("text", ""),
+                    "image_prompt": s.get("image_prompt", ""),
+                    "image_path": None,
+                    "duration": 3.0,
+                    "order": s.get("order", 0),
+                }
+            )
+
+    # 如果 asset_urls 存在但 storyboard 没图片路径，按顺序补齐
+    asset_urls = job.asset_urls or []
+    for idx, url in enumerate(asset_urls):
+        if idx < len(scenes_data):
+            scenes_data[idx]["image_path"] = url
+
+    # 用 script_json 补全 image_prompt
+    prompt_map: dict[int, str] = {}
+    if script.get("scenes"):
+        for s in script["scenes"]:
+            prompt_map[int(s.get("order", 0))] = s.get("image_prompt", "")
+    for item in scenes_data:
+        if not item.get("image_prompt") and item.get("order") in prompt_map:
+            item["image_prompt"] = prompt_map[item["order"]]
+
+    if scenes_data:
+        gen.load_scenes(scenes_data)
+
+    # 恢复阶段状态
+    for st in job.stages or []:
+        gen._stage_status[st.get("name", "script")] = {
+            "status": st.get("status", "pending"),
+            "message": st.get("message", ""),
+        }
+
+    return gen

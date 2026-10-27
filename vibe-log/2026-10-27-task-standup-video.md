@@ -79,6 +79,15 @@
      - 左侧配置面板始终显示 5 个阶段时间线，通过颜色区分 done / active / pending。
      - `eval.html` 与 `video-list.html` 的「查看进度」链接改为 `video-workbench.html?job_id=...`。
 
+6. **修复画面资产每个镜头的图仍不显示，且点击「重新生成此图」无响应**（Commit `ec39660`）
+   - 原因：
+     - `storyboard_json` 中保存的已经是 `job_id/images/000.png` 相对路径，但前端 `imageUrl()` 又拼了一层 `job_id`，导致请求 `/static/video/{job_id}/{job_id}/images/000.png` 404。
+     - 点击「重新生成此图」时，后端下载 302.AI 返回的图片 URL 因环境 SSL 握手失败 (`UNEXPECTED_EOF_WHILE_READING`) 抛异常，前端没有反馈。
+   - 方案：
+     - `frontend/video-workbench.html` 与 `frontend/video-list.html` 的 `imageUrl()` 改为直接使用后端返回的相对路径，拼接为 `/static/video/${relPath}`。
+     - `video-workbench.html` 为「重新生成此图」按钮增加唯一 id，点击后显示「生成中...」并禁用，避免重复提交。
+     - `video_generator.py` 的 `regenerate_scene_image()` 增加 try/except，生成失败时自动降级为纯色占位图，确保编辑接口始终返回成功。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

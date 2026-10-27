@@ -103,14 +103,9 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
 
     video_url = None
     if job.final_video_path and Path(job.final_video_path).exists():
-        # 如果配置了静态部署目录，返回可访问 URL；否则返回下载端点
-        if settings.static_deploy_dir:
-            rel = Path(job.final_video_path).relative_to(
-                Path(settings.video_output_dir)
-            )
-            video_url = f"/static/video/{rel.as_posix()}"
-        else:
-            video_url = f"/video/jobs/{job.job_id}/download"
+        # 统一使用 /static/video/... 提供播放/下载，避免 /video/jobs/.../download 需要鉴权
+        rel = Path(job.final_video_path).relative_to(Path(settings.video_output_dir))
+        video_url = f"/static/video/{rel.as_posix()}"
 
     return VideoJobResponse(
         job_id=job.job_id,

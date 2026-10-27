@@ -406,6 +406,11 @@ async def add_no_cache_headers(request, call_next):
     return response
 
 
+# 挂载生成的视频目录（先挂载更具体的 /static/video，避免被 /static 通配覆盖）
+_video_dir = settings.video_output_dir
+_video_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/video", StaticFiles(directory=str(_video_dir)), name="static_video")
+
 # 挂载前端静态文件（如果 frontend/ 目录存在）
 _frontend_dir = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
 if _frontend_dir.is_dir():

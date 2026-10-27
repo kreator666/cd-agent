@@ -184,6 +184,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <div></div>
     <div class="title">笑果评测｜四维度生成完整脱口秀</div>
     <div class="actions">
+      <a class="action" href="/static/video-list.html"><span>📹 我的视频</span></a>
       <button class="action" onclick="logout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span>退出</span></button>
     </div>
   </header>
@@ -194,6 +195,7 @@ button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer
     <a href="/static/pro-b.html" title="专业版" style="display:none;">🎬</a>
     <a href="/static/eval.html" class="active" title="笑果评测">🎯</a>
     <a href="/static/eval-square.html" title="段子广场">🏛️</a>
+    <a href="/static/video-list.html" title="我的视频">📹</a>
     <a href="/static/me.html" title="我的">👤</a>
   </nav>
 
@@ -311,6 +313,7 @@ requireAuth();
 
 let currentSessionId = null;
 let pollTimer = null;
+let videoMap = {};
 
 const modelSelect = document.getElementById('model-select');
 const startBtn = document.getElementById('start-btn');
@@ -443,6 +446,23 @@ function initTemplateSelector() {
 async function init() {
   initTemplateSelector();
   await loadModels();
+  await loadVideos();
+}
+
+async function loadVideos() {
+  try {
+    const res = await apiFetch('/video/jobs?limit=100');
+    const data = await res.json();
+    videoMap = {};
+    for (const j of (data.jobs || [])) {
+      const existing = videoMap[j.result_id];
+      if (!existing || new Date(j.created_at) > new Date(existing.created_at)) {
+        videoMap[j.result_id] = j;
+      }
+    }
+  } catch (err) {
+    console.error('加载视频任务失败', err);
+  }
 }
 
 async function loadModels() {
@@ -583,7 +603,7 @@ function renderResultCard(r) {
         <div style="display:flex;gap:8px;align-items:center;">
           ${r.status === 'done' && !r.is_published ? `<button class="publish-btn" onclick="publishResult('${r.id}')">发布到广场</button>` : ''}
           ${r.status === 'done' ? `<button class="publish-btn secondary" onclick="openCoachModal('${r.id}')">打磨</button>` : ''}
-          ${r.status === 'done' ? `<button class="publish-btn secondary" onclick="goVideoWorkbench('${r.id}')">🎬 生成视频</button>` : ''}
+          ${renderVideoButton(r)}
           ${r.is_published ? `<span class="published-badge">已在广场</span><button class="publish-btn secondary" onclick="unpublishResult('${r.id}')">取消发布</button>` : ''}
           ${r.content ? `<button class="copy-btn" onclick="copyResult('${r.id}')">复制</button>` : ''}
         </div>
@@ -658,6 +678,18 @@ let currentCoachResultId = null;
 
 function goVideoWorkbench(resultId) {
   window.location.href = `/static/video-workbench.html?result_id=${encodeURIComponent(resultId)}&_=` + Date.now();
+}
+
+function renderVideoButton(r) {
+  if (r.status !== 'done') return '';
+  const vj = videoMap[r.id];
+  if (vj && vj.status === 'done') {
+    return `<a class="publish-btn secondary" href="/static/video-list.html?result_id=${encodeURIComponent(r.id)}">📹 查看视频</a>`;
+  }
+  if (vj && (vj.status === 'running' || vj.status === 'pending')) {
+    return `<a class="publish-btn secondary" href="/static/video-list.html?result_id=${encodeURIComponent(r.id)}">⏳ 视频生成中</a>`;
+  }
+  return `<button class="publish-btn secondary" onclick="goVideoWorkbench('${r.id}')">🎬 生成视频</button>`;
 }
 
 function openCoachModal(resultId) {

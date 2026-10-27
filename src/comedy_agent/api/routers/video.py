@@ -64,6 +64,7 @@ class VideoJobResponse(BaseModel):
     video_url: str | None = None
     final_video_path: str | None = None
     storyboard: dict[str, Any] | None = None
+    result_content: str | None = None
     error: str | None = None
     created_at: str
     updated_at: str
@@ -116,6 +117,7 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
         video_url=video_url,
         final_video_path=job.final_video_path,
         storyboard=job.storyboard_json,
+        result_content=job.result.content if job.result is not None else None,
         error=job.error,
         created_at=job.created_at.isoformat() if job.created_at else "",
         updated_at=job.updated_at.isoformat() if job.updated_at else "",

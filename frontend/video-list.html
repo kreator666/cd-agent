@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的视频｜脱口秀视频列表</title>
+<style>
+:root{
+  --bg:#ffffff;
+  --ink:#343434;
+  --muted:#888b92;
+  --light:#f5f6f8;
+  --line:#eceef2;
+  --line-dark:#dfe2e7;
+  --orange:#ff764a;
+  --green:#18a058;
+  --red:#ff4a4a;
+  --shadow:0 18px 50px rgba(20,26,38,.10);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+  font-size:15px;letter-spacing:.02em;
+}
+.app{min-height:100vh;display:flex;flex-direction:column;}
+button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+/* Topbar */
+.topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+.title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+.back-btn{justify-self:start;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;font-weight:650;text-decoration:none;}
+.back-btn:hover{color:var(--orange);}
+.actions{display:flex;justify-content:flex-end;align-items:center;gap:18px;color:#333;font-weight:620;}
+.action{display:flex;align-items:center;gap:8px;white-space:nowrap;border-radius:16px;padding:9px 10px;transition:.24s cubic-bezier(.2,.8,.2,1);text-decoration:none;color:inherit;}
+.action:hover{background:#f7f8fa;transform:translateY(-1px)}
+
+/* Nav sidebar */
+.nav-sidebar{position:fixed;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+.nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+.nav-sidebar a:hover{background:#f0f1f4;}
+.nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+/* Main */
+.main{flex:1;padding:28px 28px 28px 84px;max-width:1400px;margin:0 auto;width:100%;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.page-header h1{margin:0;font-size:22px;font-weight:780;color:#232323;}
+.page-header p{margin:6px 0 0;font-size:13px;color:var(--muted);}
+
+.empty-state{text-align:center;padding:80px 20px;color:#999;}
+.empty-state .big{font-size:56px;margin-bottom:14px;}
+
+.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;}
+.video-card{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:.2s;display:flex;flex-direction:column;}
+.video-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.08);transform:translateY(-1px);}
+.video-thumb{width:100%;aspect-ratio:9/16;background:#000;position:relative;}
+.video-thumb video{width:100%;height:100%;object-fit:cover;display:block;}
+.video-thumb .placeholder{width:100%;height:100%;display:grid;place-items:center;background:#fafbfc;color:var(--muted);font-size:13px;text-align:center;padding:20px;}
+.video-thumb .status-badge{position:absolute;top:10px;right:10px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.08);}
+.status-badge.done{background:#e8f5e9;color:var(--green);}
+.status-badge.failed{background:#ffebee;color:var(--red);}
+.status-badge.running{background:#fff2ed;color:var(--orange);}
+.status-badge.pending{background:#f5f6f8;color:var(--muted);}
+
+.video-info{padding:16px;flex:1;display:flex;flex-direction:column;}
+.video-title{font-size:14px;font-weight:760;color:#232323;margin-bottom:8px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.video-meta{font-size:12px;color:var(--muted);margin-bottom:12px;}
+.video-scenes{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;}
+.video-scenes img{width:64px;height:64px;object-fit:cover;border-radius:8px;background:#f5f6f8;}
+.video-actions{display:flex;gap:10px;margin-top:auto;}
+.video-actions a,.video-actions button{flex:1;text-align:center;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none;}
+.btn-primary{background:var(--orange);color:#fff;}
+.btn-primary:hover{filter:brightness(1.05);}
+.btn-secondary{background:#fafbfc;color:#333;border:1px solid var(--line-dark);}
+.btn-secondary:hover{background:#f5f6f8;}
+.btn-secondary:disabled{opacity:.6;cursor:not-allowed;}
+
+.spinner{width:24px;height:24px;border:3px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 12px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+@media(max-width:768px){
+  .main{padding-left:28px;}
+  .nav-sidebar{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="back-btn" href="/static/eval.html">← 返回评测</a>
+    <div class="title">📹 我的视频</div>
+    <div class="actions">
+      <a class="action" href="/static/me.html">👤 我的</a>
+    </div>
+  </header>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro-b.html" title="专业版" style="display:none;">🎬</a>
+    <a href="/static/eval.html" title="笑果评测">🎯</a>
+    <a href="/static/eval-square.html" title="段子广场">🏛️</a>
+    <a href="/static/video-list.html" class="active" title="我的视频">📹</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <h1>已生成的脱口秀视频</h1>
+        <p>点击卡片可重新进入工作台或下载成片</p>
+      </div>
+    </div>
+    <div id="video-list">
+      <div class="empty-state"><div class="spinner"></div><p>加载中...</p></div>
+    </div>
+  </main>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+requireAuth();
+
+const listEl = document.getElementById('video-list');
+const urlParams = new URLSearchParams(window.location.search);
+const filterResultId = urlParams.get('result_id');
+
+async function loadVideos() {
+  try {
+    const res = await apiFetch('/video/jobs');
+    if (!res.ok) throw new Error('加载失败');
+    const data = await res.json();
+    let jobs = data.jobs || [];
+    if (filterResultId) {
+      jobs = jobs.filter(j => j.result_id === filterResultId);
+    }
+    renderVideos(jobs);
+  } catch (err) {
+    listEl.innerHTML = `<div class="empty-state"><div class="big">⚠️</div><p>${escapeHtml(err.message)}</p></div>`;
+  }
+}
+
+function renderVideos(jobs) {
+  if (jobs.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <div class="big">📹</div>
+        <h3>还没有生成过视频</h3>
+        <p>去<a href="/static/eval.html" style="color:var(--orange);">笑果评测</a>生成一段脱口秀，再点击 🎬 生成视频。</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = `<div class="video-grid">${jobs.map(j => renderCard(j)).join('')}</div>`;
+}
+
+function renderCard(j) {
+  const statusText = { pending: '排队中', running: '生成中', done: '已完成', failed: '失败' }[j.status] || j.status;
+  const statusClass = j.status;
+  const thumb = j.status === 'done' && j.video_url
+    ? `<video src="${escapeHtml(j.video_url)}" controls preload="metadata"></video>`
+    : `<div class="placeholder">${statusText}${j.stage ? `<br><span style="font-size:11px">阶段：${escapeHtml(j.stage)}</span>` : ''}</div>`;
+
+  const sceneImages = (j.storyboard && j.storyboard.scenes)
+    ? j.storyboard.scenes.filter(s => s.image_path).slice(0, 4).map(s => `<img src="${escapeHtml(s.image_path)}" alt="">`).join('')
+    : '';
+
+  const content = j.result_content || '（无段子内容）';
+  const dateStr = j.created_at ? new Date(j.created_at).toLocaleString() : '';
+
+  let actions = '';
+  if (j.status === 'done' && j.video_url) {
+    actions = `
+      <a class="btn-primary" href="${escapeHtml(j.video_url)}" download target="_blank">下载</a>
+      <a class="btn-secondary" href="/static/video-workbench.html?result_id=${encodeURIComponent(j.result_id)}">重新生成</a>
+    `;
+  } else if (j.status === 'running' || j.status === 'pending') {
+    actions = `
+      <button class="btn-secondary" disabled>生成中...</button>
+      <a class="btn-secondary" href="/static/video-workbench.html?result_id=${encodeURIComponent(j.result_id)}">查看进度</a>
+    `;
+  } else {
+    actions = `
+      <a class="btn-primary" href="/static/video-workbench.html?result_id=${encodeURIComponent(j.result_id)}">重新生成</a>
+    `;
+  }
+
+  return `
+    <div class="video-card" data-job-id="${j.job_id}">
+      <div class="video-thumb">
+        ${thumb}
+        <span class="status-badge ${statusClass}">${statusText}</span>
+      </div>
+      <div class="video-info">
+        <div class="video-title">${escapeHtml(content)}</div>
+        <div class="video-meta">${dateStr} · 镜头 ${sceneImages ? Math.min(4, (j.storyboard.scenes||[]).length) : 0}</div>
+        ${sceneImages ? `<div class="video-scenes">${sceneImages}</div>` : ''}
+        <div class="video-actions">${actions}</div>
+      </div>
+    </div>
+  `;
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+loadVideos();
+</script>
+</body>
+</html>

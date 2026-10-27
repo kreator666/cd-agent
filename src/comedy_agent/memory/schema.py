@@ -1001,6 +1001,9 @@ class VideoJob(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
+    # Relationship
+    result: Mapped["EvalResult"] = relationship("EvalResult", lazy="joined")
+
 
 # ------------------------------------------------------------------ #
 # JokeRating —— 广场段子的路人评分

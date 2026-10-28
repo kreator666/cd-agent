@@ -105,6 +105,10 @@
      - `add_post_audio()` 改用 `_run_async_sync(self.generate_tts())`。
      - 若旧任务缺少 `silent.mp4`，post 阶段自动先补合成无声视频，而不是直接报错。
 
+9. **修复左侧导航栏只在笑果评测页显示「我的视频」**（Commit `b6ff516`）
+   - 原因：只有 `eval.html`、`video-list.html`、`video-workbench.html` 的侧边栏写了「我的视频」入口，其他页面（`me.html`、`speed.html`、`publish.html`、`skills.html`、`consumptions.html`、`eval-square.html`、`pro-b.html`）都漏掉了。
+   - 方案：在这些页面的 `nav-sidebar` 中统一补充 `<a href="/static/video-list.html" title="我的视频">📹</a>`，保持导航一致。
+
 ## 备注
 - 测试通过率：
   - `tests/test_annotation_api.py` + `tests/test_api_new_routers.py`：17/17 通过

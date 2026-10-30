@@ -89,9 +89,41 @@ workbench daemon status                           # 后台守护进程状态
 3. 其余全部 → 反代到后端 `127.0.0.1:8000`（API 无 `/api` 前缀，`/health`、`/auth/*`、`/me/*`、`/eval/*` 等 122 个路由）
 4. html 不缓存，css/js/图片缓存 7 天；`client_max_body_size 50m`（文件上传）
 
-### 更新部署
+### 发布流程（照做即可）
 
-本地：`tar --force-local -czf frontend.tar.gz -C frontend .` → `workbench upload` 到服务器 `/var/www/` → 解压覆盖。改前端代码后重启后端才生效（uvicorn 以 `--reload` 运行，改 Python 代码自动重载）。
+服务器上仓库路径：`/root/workspace/cd-agent`（分支 `v3_new`），nginx 站点目录：`/var/www/frontend`。
+
+**标准发布（改完代码并 push 到 GitHub 后）：**
+
+```bash
+ssh claw 'cd /root/workspace/cd-agent && git pull origin v3_new && cp -r frontend/. /var/www/frontend/'
+```
+
+然后验证：
+
+```bash
+curl -sk -o /dev/null -w "%{http_code}\n" https://www.comedyclaw.cn/        # 期望 200
+curl -sk -o /dev/null -w "%{http_code}\n" https://www.comedyclaw.cn/health    # 期望 200
+```
+
+**说明：**
+- 前端静态文件：`cp -r frontend/. /var/www/frontend/` 即生效，无需重启 nginx
+- 后端 Python 代码：uvicorn 以 `--reload` 运行，pull 后自动热重载，无需手动重启
+- 改了 `requirements.txt` 或 uvicorn 挂掉时，才需要重启后端：
+
+```bash
+ssh claw 'ps aux | grep "uvicorn comedy_agent" | grep -v grep | awk "{print \$2}" | xargs -r kill; cd /root/workspace/cd-agent && nohup python3 -m uvicorn comedy_agent.api.server:app --host 0.0.0.0 --port 8000 --reload > /var/log/uvicorn.log 2>&1 &'
+```
+
+**只改单个前端文件的快速发布：**
+
+```bash
+scp ./frontend/xxx.html claw:/var/www/frontend/xxx.html
+```
+
+### 备用：Workbench 通道发布（云助手正常时可用）
+
+本地：`tar --force-local -czf frontend.tar.gz -C frontend .` → `workbench upload -f` 到服务器 `/var/www/` → 解压覆盖。
 
 ## 注意事项
 

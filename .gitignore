@@ -59,3 +59,6 @@ uvicorn.pid
 Thumbs.db
 frontend/avatars/
 frontend/qr_codes/
+
+# 调试临时文件
+.freebuff/

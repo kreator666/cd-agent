@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分段打磨工作台</title>
+<style>
+:root{
+  --bg:#ffffff;
+  --ink:#343434;
+  --muted:#888b92;
+  --light:#f5f6f8;
+  --line:#eceef2;
+  --line-dark:#dfe2e7;
+  --orange:#ff764a;
+  --green:#18a058;
+  --red:#ff4a4a;
+  --icon:#5f6368;
+  --shadow:0 18px 50px rgba(20,26,38,.10);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;
+  font-size:15px;letter-spacing:.02em;
+}
+.app{height:100vh;display:flex;flex-direction:column;background:#fff;position:relative;}
+button{font:inherit;border:0;background:transparent;color:inherit;cursor:pointer;padding:0}
+
+/* Topbar */
+.topbar{height:76px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 28px 0 26px;border-bottom:1px solid rgba(238,240,244,.45);position:relative;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(14px)}
+.title{text-align:center;font-size:20px;font-weight:760;color:#232323;}
+.actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;color:#333;font-weight:620;}
+.back-link{justify-self:start;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;font-weight:650;text-decoration:none;}
+.back-link:hover{color:var(--orange);}
+.save-btn{padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;color:#fff;background:var(--orange);transition:.2s;}
+.save-btn:hover{filter:brightness(1.05);}
+.save-btn:disabled{opacity:.6;cursor:not-allowed;}
+.saved-tip{font-size:12px;font-weight:700;color:var(--green);display:none;}
+
+/* Nav sidebar */
+.nav-sidebar{position:absolute;left:0;top:76px;bottom:0;width:56px;background:#fafbfc;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px;z-index:15;}
+.nav-sidebar a{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;color:#6f737a;text-decoration:none;font-size:18px;transition:.2s;}
+.nav-sidebar a:hover{background:#f0f1f4;}
+.nav-sidebar a.active{background:#fff2ed;color:#ff764a;}
+
+/* Main layout */
+.main{flex:1;min-height:0;padding-left:56px;overflow:hidden;display:flex;}
+.polish-body{flex:1;overflow-y:auto;padding:24px 32px 48px;background:#fff;}
+
+/* Section panels */
+.section-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,0.04);}
+.section-panel-label{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.section-textarea{width:100%;padding:12px 14px;border:1px solid var(--line-dark);border-radius:12px;font-size:14px;line-height:1.8;color:#444;font-family:inherit;resize:vertical;outline:none;}
+.section-textarea:focus{border-color:var(--orange);}
+.section-actions{display:flex;gap:10px;align-items:center;margin-top:12px;}
+.op-btn{padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;transition:.2s;}
+.op-btn.polish{background:#fff2ed;color:var(--orange);}
+.op-btn.polish:hover{filter:brightness(.97);}
+.op-btn.regen{background:#f5f6f8;color:#555;border:1px solid var(--line-dark);}
+.op-btn.regen:hover{background:#e8eaed;}
+.op-btn:disabled{opacity:.55;cursor:not-allowed;}
+.op-error{font-size:12px;color:var(--red);font-weight:600;}
+
+/* Preview */
+.preview-panel{background:#fafbfc;border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-top:8px;}
+.preview-panel summary{font-size:14px;font-weight:760;color:#232323;cursor:pointer;user-select:none;}
+.preview-text{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;font-size:14px;line-height:1.9;color:#444;white-space:pre-wrap;word-break:break-word;}
+
+.empty-state{text-align:center;padding:80px 20px;color:#999;}
+.empty-state h3{margin:0 0 10px;font-size:18px;color:#555;}
+
+@media(max-width:768px){
+  .main{padding-left:0;}
+  .nav-sidebar{display:none;}
+  .polish-body{padding:16px 16px 40px;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="back-link" href="/static/eval.html">← 返回评测</a>
+    <div class="title" id="page-title">分段打磨</div>
+    <div class="actions">
+      <span class="saved-tip" id="saved-tip">✓ 已保存</span>
+      <button class="save-btn" id="save-btn" onclick="saveContent()">💾 保存</button>
+      <button class="action" style="font-weight:620;display:flex;align-items:center;gap:8px;" onclick="logout()"><span>退出</span></button>
+    </div>
+  </header>
+
+  <nav class="nav-sidebar">
+    <a href="/static/index.html" title="首页">🏠</a>
+    <a href="/static/speed.html" title="极速版">⚡</a>
+    <a href="/static/pro-b.html" title="专业版" style="display:none;">🎬</a>
+    <a href="/static/eval.html" title="笑果评测">🎯</a>
+    <a href="/static/eval-square.html" title="段子广场">🏛️</a>
+    <a href="/static/video-list.html" title="我的视频">📹</a>
+    <a href="/static/me.html" title="我的">👤</a>
+  </nav>
+
+  <main class="main">
+    <div class="polish-body" id="polish-body">
+      <div class="empty-state">
+        <h3>加载中...</h3>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/static/common.js"></script>
+<script>
+requireAuth();
+
+const resultId = new URLSearchParams(window.location.search).get('result_id');
+const polishBody = document.getElementById('polish-body');
+const saveBtn = document.getElementById('save-btn');
+const savedTip = document.getElementById('saved-tip');
+
+let sections = [];
+let hasLabels = false;
+let sectionTitle = '';
+
+function renderMissingResultId() {
+  polishBody.innerHTML = `
+    <div class="empty-state">
+      <h3>缺少 result_id 参数</h3>
+      <p>请从 <a href="/static/eval.html" style="color:var(--orange);">笑果评测</a> 页面点击「打磨」进入。</p>
+    </div>
+  `;
+}
+
+async function loadResultMeta() {
+  const res = await apiFetch(`/eval/results/${resultId}`);
+  const data = await res.json();
+  sectionTitle = data.section_title || '';
+  document.getElementById('page-title').textContent = sectionTitle
+    ? `分段打磨｜${sectionTitle}`
+    : '分段打磨';
+}
+
+async function loadSections() {
+  const res = await apiFetch(`/eval/results/${resultId}/sections`);
+  const data = await res.json();
+  sections = data.sections || [];
+  hasLabels = !!data.has_labels;
+  renderPanels();
+}
+
+function renderPanels() {
+  if (!sections.length) {
+    polishBody.innerHTML = `
+      <div class="empty-state">
+        <h3>未解析到段落</h3>
+        <p>该结果正文为空或无法分段，请返回评测页检查。</p>
+      </div>
+    `;
+    return;
+  }
+
+  const panelsHtml = sections.map((s) => {
+    const lineCount = s.text ? s.text.split('\n').length : 0;
+    const rows = Math.max(3, lineCount);
+    return `
+      <div class="section-panel" data-index="${s.index}">
+        <div class="section-panel-label">${escapeHtml(s.title)}</div>
+        <textarea class="section-textarea" id="text-${s.index}" rows="${rows}" data-index="${s.index}">${escapeHtml(s.text)}</textarea>
+        <div class="section-actions">
+          <button class="op-btn polish" id="polish-${s.index}" onclick="runSectionOp(${s.index}, 'polish')">✨ 润色</button>
+          <button class="op-btn regen" id="regen-${s.index}" onclick="runSectionOp(${s.index}, 'regenerate')">🔄 重新生成</button>
+          <span class="op-error" id="err-${s.index}" style="display:none;"></span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  polishBody.innerHTML = panelsHtml + `
+    <div class="preview-panel">
+      <details id="preview-details">
+        <summary>全文预览</summary>
+        <div class="preview-text" id="preview-text"></div>
+      </details>
+    </div>
+  `;
+
+  polishBody.addEventListener('input', (e) => {
+    if (e.target.classList.contains('section-textarea')) {
+      updatePreview();
+    }
+  });
+  updatePreview();
+}
+
+function getSectionText(index) {
+  const ta = document.getElementById(`text-${index}`);
+  return ta ? ta.value : (sections[index] ? sections[index].text : '');
+}
+
+function buildMergedContent() {
+  return sections.map((s) => {
+    const text = getSectionText(s.index);
+    return s.has_label ? `【${s.title}】\n${text}` : text;
+  }).join('\n\n');
+}
+
+function updatePreview() {
+  const el = document.getElementById('preview-text');
+  if (el) el.textContent = buildMergedContent();
+}
+
+function showSectionError(index, message) {
+  const el = document.getElementById(`err-${index}`);
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = message ? 'inline' : 'none';
+}
+
+async function runSectionOp(index, mode) {
+  const btn = document.getElementById(`${mode === 'polish' ? 'polish' : 'regen'}-${index}`);
+  const otherBtn = document.getElementById(`${mode === 'polish' ? 'regen' : 'polish'}-${index}`);
+  const ta = document.getElementById(`text-${index}`);
+  if (!btn || !ta) return;
+
+  const loadingText = mode === 'polish' ? '润色中...' : '生成中...';
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  otherBtn.disabled = true;
+  btn.textContent = loadingText;
+  showSectionError(index, '');
+
+  try {
+    const res = await apiFetch(`/eval/results/${resultId}/sections/${index}/${mode}`, { method: 'POST' });
+    const data = await res.json();
+    ta.value = data.text || '';
+    updatePreview();
+  } catch (err) {
+    showSectionError(index, (mode === 'polish' ? '润色失败：' : '重新生成失败：') + err.message);
+  } finally {
+    btn.disabled = false;
+    otherBtn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+async function saveContent() {
+  saveBtn.disabled = true;
+  const original = saveBtn.textContent;
+  saveBtn.textContent = '保存中...';
+  savedTip.style.display = 'none';
+  try {
+    await apiFetch(`/eval/results/${resultId}/content`, {
+      method: 'PUT',
+      body: JSON.stringify({ content: buildMergedContent() }),
+    });
+    savedTip.style.display = 'inline';
+    setTimeout(() => { savedTip.style.display = 'none'; }, 2500);
+  } catch (err) {
+    alert('保存失败：' + err.message);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = original;
+  }
+}
+
+async function init() {
+  if (!resultId) {
+    renderMissingResultId();
+    return;
+  }
+  try {
+    await loadResultMeta();
+    await loadSections();
+  } catch (err) {
+    polishBody.innerHTML = `
+      <div class="empty-state">
+        <h3>加载失败</h3>
+        <p>${escapeHtml(err.message)}</p>
+        <p><a href="/static/eval.html" style="color:var(--orange);">返回评测</a></p>
+      </div>
+    `;
+  }
+}
+
+init();
+</script>
+</body>
+</html>

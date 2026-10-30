@@ -35,7 +35,7 @@
 - 新增 `tests/test_standup_short_skill.py`（8 个：加载/硬约束关键字/mock LLM invoke）
 
 ## Commit 记录
-- **Commit ID**: 待补充
+- **Commit ID**: `d24b86b`
 - **Branch**: `new-version`
 - **Remote**: `origin/new-version`
 - 注：前端打磨页部分已先由子任务提交（`da798a4` 前端 + `dc2b1ec` vibe-log）

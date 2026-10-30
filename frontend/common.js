@@ -45,7 +45,11 @@ async function apiFetch(path, options = {}) {
         let detail = `HTTP ${res.status}`;
         try {
             const errData = await res.clone().json();
-            detail = errData.detail || detail;
+            if (typeof errData.detail === 'string') {
+                detail = errData.detail;
+            } else if (errData.detail !== undefined) {
+                detail = JSON.stringify(errData.detail);
+            }
         } catch {}
         throw new Error(detail);
     }

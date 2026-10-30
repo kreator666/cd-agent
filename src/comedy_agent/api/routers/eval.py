@@ -24,6 +24,10 @@ from comedy_agent.memory.schema import (
     JokeRating,
     UserProfile,
 )
+from comedy_agent.models.factory import ModelFactory
+from comedy_agent.services.script_sections import (
+    parse_sections as parse_script_sections,
+)
 from comedy_agent.skills.loader import load_skill_config, load_single_skill
 from comedy_agent.skills.prompt_sections import (
     parse_sections,
@@ -247,6 +251,51 @@ class CoachResponse(BaseModel):
     stopped_reason: str = Field(default="", description="结束原因")
     iterations: list[dict[str, Any]] = Field(default_factory=list, description="每轮评分记录")
     saved_script_id: str | None = Field(default=None, description="保存到作品库的 script_id")
+
+
+class ScriptSectionItem(BaseModel):
+    """分段打磨 —— 单个段落。"""
+
+    index: int = Field(description="段落序号")
+    title: str = Field(description="段落标题")
+    text: str = Field(description="段落正文")
+    has_label: bool = Field(description="是否有原始标签")
+
+
+class ScriptSectionsResponse(BaseModel):
+    """分段打磨 —— 段落解析响应。"""
+
+    result_id: str
+    has_labels: bool = Field(description="正文是否包含段落标签")
+    sections: list[ScriptSectionItem]
+
+
+class ContentUpdateRequest(BaseModel):
+    """分段打磨 —— 覆盖正文请求。"""
+
+    content: str = Field(min_length=1, max_length=200000, description="新的段子正文")
+
+    @field_validator("content")
+    @classmethod
+    def _strip_content(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) == 0:
+            raise ValueError("段子正文不能为空")
+        return value
+
+
+class ContentUpdateResponse(BaseModel):
+    """分段打磨 —— 覆盖正文响应（结果摘要）。"""
+
+    result_id: str
+    content: str
+    status: str
+
+
+class SectionPolishResponse(BaseModel):
+    """分段打磨 —— 单段润色/重新生成响应。"""
+
+    text: str = Field(description="润色或重新生成后的段落正文")
 
 
 # --------------------------------------------------------------------------- #
@@ -710,6 +759,178 @@ async def coach_eval_result(
         stopped_reason=coach_result.get("stopped_reason", ""),
         iterations=coach_result.get("iterations", []),
         saved_script_id=coach_result.get("saved_script_id"),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 分段打磨接口
+# --------------------------------------------------------------------------- #
+
+
+def _get_owned_result(
+    session: Session, result_id: str, user_id: str
+) -> EvalResult:
+    """查询当前用户拥有的评测结果，不存在返回 None 由调用方处理。"""
+    return (
+        session.query(EvalResult)
+        .join(EvalSession)
+        .filter(EvalResult.result_id == result_id, EvalSession.user_id == user_id)
+        .first()
+    )
+
+
+def _sections_context_summary(sections: list[dict], exclude_index: int) -> str:
+    """其他段的简要摘要（每段截取前 80 字）。"""
+    lines = [
+        f"- {s['title']}：{s['text'][:80]}"
+        for s in sections
+        if s["index"] != exclude_index and s["text"].strip()
+    ]
+    return "\n".join(lines) if lines else "（无）"
+
+
+def _rewrite_section_text(
+    result: EvalResult,
+    eval_session: EvalSession,
+    sections: list[dict],
+    section: dict,
+    mode: str,
+) -> str:
+    """调用 LLM 对单段进行润色（polish）或重新生成（regenerate）。"""
+    context = _sections_context_summary(sections, section["index"])
+    dimensions = (
+        f"话题：{eval_session.topic}\n"
+        f"态度：{eval_session.attitude}\n"
+        f"偏见：{eval_session.bias}\n"
+        f"情绪：{eval_session.emotion}"
+    )
+    if mode == "polish":
+        requirement = (
+            "要求：保持该段的职能定位和篇幅大致不变，只提升语言节奏和笑点密度。"
+        )
+    else:
+        requirement = (
+            "要求：保留该段职能定位，结合上下文衔接，全新创作该段内容。"
+        )
+    prompt = (
+        "请处理以下脱口秀段落。\n\n"
+        f"【段落标题】\n{section['title']}\n\n"
+        f"【段落原文】\n{section['text']}\n\n"
+        f"【全文其他段落摘要】\n{context}\n\n"
+        f"【创作上下文】\n{dimensions}\n\n"
+        f"{requirement}直接输出处理后的段落正文，不要输出标题行，不要任何解释。"
+    )
+
+    try:
+        llm = ModelFactory.get_model(result.model, task_type="creative")
+        response = llm.invoke(
+            [
+                ("system", "你是脱口秀润色助手。你只输出段落正文，不输出标题行，不做任何解释。"),
+                ("human", prompt),
+            ]
+        )
+    except Exception as exc:
+        logger.exception("分段打磨失败 result_id=%s mode=%s", result.result_id, mode)
+        raise HTTPException(status_code=500, detail=f"分段打磨失败: {exc}") from exc
+
+    return str(getattr(response, "content", response)).strip()
+
+
+@router.get("/results/{result_id}/sections", response_model=ScriptSectionsResponse)
+async def get_result_sections(
+    result_id: str,
+    user_id: str = Depends(get_current_user),
+) -> ScriptSectionsResponse:
+    """把评测结果正文解析为段落列表，供分段打磨使用。"""
+    with _db_session() as session:
+        result = _get_owned_result(session, result_id, user_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+        content = result.content or ""
+
+    sections = parse_script_sections(content)
+    return ScriptSectionsResponse(
+        result_id=result_id,
+        has_labels=any(s["has_label"] for s in sections),
+        sections=[ScriptSectionItem(**s) for s in sections],
+    )
+
+
+@router.put("/results/{result_id}/content", response_model=ContentUpdateResponse)
+async def update_result_content(
+    result_id: str,
+    request: ContentUpdateRequest,
+    user_id: str = Depends(get_current_user),
+) -> ContentUpdateResponse:
+    """覆盖评测结果正文（分段打磨保存时使用）。"""
+    with _db_session() as session:
+        result = _get_owned_result(session, result_id, user_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+
+        result.content = request.content
+        session.commit()
+        return ContentUpdateResponse(
+            result_id=result.result_id,
+            content=result.content,
+            status=result.status,
+        )
+
+
+@router.post(
+    "/results/{result_id}/sections/{section_index}/polish",
+    response_model=SectionPolishResponse,
+)
+async def polish_result_section(
+    result_id: str,
+    section_index: int,
+    user_id: str = Depends(get_current_user),
+) -> SectionPolishResponse:
+    """AI 润色单个段落（保持职能与篇幅，提升语言节奏和笑点密度）。"""
+    return SectionPolishResponse(
+        text=_rewrite_section(result_id, section_index, user_id, mode="polish")
+    )
+
+
+@router.post(
+    "/results/{result_id}/sections/{section_index}/regenerate",
+    response_model=SectionPolishResponse,
+)
+async def regenerate_result_section(
+    result_id: str,
+    section_index: int,
+    user_id: str = Depends(get_current_user),
+) -> SectionPolishResponse:
+    """AI 重新生成单个段落（保留职能定位，结合上下文全新创作）。"""
+    return SectionPolishResponse(
+        text=_rewrite_section(result_id, section_index, user_id, mode="regenerate")
+    )
+
+
+def _rewrite_section(
+    result_id: str, section_index: int, user_id: str, mode: str
+) -> str:
+    """polish / regenerate 的公共逻辑：取段落、调 LLM、返回新文本。"""
+    with _db_session() as session:
+        result = _get_owned_result(session, result_id, user_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="结果不存在")
+        if not result.content:
+            raise HTTPException(status_code=400, detail="段子内容为空，无法处理")
+
+        sections = parse_script_sections(result.content)
+        if section_index < 0 or section_index >= len(sections):
+            raise HTTPException(status_code=400, detail="段落序号越界")
+
+        eval_session = result.session
+        section = sections[section_index]
+
+    return _rewrite_section_text(
+        result=result,
+        eval_session=eval_session,
+        sections=sections,
+        section=section,
+        mode=mode,
     )
 
 

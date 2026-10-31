@@ -52,21 +52,34 @@ DEFAULT_STYLE = "illustration"
 STYLE_PRESETS: dict[str, dict[str, str]] = {
     "illustration": {
         "image_prefix": "治愈系插画风格，柔和光线，简洁背景，",
+        "image_suffix": "，无文字，无字幕，高画质",
         "bg_color": "#F7F5F0",
         "text_color": "#2C2C2C",
         "accent_color": "#FF764A",
     },
     "comic": {
         "image_prefix": "美式漫画风格，粗黑边线，夸张表情，高对比度，",
+        "image_suffix": "，无文字，无字幕，高画质",
         "bg_color": "#1A1A1A",
         "text_color": "#FFFFFF",
         "accent_color": "#FFD93D",
     },
     "minimal": {
         "image_prefix": "极简平面设计，大面积留白，柔和渐变色，",
+        "image_suffix": "，无文字，无字幕，高画质",
         "bg_color": "#FFFFFF",
         "text_color": "#333333",
         "accent_color": "#FF764A",
+    },
+    "comic_strip": {
+        "image_prefix": (
+            "黑白线稿多格漫画，同一画面内2到4格漫画分镜纵向排布，"
+            "夸张搞笑的人物表情和肢体动作，漫画速度线，画风简洁粗犷，"
+        ),
+        "image_suffix": "，纯黑白线稿，不要上色，无文字，无对话气泡，无字幕，白色背景，高画质",
+        "bg_color": "#FFFFFF",
+        "text_color": "#1A1A1A",
+        "accent_color": "#FF4D4F",
     },
 }
 
@@ -339,10 +352,11 @@ class VideoGenerator:
         """根据镜头文本和风格构建文生图提示词。"""
         preset = STYLE_PRESETS.get(self.config.style, STYLE_PRESETS[DEFAULT_STYLE])
         prefix = preset["image_prefix"]
+        suffix = preset.get("image_suffix", "，无文字，无字幕，高画质")
         # 提取关键词：去掉语气词，保留名词和动词
         keywords = re.sub(r"[，。！？、：；\"'""''（）()\[\]]", " ", text)
         keywords = re.sub(r"\s+", " ", keywords).strip()[:120]
-        return f"{prefix}画面内容：{keywords}，无文字，无字幕，高画质"
+        return f"{prefix}画面内容：{keywords}{suffix}"
 
     # ------------------------------------------------------------------ #
     # Stage 2: 画面资产

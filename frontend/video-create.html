@@ -636,6 +636,19 @@ async function createVideo() {
   }
 
   try {
+    // 该段子若已有视频任务，优先返回已有任务进度（从当前阶段继续），避免重复创建从头开始
+    try {
+      const listRes = await apiFetch('/video/jobs?limit=50');
+      const listData = await listRes.json();
+      const existing = (listData.jobs || []).find(j => j.result_id === currentResultId);
+      if (existing && confirm('该段子已有视频任务，「确定」前往查看已有进度，「取消」则创建新任务')) {
+        window.location.href = '/static/video-workbench.html?job_id=' + encodeURIComponent(existing.job_id);
+        return;
+      }
+    } catch (e) {
+      console.warn('检查已有视频任务失败', e);
+    }
+
     const merged = buildMergedContent();
     await apiFetch(`/eval/results/${currentResultId}/content`, {
       method: 'PUT',

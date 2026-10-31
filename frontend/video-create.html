@@ -676,7 +676,7 @@ function renderHistory(items) {
         <div class="history-meta">${new Date(s.created_at).toLocaleString()} · ${s.total} 个结果 · ${escapeHtml(s.status)}</div>
       </div>
       <div class="history-item-actions">
-        <button class="history-open-btn" onclick="loadHistorySession('${s.session_id}')">再生成视频</button>
+        <button class="history-open-btn" onclick="loadHistorySession('${s.session_id}')">查看 / 编辑</button>
       </div>
     </div>
   `).join('');
@@ -701,6 +701,7 @@ async function loadHistorySession(sessionId) {
     if (doneResult) {
       renderEditor(doneResult.id, doneResult.content);
       resultBody.scrollTop = 0;
+      resultBody.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
       alert('该会话还没有生成完成的段子');
     }

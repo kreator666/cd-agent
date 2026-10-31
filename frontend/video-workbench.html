@@ -698,7 +698,8 @@ function renderStoryboardReview() {
 }
 
 function renderVideoReview() {
-  const videoUrl = currentJob.video_url ? currentJob.video_url.replace('final.mp4','silent.mp4') : '';
+  const videoUrl = currentJob.silent_url
+    || (currentJob.video_url ? currentJob.video_url.replace('final.mp4','silent.mp4') : '');
   return `
     <div class="empty-state" style="padding:30px 0;">
       <div class="video-box">

@@ -69,6 +69,7 @@ class VideoJobResponse(BaseModel):
     stage: str
     stages: list[StageItem]
     video_url: str | None = None
+    silent_url: str | None = None
     final_video_path: str | None = None
     storyboard: dict[str, Any] | None = None
     result_content: str | None = None
@@ -129,6 +130,11 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
         rel = Path(job.final_video_path).relative_to(Path(settings.video_output_dir))
         video_url = f"/static/video/{rel.as_posix()}"
 
+    silent_url = None
+    if job.video_path and Path(job.video_path).exists():
+        rel = Path(job.video_path).relative_to(Path(settings.video_output_dir))
+        silent_url = f"/static/video/{rel.as_posix()}"
+
     storyboard = _normalize_storyboard(job.storyboard_json, job.job_id)
 
     return VideoJobResponse(
@@ -138,6 +144,7 @@ def _job_to_response(job: VideoJob) -> VideoJobResponse:
         stage=job.stage,
         stages=[StageItem(**s) for s in stages],
         video_url=video_url,
+        silent_url=silent_url,
         final_video_path=job.final_video_path,
         storyboard=storyboard,
         result_content=job.result.content if job.result is not None else None,

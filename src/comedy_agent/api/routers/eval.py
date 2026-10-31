@@ -70,6 +70,7 @@ class EvalCreateRequest(BaseModel):
     bias: str = Field(description="偏见")
     emotion: str = Field(description="情绪")
     duration: int = Field(default=3, description="时长（分钟）")
+    structure: str | None = Field(default=None, description="故事结构（standup_short 用，非法值由 Skill 兜底为 random）")
 
 
 class EvalCreateResponse(BaseModel):
@@ -414,6 +415,7 @@ async def create_eval_session(
         bias=request.bias,
         emotion=request.emotion,
         duration=request.duration,
+        structure=request.structure,
     )
 
     return EvalCreateResponse(
@@ -1215,6 +1217,7 @@ def _run_eval_generation(
     bias: str,
     emotion: str,
     duration: int,
+    structure: str | None = None,
 ) -> None:
     """后台执行生成任务：直接调用指定 Skill 生成完整段子。"""
     try:
@@ -1246,17 +1249,21 @@ def _run_eval_generation(
         if model:
             skill.model_name = model
 
-        content = skill.invoke(
-            {
-                "topic": topic,
-                "attitude": attitude,
-                "bias": bias or "无",
-                "emotion": emotion,
-                "duration": duration,
-                "user_id": user_id,
-                "debug": False,
-            }
-        )
+        invoke_payload = {
+            "topic": topic,
+            "attitude": attitude,
+            "bias": bias or "无",
+            "emotion": emotion,
+            "duration": duration,
+            "user_id": user_id,
+            "debug": False,
+        }
+        # 仅当 Skill 支持 structure 参数时才透传，避免破坏旧 Skill（如 standup_focused）
+        schema_fields = getattr(getattr(skill, "args_schema", None), "model_fields", None)
+        if schema_fields and "structure" in schema_fields:
+            invoke_payload["structure"] = structure or "random"
+
+        content = skill.invoke(invoke_payload)
 
         with _db_session() as session:
             result = (

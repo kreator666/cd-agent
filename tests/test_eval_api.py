@@ -7,9 +7,31 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 from sqlalchemy import StaticPool, create_engine
 
 from comedy_agent.api.server import app, state
+
+
+class _MockArgsWithStructure(BaseModel):
+    """模拟 standup_short 的 args_schema（含 structure）。"""
+
+    topic: str = ""
+    attitude: str = ""
+    bias: str = "无"
+    emotion: str = ""
+    duration: int = 3
+    structure: str = "random"
+
+
+class _MockArgsNoStructure(BaseModel):
+    """模拟 standup_focused 的 args_schema（不含 structure）。"""
+
+    topic: str = ""
+    attitude: str = ""
+    bias: str = "无"
+    emotion: str = ""
+    duration: int = 3
 
 
 def _patched_create_engine(*args, **kwargs):
@@ -103,6 +125,70 @@ class TestEvalSession:
             assert detail["total"] == 1
             assert len(detail["results"]) == 1
             assert detail["results"][0]["section_id"] == "full"
+
+    def test_create_session_with_structure(self, client):
+        mock_skill = _mock_skill()
+        mock_skill.args_schema = _MockArgsWithStructure
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            mock_load_skill.return_value = mock_skill
+
+            res = client.post("/eval/sessions", json={
+                "skill_name": "standup_short",
+                "model": "deepseek-v3",
+                "topic": "骨折",
+                "attitude": "自嘲",
+                "bias": "无",
+                "emotion": "荒诞",
+                "structure": "snowball",
+            })
+            assert res.status_code == 200, res.text
+
+            # 后台生成已执行（TestClient 同步运行 BackgroundTasks），invoke 收到 structure
+            mock_skill.invoke.assert_called_once()
+            kwargs = mock_skill.invoke.call_args[0][0]
+            assert kwargs["structure"] == "snowball"
+
+    def test_create_session_without_structure_defaults_random(self, client):
+        mock_skill = _mock_skill()
+        mock_skill.args_schema = _MockArgsWithStructure
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            mock_load_skill.return_value = mock_skill
+
+            res = client.post("/eval/sessions", json={
+                "skill_name": "standup_short",
+                "model": "deepseek-v3",
+                "topic": "骨折",
+                "attitude": "自嘲",
+                "bias": "无",
+                "emotion": "荒诞",
+            })
+            assert res.status_code == 200, res.text
+
+            mock_skill.invoke.assert_called_once()
+            kwargs = mock_skill.invoke.call_args[0][0]
+            assert kwargs["structure"] == "random"
+
+    def test_create_session_skill_without_structure_param(self, client):
+        """不支持 structure 参数的旧 Skill（如 standup_focused）不应收到该 kwarg。"""
+        mock_skill = _mock_skill()
+        mock_skill.args_schema = _MockArgsNoStructure
+        with patch("comedy_agent.api.routers.eval.load_single_skill") as mock_load_skill:
+            mock_load_skill.return_value = mock_skill
+
+            res = client.post("/eval/sessions", json={
+                "skill_name": "standup_focused",
+                "model": "deepseek-v3",
+                "topic": "骨折",
+                "attitude": "自嘲",
+                "bias": "无",
+                "emotion": "荒诞",
+                "structure": "snowball",
+            })
+            assert res.status_code == 200, res.text
+
+            mock_skill.invoke.assert_called_once()
+            kwargs = mock_skill.invoke.call_args[0][0]
+            assert "structure" not in kwargs
 
     def test_create_session_missing_input(self, client):
         res = client.post("/eval/sessions", json={
